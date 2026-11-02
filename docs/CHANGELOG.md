@@ -2,6 +2,8 @@
 
 ## 0.2.10 BETA (unreleased)
 
+- **Prompt Forge: dropping a picture on Reference images works.** Native webviews hand over OS file drops as paths, never as DOM files, so the zone's drop handler got nothing and did nothing. It now takes the path like the References panel does. A drop with no usable picture says so.
+
 - **GitHub issue forms.** Bug, enhancement, question and documentation forms apply the corresponding existing label and ask for the DEAS version and update status. Bug reports collect reproduction steps, system/GPU details, effective model settings and a reviewed `.txt` log export (or an explanation if unavailable). The Logs guide documents export, attachment and privacy steps; no automatic uploads or app changes.
 
 - **Compact native checkpoint picker restored.** Removed the custom expanding checkpoint list and filter field. The selector is again a single native dropdown with normal pointer/keyboard behavior, all model options, existing compatibility gates and saved selections. This UI correction does not claim to fix the separately observed native WebKit/EGL startup crash.

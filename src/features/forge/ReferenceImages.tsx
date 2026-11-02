@@ -1,6 +1,9 @@
-import { useState, type Dispatch, type DragEvent, type SetStateAction } from 'react';
+import { useEffect, useRef, useState, type Dispatch, type DragEvent, type SetStateAction } from 'react';
+import { isTauri } from '@tauri-apps/api/core';
+import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { useI18n } from '../../i18n/I18nProvider';
 import { forgeError, referenceReadback, tagSearch, type NativeReferences } from '../../lib/forge';
+import { describeMedia, itemFromEntry, type MediaItem } from '../../lib/media';
 
 export interface RefPicture { id: string; name: string; image: string; role: string; fidelity: string; note: string; character: string; readback?: { text: string; key: string } }
 
@@ -22,6 +25,14 @@ export async function prepare(file: File): Promise<string> {
   canvas.width = Math.round(bitmap.width * scale); canvas.height = Math.round(bitmap.height * scale);
   canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
   return canvas.toDataURL('image/jpeg', 0.92);
+}
+
+/** A dropped file as `prepare` takes it. The asset server may not name a type, and only `add`'s filter reads it. */
+async function fileFrom(item: MediaItem): Promise<File> {
+  const response = await fetch(item.src);
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const blob = await response.blob();
+  return new File([blob], item.name, { type: blob.type.startsWith('image/') ? blob.type : 'image/*' });
 }
 
 /** A read-back as the model wrote it, with its `**heading**` lines shown as headings rather than asterisks. */
@@ -59,6 +70,28 @@ export function ReferenceImages({ root, target, model, vocab, pictures, onPictur
       onPictures(current => [...current, ...added].slice(0, vocab.max));
     } catch { setError(t('forge.refs.unreadable')); }
   };
+  const box = useRef<HTMLDivElement>(null);
+  const adding = useRef(add); adding.current = add;
+  // Native webviews deliver OS file drops as paths for the whole window, never as DOM files.
+  useEffect(() => {
+    if (!isTauri()) return;
+    let alive = true, unlisten: (() => void) | undefined;
+    const inside = (p: { x: number; y: number }) => {
+      const r = box.current?.getBoundingClientRect(), x = p.x / devicePixelRatio, y = p.y / devicePixelRatio;
+      return !!r && Array.from(document.querySelectorAll('dialog[open]')).every(modal => modal.contains(box.current)) && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+    };
+    void getCurrentWebview().onDragDropEvent(e => {
+      if (e.payload.type === 'leave') { setOver(false); return; }
+      const hit = inside(e.payload.position);
+      setOver(e.payload.type !== 'drop' && hit);
+      if (e.payload.type !== 'drop' || !hit) return;
+      void describeMedia(e.payload.paths)
+        .then(entries => Promise.all(entries.map(itemFromEntry).flatMap(item => item?.media === 'image' ? [fileFrom(item)] : [])))
+        .then(files => { if (alive) { if (files.length) void adding.current(files); else setError(t('forge.refs.unreadable')); } })
+        .catch(() => { if (alive) setError(t('forge.refs.unreadable')); });
+    }).then(stop => { if (alive) unlisten = stop; else stop(); }, err => { if (alive) setError(String(err)); });
+    return () => { alive = false; unlisten?.(); };
+  }, [t]);
   const set = (id: string, change: Partial<RefPicture>) => onPictures(current => current.map(p => p.id === id ? { ...p, ...change } : p));
   const analyze = async (p: RefPicture) => {
     setReading(p.id); setError('');
@@ -98,7 +131,7 @@ export function ReferenceImages({ root, target, model, vocab, pictures, onPictur
         </div>
       </div>;
     })}
-    {pictures.length < vocab.max && <div className={`forge-refdrop${over ? ' over' : ''}`} onDragOver={e => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)} onDrop={drop}>
+    {pictures.length < vocab.max && <div ref={box} className={`forge-refdrop${over ? ' over' : ''}`} onDragOver={e => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)} onDrop={drop}>
       <div className="forge-length">
         {pick(t('forge.refs.role'), role, setRole, vocab.roles, 'next-role')}
         {pick(t('forge.refs.fidelity'), fidelity, setFidelity, vocab.fidelity, 'next-fidelity')}

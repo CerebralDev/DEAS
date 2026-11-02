@@ -13,6 +13,7 @@ it('routes the MOSS generation family to the existing MOSS prompt writer', () =>
 });
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(), isTauri: vi.fn(() => true), convertFileSrc: (p: string) => p }));
+vi.mock('@tauri-apps/api/webview', () => ({ getCurrentWebview: () => ({ onDragDropEvent: async () => () => {} }) }));
 const models = { models: [{ id: 'ollama:qwen', label: 'qwen' }], errors: {}, creativity: ['literal', 'precise', 'faithful', 'measured', 'balanced', 'loose', 'inventive', 'creative', 'daring', 'wild'], shot_counts: ['Auto', 1, 2], default_shots: 'Auto', durations: [5, 8] };
 const nativeTargets = { source: { commit: 'test' }, creativity: models.creativity, targets: ['illustrious', 'anima', 'krea2', 'moss'].map(key => ({ key, label: key, modes: [], defaultMode: null, optional: ['Reasoning', 'Negative prompt'], qualityPresets: [], styles: [], aspectRatios: null, hasNegative: key !== 'krea2', tools: true, guidance: [] })) };
 const nativeCalls = () => vi.mocked(invoke).mock.calls.filter(([c]) => c === 'native_forge_write').map(([, a]) => a as { root: string; request: Record<string, unknown> });
