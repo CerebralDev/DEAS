@@ -92,6 +92,16 @@ it.each([{ root: undefined }, { target: undefined }, { disabled: true }, { readO
   expect(tagSearch).not.toHaveBeenCalled();
 });
 
+it('leaves Ctrl+Enter to Studio while suggestions are open', async () => {
+  tools.autocomplete = true;
+  render(<Editor />);
+  select('rain,  bluZZ  , sky\ncloud', 10);
+  await act(async () => { vi.advanceTimersByTime(150); });
+  expect(screen.getByRole('listbox')).toBeTruthy();
+  fireEvent.keyDown(textarea(), { key: 'Enter', ctrlKey: true });
+  expect(textarea().value).toBe('rain,  bluZZ  , sky\ncloud');
+  expect(screen.getByRole('listbox')).toBeTruthy();
+});
 it('requires two characters and a collapsed selection', async () => {
   tools.autocomplete = true;
   render(<Editor />); select('b'); await debounce();

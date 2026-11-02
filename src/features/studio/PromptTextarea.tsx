@@ -147,14 +147,14 @@ export const PromptTextarea = forwardRef<HTMLTextAreaElement, PromptTextareaProp
           const items = fix.items ?? [];
           if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setFix(null); return; }
           if (items.length && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) { e.preventDefault(); setFixCursor(i => (i + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length); return; }
-          if (items.length && e.key === 'Enter') { e.preventDefault(); applyFix(items[fixCursor]); return; }
+          if (items.length && e.key === 'Enter' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); applyFix(items[fixCursor]); return; }
         }
         // Ctrl+. opens suggestions for the misspelled word under the caret (keyboard twin of right-click).
         if ((e.ctrlKey || e.metaKey) && e.key === '.' && marks.length) { const mark = markAt(e.currentTarget.selectionStart); if (mark) { e.preventDefault(); openFix(mark); return; } }
         if (!composing.current && !e.nativeEvent.isComposing && hits.length) {
           if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); return; }
           if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); setCursor(i => (i + (e.key === 'ArrowDown' ? 1 : hits.length - 1)) % hits.length); return; }
-          if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) { e.preventDefault(); pick(hits[cursor]); return; }
+          if ((e.key === 'Enter' && !e.ctrlKey && !e.metaKey) || (e.key === 'Tab' && !e.shiftKey)) { e.preventDefault(); pick(hits[cursor]); return; }
         }
         onKeyDown?.(e);
       }} />

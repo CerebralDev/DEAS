@@ -3,6 +3,9 @@
 ## Forge picture drop (0.2.10)
 
 Vitest with a mocked `onDragDropEvent` covers a drop inside and outside the zone, behind a dialog, past the picture limit and with no picture. Windows WebView2 acceptance: see the pull request. Linux WebKitGTK is not checked.
+## Ctrl+Enter (0.2.10)
+
+Vitest covers no press while Run is disabled, plain Enter, repeats, an open dialog and a hidden host, one press otherwise, and suggestions left alone. Workbench and PromptTextarea suites: 329 passed. Native keyboard acceptance is listed in PLAN.
 
 ## Compact native checkpoint selector (0.2.10 unreleased)
 
