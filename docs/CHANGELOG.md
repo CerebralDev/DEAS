@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.2.13 BETA
+
+- **SD3 / SD3.5 works.** Two-encoder family: `clip_l`/`clip_g` + `t5xxl`, type `sd3`, `EmptySD3LatentImage`, `ModelSamplingSD3` shift 3, encoded negative. Starting values 28 steps at CFG 4.5 `dpmpp_2m`/`karras`.
+- **Chroma and Chroma Radiance work.** Single T5-XXL encoder with type `chroma`; Chroma uses the Flux latent, Radiance the pixel-space `EmptyChromaRadianceLatentImage`. Both share a CLIP type, so the recipe now carries an optional `diffusion.family` id and falls back to the CLIP type when absent.
+- **HiDream works.** Dual encoders `llama_3_8b` + `t5xxl` with type `hidream`, Flux latent, no sampling patch (core declares empty sampling settings), encoded negative. HiDream-O1 is not covered.
+- **PixArt and HunyuanDiT work.** PixArt Alpha/Sigma: single `t5xxl` with type `pixart`, SD15/SDXL latent. HunyuanDiT 1.0/1.5: dual `clip_l` + `mt5xl` with type `hunyuan_dit`, SDXL latent. Both keep `EmptyLatentImage` and add no sampling patch.
+- **Lumina2 works.** All-in-one checkpoint family: SD3 latent, `ModelSamplingAuraFlow` shift 4, 30 steps at CFG 4 `res_multistep`/`simple`. `modelShapes` rules separate it from Z-Image (cap_embedder 2304 vs 3840); the recipe carries the top-level `family` id for checkpoint families.
+- **SD1.5 / SD2 work.** Plain checkpoint family detected by the CLIP-L-only signature (`conditioner.embedders.0`), SDXL still wins on two embedders: `EmptyLatentImage`, no patch, grid 8, 512×512 at 20 steps CFG 7 `dpmpp_2m`/`karras`.
+- **Kandinsky 5 Image works.** Single Qwen2.5-VL-7B encoder with type `kandinsky5_image`, Flux latent, no sampling patch (shift internal).
+- **Ideogram 4 and Boogu Image work.** Ideogram 4: Qwen3-8B with type `ideogram4`, Flux2 latent. Boogu: full Qwen3-VL-8B with type `boogu`, Flux latent. Both keep the internal shift and need no patch node.
+- **OmniGen2 works.** Qwen2.5-VL-3B with type `omnigen2`, Flux latent, no patch (shift 2.6 internal).
+- **Fibo 2.0 and Ernie Image work.** Fibo 2.0: Qwen3-VL-4B with type `fibo2`, Flux2 latent. Ernie Image: Ministral-3-3B, Flux2 latent. Both keep the internal shift.
+- **Flux.2 works.** Family-declared `sigmaNode` (Flux2Scheduler) replaces KSampler: RandomNoise + CFGGuider + KSamplerSelect + SamplerCustomAdvanced, Flux2 latent, flux2-vae, type `flux2`. Klein blueprint values 20 steps / CFG 5 / euler.
+- **Flux.3 works (unverified).** Qwen3-VL-4B with type `flux3`, Flux2 latent and the same scheduler path; no core blueprint exists.
+- **Mage-Flow works.** Family-declared `encodeNode` (`TextEncodeMageFlowEdit`) carries prompt, negative and the latent in one node; no EmptyLatentImage. 30 steps / CFG 5 / euler (Turbo 4/1).
+- **PixelDiT works (unverified).** Gemma-2 with type `pixeldit`, pixel latent `EmptyChromaRadianceLatentImage` (the PixelDiTPixel format), no patch.
+
+## 0.2.12 BETA (unreleased)
+
+- **Flux.1 works.** Flux.1 dev/schnell/Krea is a detected family with two encoders: the Model files panel gains a **Second text encoder** picker, the recipe compiles `DualCLIPLoader` (`clip_l` + `t5xxl`, type `flux`), uses the SD3 latent, zeroes the negative and starts on the blueprint values (20 steps, CFG 1, `euler`, `simple`). A GGUF encoder switches to `DualCLIPLoaderGGUF`. Flux.1 Fill is not covered.
+- **Dual encoders are recipe data, not a compiler branch.** `diffusion.textEncoder2` is optional in both compilers (TS and Rust); the backend prerequisites now list `dualTextEncoders`/`dualClipTypes` from `DualCLIPLoader`, and the second encoder is a filename hint (`componentFilesNamed`) that never claims header compatibility.
+
+## 0.2.11 BETA (unreleased)
+
+- **Z-Image works.** Z-Image Turbo is now a detected model family: pick the diffusion file in Checkpoint, its Qwen3-4B text encoder (`lumina2` loader type) and the Flux VAE (`ae`) under Model files. The recipe creates the SD3 latent, chains `ModelSamplingAuraFlow` (shift 3) after the model patches, zeroes the negative conditioning and starts on the Comfy-Org values (8 steps, CFG 1, `res_multistep`, `simple`). Canvas edges stay multiples of 16; Z-Image Base needs 25–30 steps at CFG 3–5 and an encoded negative, which this entry does not cover.
+- **Image recipe points come from family data.** The latent node, the zeroed negative and the sampling patch are declared in `src/families/builtin.json` and read by both compilers; MOSS's Flux2 latent moved from a hardcoded branch into the same data. An unknown architecture keeps the plain graph.
+
 ## 0.2.10 BETA
 
 - **Prompt Forge: dropping a picture on Reference images works.** Native webviews hand over OS file drops as paths, never as DOM files, so the zone's drop handler got nothing and did nothing. It now takes the path like the References panel does. A drop with no usable picture says so.

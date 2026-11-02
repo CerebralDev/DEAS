@@ -35,7 +35,9 @@ export interface DiagnosticImageIntentV1 {
   readonly inputLayers?: readonly { readonly image: string; readonly x: number; readonly y: number; readonly width: number; readonly height: number }[];
   readonly inputResize?: { readonly width: number; readonly height: number; readonly crop: 'disabled' | 'center'; readonly pad?: { readonly left: number; readonly right: number; readonly top: number; readonly bottom: number } };
   /** Load `checkpoint` as a diffusion model (UNETLoader) with its own text encoder (CLIPLoader type) and VAE. */
-  readonly diffusion?: { readonly textEncoder: string; readonly clipType: string; readonly vae: string };
+  readonly diffusion?: { readonly textEncoder: string; readonly textEncoder2?: string; readonly clipType: string; readonly vae: string; /** Family id when several families share a CLIP type (Chroma / Chroma Radiance). */ readonly family?: string };
+  /** Family id for checkpoint-loader families whose recipe points (latent, patch) differ from the plain graph. */
+  readonly family?: string;
   /** MiniMax H3 image edit (native compiler only): sigma shifts; the native graph samples the source as the first frame of a 5-frame pass. */
   readonly h3Edit?: { readonly shiftVideo: number; readonly shiftAudio: number };
   /** SDXL ReVision (checkpoint-loader families only): a reference picture from the backend input folder, encoded by a CLIP-vision model and blended into the positive conditioning at `strength`. */
@@ -94,6 +96,9 @@ export interface RecipeAllowlist {
   readonly ggufDualTextEncoders?: readonly string[];
   readonly ggufDualClipTypes?: readonly string[];
   readonly textEncoders?: readonly string[];
+  /** `DualCLIPLoader` combos for two-encoder families (Flux.1, SD3); absent on older backends. */
+  readonly dualTextEncoders?: readonly string[];
+  readonly dualClipTypes?: readonly string[];
   readonly clipTypes?: readonly string[];
   readonly visionModels?: readonly string[];
   readonly vaes?: readonly string[];
@@ -150,7 +155,7 @@ function validateIntent(input: unknown): DiagnosticImageIntentV1 {
     throw new RecipeCompileError('INVALID_INPUT', field, message, remedy);
   };
   for (const key of Object.keys(input)) {
-    if (!fields.includes(key) && !['loras', 'inputImage', 'denoise', 'diffusion', 'inputResize', 'inputMask', 'maskBlur', 'inpaintCrop', 'inputLayers', 'options', 'sigmas', 'wildcard', 'upscaleModel', 'refine', 'imageFormat', 'imageCompression', 'imageReference', 'nativeImageReference'].includes(key)) invalid(key, 'Unknown domain intent field.', 'Remove unsupported fields; do not pass widget or canvas state.');
+    if (!fields.includes(key) && !['loras', 'inputImage', 'denoise', 'diffusion', 'family', 'inputResize', 'inputMask', 'maskBlur', 'inpaintCrop', 'inputLayers', 'options', 'sigmas', 'wildcard', 'upscaleModel', 'refine', 'imageFormat', 'imageCompression', 'imageReference', 'nativeImageReference'].includes(key)) invalid(key, 'Unknown domain intent field.', 'Remove unsupported fields; do not pass widget or canvas state.');
   }
   for (const field of fields) {
     if (!Object.hasOwn(input, field)) invalid(field, 'Missing required intent field.', 'Supply this explicit DEAS-owned intent field; no defaults are inferred.');
@@ -223,9 +228,13 @@ function validateIntent(input: unknown): DiagnosticImageIntentV1 {
     if (!safeChoice(input[field])) invalid(field, 'Unsafe recipe enum.', `Choose a ${field} the backend lists.`);
   }
   const d = input.diffusion;
-  if (d !== undefined && !(isRecord(d) && Object.keys(d).length === 3 && safeComfyModel(d.textEncoder) && safeComfyModel(d.vae) && safeChoice(d.clipType))) {
-    invalid('diffusion', 'Invalid diffusion loader.', 'Supply {textEncoder, clipType, vae} from the verified backend lists.');
+  if (d !== undefined && !(isRecord(d) && [3, 4, 5].includes(Object.keys(d).length) && Object.keys(d).every(k => ['textEncoder', 'textEncoder2', 'clipType', 'vae', 'family'].includes(k))
+    && safeComfyModel(d.textEncoder) && safeComfyModel(d.vae) && safeChoice(d.clipType)
+    && (d.family === undefined || safeChoice(d.family))
+    && (d.textEncoder2 === undefined || (safeComfyModel(d.textEncoder2) && d.textEncoder2 !== d.textEncoder)))) {
+    invalid('diffusion', 'Invalid diffusion loader.', 'Supply {textEncoder, clipType, vae}, an optional textEncoder2 for dual encoders and an optional family id.');
   }
+  if (input.family !== undefined && !safeChoice(input.family)) invalid('family', 'Unsafe family id.', 'Pass the bundled family id exactly (e.g. lumina2).');
   if (isRecord(d) && d.clipType === 'moss_image') {
     const multiple = families.find(f => f.id === 'moss-image')!.multiple!;
     if ((input.width as number) % multiple !== 0 || (input.height as number) % multiple !== 0) invalid('dimensions', `MOSS-Image dimensions must be multiples of ${multiple}.`, 'Use the MOSS-Image canvas grid.');
@@ -306,6 +315,9 @@ export function compileRecipe(input: unknown, verified: unknown): CompiledRecipe
   const allowlist = verified as unknown as RecipeAllowlist;
   if (intent.wildcard&&!allowlist.nodes.includes(wildcardNode)) throw new RecipeCompileError('MISSING_CAPABILITY',wildcardNode,'Wildcard plugin is unavailable.','Install the DaSiWa node pack or disable wildcards.');
   const d = intent.diffusion;
+  // Family-declared recipe points (latent node, zeroed negative, sampling patch); unknown architectures keep the plain graph.
+  const recipeList = families as unknown as { id?: string; clipType?: string; latent?: string; negative?: string; patch?: { node: string; shift?: number }; sigmaNode?: string; encodeNode?: string }[];
+  const recipe = recipeList.find(f => f.id === (d?.family ?? intent.family)) ?? recipeList.find(f => d !== undefined && f.clipType === d.clipType);
   const loras = intent.loras ?? [];
   if (isGguf(intent.checkpoint) && !d) throw new RecipeCompileError('INVALID_INTENT','checkpoint','GGUF requires a diffusion recipe with separate text encoder and VAE.','Select a compatible split-model family.');
   if (d && isGguf(d.vae)) throw new RecipeCompileError('INVALID_INTENT','diffusion.vae','GGUF VAE is unsupported.','Select a supported VAE file.');
@@ -327,8 +339,11 @@ export function compileRecipe(input: unknown, verified: unknown): CompiledRecipe
     if (!allowlist.nodes.includes(node)) throw new RecipeCompileError('MISSING_CAPABILITY', node, 'Option node is unavailable.', 'Install the node pack or turn the option off.');
   }
   // LoraLoaders chain after the loaders; the last one feeds the sampler and both encoders.
+  const dual = d?.textEncoder2;
   const chain: Record<string, ApiNode> = d ? {
-    C: { class_type: clipLoaderName(d.textEncoder), inputs: { clip_name: d.textEncoder, type: d.clipType } },
+    C: dual
+      ? { class_type: isGguf(d.textEncoder) || isGguf(dual) ? 'DualCLIPLoaderGGUF' : 'DualCLIPLoader', inputs: { clip_name1: d.textEncoder, clip_name2: dual, type: d.clipType } }
+      : { class_type: clipLoaderName(d.textEncoder), inputs: { clip_name: d.textEncoder, type: d.clipType } },
     V: { class_type: 'VAELoader', inputs: { vae_name: d.vae } },
   } : {};
   let model: ApiLink = ['1', 0], clip: ApiLink = d ? ['C', 0] : ['1', 1];
@@ -343,31 +358,50 @@ export function compileRecipe(input: unknown, verified: unknown): CompiledRecipe
     chain[id] = { class_type: node, inputs: { ...inputs, model } };
     model = [id, 0];
   }
+  // Family-declared sampling patch chains after every model patch, so it sees the final model.
+  if (recipe?.patch) {
+    chain.M = { class_type: recipe.patch.node, inputs: { shift: recipe.patch.shift ?? 1, model } };
+    model = ['M', 0];
+  }
   // Spatial tiles; the temporal values are the node defaults (used by video VAEs only).
   const tiles: Record<string, number> = tiled ? { tile_size: o.vaeTile!, overlap: 64, temporal_size: 64, temporal_overlap: 8 } : {};
+  // Mage-Flow encodes prompt, negative and latent in one node (outputs positive/negative/latent).
+  const enc = recipe?.encodeNode;
+  const negative: ApiLink = enc ? ['2', 1] : ['3', 0];
+  const latent: ApiLink = enc ? ['2', 2] : ['4', 0];
   const result: CompiledRecipe = {
     recipeId: intent.recipeId, version: 1, generationReady: false,
     requiredNodes: [],
     requiredModels: d ? [{ kind: 'diffusionModel', identifier: intent.checkpoint }, { kind: 'textEncoder', identifier: d.textEncoder }, { kind: 'vae', identifier: d.vae }] : [{ kind: 'checkpoint', identifier: intent.checkpoint }],
     graph: {
       '1': d ? { class_type: isGguf(intent.checkpoint) ? 'UnetLoaderGGUF' : 'UNETLoader', inputs: { unet_name: intent.checkpoint, ...(!isGguf(intent.checkpoint) ? { weight_dtype: 'default' } : {}) } } : { class_type: 'CheckpointLoaderSimple', inputs: { ckpt_name: intent.checkpoint } },
-      '2': { class_type: 'CLIPTextEncode', inputs: { text: intent.positivePrompt, clip } },
-      '3': { class_type: 'CLIPTextEncode', inputs: { text: intent.negativePrompt, clip } },
-      '4': { class_type: d?.clipType === 'moss_image' ? 'EmptyFlux2LatentImage' : 'EmptyLatentImage', inputs: { width: intent.width, height: intent.height, batch_size: 1 } },
-      '5': { class_type: 'KSampler', inputs: { model, positive: ['2', 0], negative: ['3', 0], latent_image: ['4', 0], seed: intent.seed, steps: intent.steps, cfg: intent.cfg, sampler_name: intent.sampler, scheduler: intent.scheduler, denoise: 1 } },
+      '2': enc
+        ? { class_type: enc, inputs: { clip, prompt: intent.positivePrompt, negative_prompt: intent.negativePrompt, width: intent.width, height: intent.height, batch_size: 1 } }
+        : { class_type: 'CLIPTextEncode', inputs: { text: intent.positivePrompt, clip } },
+      ...(enc ? {} : {
+        '3': recipe?.negative === 'zero'
+          ? { class_type: 'ConditioningZeroOut', inputs: { conditioning: ['2', 0] } }
+          : { class_type: 'CLIPTextEncode', inputs: { text: intent.negativePrompt, clip } },
+        '4': { class_type: recipe?.latent ?? 'EmptyLatentImage', inputs: { width: intent.width, height: intent.height, batch_size: 1 } },
+      }),
+      '5': { class_type: 'KSampler', inputs: { model, positive: ['2', 0], negative, latent_image: latent, seed: intent.seed, steps: intent.steps, cfg: intent.cfg, sampler_name: intent.sampler, scheduler: intent.scheduler, denoise: 1 } },
       '6': { class_type: tiled ? 'VAEDecodeTiled' : 'VAEDecode', inputs: { samples: ['5', 0], vae, ...tiles } },
       '7': { class_type: 'SaveImage', inputs: { images: ['6', 0], filename_prefix: intent.outputPrefix } },
       ...chain,
       ...(intent.inputImage !== undefined ? { '8': { class_type: 'LoadImage', inputs: { image: intent.inputImage } }, '9': { class_type: 'VAEEncode', inputs: { pixels: ['8', 0], vae } } } : {}),
     },
   };
-  if (intent.sigmas) {
+  // Model-fixed schedule: explicit sigmas (ManualSigmas) or a family-declared scheduler node (Flux.2's Flux2Scheduler).
+  const schedule: ApiNode | undefined = intent.sigmas
+    ? { class_type: 'ManualSigmas', inputs: { sigmas: intent.sigmas.join(', ') } }
+    : recipe?.sigmaNode ? { class_type: recipe.sigmaNode, inputs: { steps: intent.steps, width: intent.width, height: intent.height } } : undefined;
+  if (schedule) {
     const graph = result.graph as Record<string, ApiNode>;
     graph.N = { class_type: 'RandomNoise', inputs: { noise_seed: intent.seed } };
     graph.G = { class_type: 'CFGGuider', inputs: { model, positive: ['2', 0], negative: ['3', 0], cfg: intent.cfg } };
     graph.Q = { class_type: 'KSamplerSelect', inputs: { sampler_name: intent.sampler } };
-    graph.Z = { class_type: 'ManualSigmas', inputs: { sigmas: intent.sigmas.join(', ') } };
-    graph['5'] = { class_type: 'SamplerCustomAdvanced', inputs: { noise: ['N', 0], guider: ['G', 0], sampler: ['Q', 0], sigmas: ['Z', 0], latent_image: ['4', 0] } };
+    graph.Z = schedule;
+    graph['5'] = { class_type: 'SamplerCustomAdvanced', inputs: { noise: ['N', 0], guider: ['G', 0], sampler: ['Q', 0], sigmas: ['Z', 0], latent_image: latent } };
   }
   if (intent.imageReference) {
     // Core ReVision chain: each reference picture's CLIP-vision features blended into the positive conditioning.
@@ -484,7 +518,7 @@ export function compileRecipe(input: unknown, verified: unknown): CompiledRecipe
     const graph=result.graph as Record<string,ApiNode>;
     graph.WP={class_type:wildcardNode,inputs:{...intent.wildcard,selection_state:JSON.stringify(intent.wildcard.selection_state),positive_input:intent.positivePrompt,negative_input:intent.negativePrompt}};
     graph['2']={...graph['2'],inputs:{...graph['2'].inputs,text:['WP',0]}};
-    graph['3']={...graph['3'],inputs:{...graph['3'].inputs,text:['WP',1]}};
+    if (graph['3'].class_type === 'CLIPTextEncode') graph['3']={...graph['3'],inputs:{...graph['3'].inputs,text:['WP',1]}};
     if (graph.M) graph.M={...graph.M,inputs:{...graph.M.inputs,text_positive:['WP',0],text_negative:['WP',1]}};
   }
   if (intent.nativeImageReference) {
@@ -521,6 +555,12 @@ export function compileRecipe(input: unknown, verified: unknown): CompiledRecipe
   }
   if (!(d ? (isGguf(intent.checkpoint) ? allowlist.ggufDiffusionModels : allowlist.diffusionModels) ?? [] : allowlist.checkpoints).includes(intent.checkpoint)) throw new RecipeCompileError('MISSING_MODEL', 'checkpoint', 'Checkpoint is not in the verified model list.', 'Select an exact checkpoint identifier from the verified backend model list.');
   if (d && !((isGguf(d.textEncoder) ? allowlist.ggufTextEncoders : allowlist.textEncoders)?.includes(d.textEncoder) && allowlist.vaes?.includes(d.vae) && (isGguf(d.textEncoder) ? allowlist.ggufClipTypes : allowlist.clipTypes)?.includes(d.clipType))) throw new RecipeCompileError('MISSING_MODEL', 'diffusion', 'Text encoder, VAE or CLIP type is not in the verified backend lists.', 'Select files and a CLIP type the backend lists.');
+  if (d?.textEncoder2) {
+    const gguf = isGguf(d.textEncoder) || isGguf(d.textEncoder2);
+    const encoders = gguf ? allowlist.ggufDualTextEncoders : allowlist.dualTextEncoders;
+    const types = gguf ? allowlist.ggufDualClipTypes : allowlist.dualClipTypes;
+    if (!encoders?.includes(d.textEncoder) || !encoders.includes(d.textEncoder2) || !types?.includes(d.clipType)) throw new RecipeCompileError('MISSING_MODEL', 'diffusion.textEncoder2', 'Dual text encoders or CLIP type are not in the verified backend lists.', 'Select both encoder files and a CLIP type the backend lists for the dual loader.');
+  }
   // object_info lists only the input folder; ComfyUI resolves an `[output]` file itself (containment + existence in LoadImage).
   for (const image of [intent.inputImage, ...(intent.imageReference?.images.map(e => e.image) ?? []), ...(intent.nativeImageReference?.images ?? []), ...(intent.inputLayers ?? []).map(l => l.image)]) if (image !== undefined && !image.endsWith(' [output]') && !isUploadedMask(image) && !allowlist.images?.includes(image)) throw new RecipeCompileError('MISSING_MODEL', 'inputImage', 'Input image is not in the backend input folder list.', 'Pick a file the backend lists in its input folder.');
   if (intent.imageReference && !allowlist.visionModels?.includes(intent.imageReference.visionModel)) throw new RecipeCompileError('MISSING_MODEL', 'visionModel', 'CLIP-vision model is not in the verified vision model list.', 'Install the model in the backend vision folder and reload prerequisites.');

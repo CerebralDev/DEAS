@@ -407,6 +407,7 @@
   "studio.run.edit.layerRemove": "Remove {name}",
   "studio.run.edit.layerHelp": "Drag to move, corner to resize. Keys: arrows move, + / − resize, Delete removes.",
   "studio.run.textEncoder": "Text encoder",
+  "studio.run.textEncoder2": "Second text encoder",
   "studio.run.vae": "VAE",
   "studio.run.family.diffusionFolder": "This recipe needs a diffusion model in diffusion_models (or unet), not checkpoints. Move the file and refresh the model list.",
   "studio.run.family.checkpointFolder": "This recipe needs a checkpoint in checkpoints, not diffusion_models or unet. Move the file and refresh the model list.",

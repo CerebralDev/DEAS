@@ -407,6 +407,7 @@
   "studio.run.edit.layerRemove": "{name} kaldır",
   "studio.run.edit.layerHelp": "Taşımak için sürükleyin, boyut için köşeyi çekin. Tuşlar: oklar taşır, + / − boyutlandırır, Delete kaldırır.",
   "studio.run.textEncoder": "Metin kodlayıcı",
+  "studio.run.textEncoder2": "İkinci metin kodlayıcı",
   "studio.run.vae": "VAE",
   "studio.run.family.diffusionFolder": "Bu tarif checkpoints yerine diffusion_models (veya unet) içinde bir difüzyon modeli gerektirir. Dosyayı taşıyıp model listesini yenileyin.",
   "studio.run.family.checkpointFolder": "Bu tarif diffusion_models veya unet yerine checkpoints içinde bir checkpoint gerektirir. Dosyayı taşıyıp model listesini yenileyin.",

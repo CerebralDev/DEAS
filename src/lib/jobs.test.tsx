@@ -9,6 +9,94 @@ const intent: DiagnosticImageIntentV1 = {
   checkpoint: 'observed.safetensors', seed: 0, width: 512, height: 512, steps: 20, cfg: 7,
   sampler: 'euler', scheduler: 'normal', outputPrefix: 'DEAS_diagnostic',
 };
+// Mage-Flow: one encode node carries prompt, negative and latent (no EmptyLatentImage, no separate negative node).
+test('Mage-Flow compiles the combined encode node', () => {
+  const nodes = ['UNETLoader', 'CLIPLoader', 'VAELoader', 'KSampler', 'VAEDecode', 'SaveImage', 'TextEncodeMageFlowEdit'];
+  const allow = { nodes, checkpoints: [intent.checkpoint], diffusionModels: ['mage_flow_int8_convrot.safetensors'], textEncoders: ['qwen3vl_4b_bf16.safetensors'], clipTypes: ['mage'], vaes: ['mage_flow_vae_bf16.safetensors'], samplers: ['euler'], schedulers: ['simple'] };
+  const g = compileRecipe({ ...intent, checkpoint: 'mage_flow_int8_convrot.safetensors', steps: 30, cfg: 5, sampler: 'euler', scheduler: 'simple', diffusion: { textEncoder: 'qwen3vl_4b_bf16.safetensors', clipType: 'mage', vae: 'mage_flow_vae_bf16.safetensors', family: 'mage' } }, allow).graph;
+  expect(g['2']).toEqual({ class_type: 'TextEncodeMageFlowEdit', inputs: { clip: ['C', 0], prompt: intent.positivePrompt, negative_prompt: intent.negativePrompt, width: 512, height: 512, batch_size: 1 } });
+  expect(g['3']).toBeUndefined();
+  expect(g['4']).toBeUndefined();
+  expect(g['5'].inputs.positive).toEqual(['2', 0]);
+  expect(g['5'].inputs.negative).toEqual(['2', 1]);
+  expect(g['5'].inputs.latent_image).toEqual(['2', 2]);
+});
+// Flux.2: the family declares Flux2Scheduler, so the graph is the sigma path, not KSampler.
+test('Flux.2 compiles Flux2Scheduler instead of KSampler', () => {
+  const nodes = ['UNETLoader', 'CLIPLoader', 'VAELoader', 'CLIPTextEncode', 'VAEDecode', 'SaveImage', 'EmptyFlux2LatentImage', 'RandomNoise', 'CFGGuider', 'KSamplerSelect', 'Flux2Scheduler', 'SamplerCustomAdvanced'];
+  const allow = { nodes, checkpoints: [intent.checkpoint], diffusionModels: ['flux-2-klein-base-4b-fp8.safetensors'], textEncoders: ['qwen_3_4b.safetensors'], clipTypes: ['flux2'], vaes: ['flux2-vae.safetensors'], samplers: ['euler'], schedulers: ['simple', 'normal'] };
+  const g = compileRecipe({ ...intent, checkpoint: 'flux-2-klein-base-4b-fp8.safetensors', cfg: 5, diffusion: { textEncoder: 'qwen_3_4b.safetensors', clipType: 'flux2', vae: 'flux2-vae.safetensors', family: 'flux2' } }, allow).graph;
+  expect(g['4'].class_type).toBe('EmptyFlux2LatentImage');
+  expect(g.Z).toEqual({ class_type: 'Flux2Scheduler', inputs: { steps: 20, width: 512, height: 512 } });
+  expect(g['5'].class_type).toBe('SamplerCustomAdvanced');
+  expect(g['5'].inputs.sigmas).toEqual(['Z', 0]);
+  expect(g.G.inputs.cfg).toBe(5);
+});
+// Lumina2 is a checkpoint family: the top-level family id supplies the SD3 latent and the AuraFlow shift.
+test('Lumina2 compiles the checkpoint recipe points by family id', () => {
+  const nodes = ['CheckpointLoaderSimple', 'CLIPTextEncode', 'KSampler', 'VAEDecode', 'SaveImage', 'EmptySD3LatentImage', 'ModelSamplingAuraFlow'];
+  const allow = { nodes, checkpoints: [intent.checkpoint], samplers: ['res_multistep'], schedulers: ['simple'] };
+  const g = compileRecipe({ ...intent, steps: 30, cfg: 4, sampler: 'res_multistep', scheduler: 'simple', family: 'lumina2' }, allow).graph;
+  expect(g['1'].class_type).toBe('CheckpointLoaderSimple');
+  expect(g['4'].class_type).toBe('EmptySD3LatentImage');
+  expect(g.M).toEqual({ class_type: 'ModelSamplingAuraFlow', inputs: { shift: 4, model: ['1', 0] } });
+  expect(g['5'].inputs.model).toEqual(['M', 0]);
+  expect(g['3'].class_type).toBe('CLIPTextEncode');
+});
+// HiDream: dual llama3 + t5, Flux latent, no sampling patch, encoded negative.
+test('HiDream compiles dual encoders without a sampling patch', () => {
+  const nodes = ['UNETLoader', 'DualCLIPLoader', 'VAELoader', 'CLIPTextEncode', 'KSampler', 'VAEDecode', 'SaveImage', 'EmptySD3LatentImage'];
+  const allow = { nodes, checkpoints: [intent.checkpoint], diffusionModels: ['hidream_i1_full.safetensors'], textEncoders: ['llama_3_8b.safetensors', 't5xxl_fp16.safetensors'], dualTextEncoders: ['llama_3_8b.safetensors', 't5xxl_fp16.safetensors'], dualClipTypes: ['hidream'], clipTypes: ['hidream'], vaes: ['ae.safetensors'], samplers: ['euler'], schedulers: ['normal'] };
+  const g = compileRecipe({ ...intent, checkpoint: 'hidream_i1_full.safetensors', diffusion: { textEncoder: 'llama_3_8b.safetensors', textEncoder2: 't5xxl_fp16.safetensors', clipType: 'hidream', vae: 'ae.safetensors', family: 'hidream' } }, allow).graph;
+  expect(g.C.class_type).toBe('DualCLIPLoader');
+  expect(g['4'].class_type).toBe('EmptySD3LatentImage');
+  expect(g.M).toBeUndefined();
+  expect(g['3'].class_type).toBe('CLIPTextEncode');
+});
+// SD3 and Chroma: the family id disambiguates families that share a CLIP type; SD3 adds ModelSamplingSD3(3).
+test('SD3 and Chroma compile their family-declared recipe points', () => {
+  const nodes = ['UNETLoader', 'DualCLIPLoader', 'CLIPLoader', 'VAELoader', 'CLIPTextEncode', 'KSampler', 'VAEDecode', 'SaveImage', 'EmptySD3LatentImage', 'EmptyChromaRadianceLatentImage', 'ModelSamplingSD3'];
+  const allow = { nodes, checkpoints: [intent.checkpoint], diffusionModels: ['sd3.safetensors', 'chroma.safetensors', 'chroma-radiance.safetensors'], textEncoders: ['clip_l.safetensors', 't5xxl_fp16.safetensors'], dualTextEncoders: ['clip_l.safetensors', 't5xxl_fp16.safetensors'], dualClipTypes: ['sd3'], clipTypes: ['sd3', 'chroma'], vaes: ['ae.safetensors'], samplers: ['dpmpp_2m', 'euler'], schedulers: ['karras', 'simple', 'normal'] };
+  const sd3 = compileRecipe({ ...intent, checkpoint: 'sd3.safetensors', steps: 28, cfg: 4.5, sampler: 'dpmpp_2m', scheduler: 'karras', diffusion: { textEncoder: 'clip_l.safetensors', textEncoder2: 't5xxl_fp16.safetensors', clipType: 'sd3', vae: 'ae.safetensors', family: 'sd3' } }, allow).graph;
+  expect(sd3['4'].class_type).toBe('EmptySD3LatentImage');
+  expect(sd3.M).toEqual({ class_type: 'ModelSamplingSD3', inputs: { shift: 3, model: ['1', 0] } });
+  expect(sd3['3'].class_type).toBe('CLIPTextEncode');
+  const radiance = compileRecipe({ ...intent, checkpoint: 'chroma-radiance.safetensors', diffusion: { textEncoder: 't5xxl_fp16.safetensors', clipType: 'chroma', vae: 'ae.safetensors', family: 'chroma-radiance' } }, allow).graph;
+  expect(radiance['4'].class_type).toBe('EmptyChromaRadianceLatentImage');
+  expect(radiance.M).toBeUndefined();
+  // Without the family id the shared CLIP type falls back to the first family's latent.
+  const shared = compileRecipe({ ...intent, checkpoint: 'chroma.safetensors', diffusion: { textEncoder: 't5xxl_fp16.safetensors', clipType: 'chroma', vae: 'ae.safetensors' } }, allow).graph;
+  expect(shared['4'].class_type).toBe('EmptySD3LatentImage');
+});
+// Flux.1: dual encoders (clip_l + t5xxl), SD3 latent, zeroed negative — the family data plus the dual loader.
+test('Flux.1 compiles the dual CLIP loader and family recipe points', () => {
+  const nodes = ['UNETLoader', 'DualCLIPLoader', 'VAELoader', 'CLIPTextEncode', 'KSampler', 'VAEDecode', 'SaveImage', 'EmptySD3LatentImage', 'ConditioningZeroOut'];
+  const allow = { nodes, checkpoints: [intent.checkpoint], diffusionModels: ['flux1-dev.safetensors'], textEncoders: ['clip_l.safetensors', 't5xxl_fp16.safetensors'], dualTextEncoders: ['clip_l.safetensors', 't5xxl_fp16.safetensors'], dualClipTypes: ['flux'], clipTypes: ['flux'], vaes: ['ae.safetensors'], samplers: ['euler'], schedulers: ['simple'] };
+  const flux = { ...intent, checkpoint: 'flux1-dev.safetensors', steps: 20, cfg: 1, sampler: 'euler', scheduler: 'simple', diffusion: { textEncoder: 'clip_l.safetensors', textEncoder2: 't5xxl_fp16.safetensors', clipType: 'flux', vae: 'ae.safetensors' } };
+  const g = compileRecipe(flux, allow).graph;
+  expect(g.C).toEqual({ class_type: 'DualCLIPLoader', inputs: { clip_name1: 'clip_l.safetensors', clip_name2: 't5xxl_fp16.safetensors', type: 'flux' } });
+  expect(g['4'].class_type).toBe('EmptySD3LatentImage');
+  expect(g['3']).toEqual({ class_type: 'ConditioningZeroOut', inputs: { conditioning: ['2', 0] } });
+  expect(g['2'].inputs.clip).toEqual(['C', 0]);
+  expect(() => compileRecipe(flux, { ...allow, dualClipTypes: [] })).toThrow(/textEncoder2/);
+  expect(() => compileRecipe({ ...flux, diffusion: { ...flux.diffusion, textEncoder2: 'clip_l.safetensors' } }, allow)).toThrow(/diffusion/);
+});
+// Z-Image Turbo: the family declares EmptySD3LatentImage, a zeroed negative and ModelSamplingAuraFlow(3) — same graph as jobs.rs.
+test('Z-Image compiles the family-declared latent, negative and sampling patch', () => {
+  const nodes = ['UNETLoader', 'CLIPLoader', 'VAELoader', 'CLIPTextEncode', 'KSampler', 'VAEDecode', 'SaveImage', 'EmptySD3LatentImage', 'EmptyFlux2LatentImage', 'ModelSamplingAuraFlow', 'ConditioningZeroOut'];
+  const allow = { nodes, checkpoints: [intent.checkpoint, 'z_image_turbo_bf16.safetensors'], diffusionModels: ['z_image_turbo_bf16.safetensors'], textEncoders: ['qwen_3_4b.safetensors'], clipTypes: ['lumina2'], vaes: ['ae.safetensors'], samplers: ['res_multistep'], schedulers: ['simple'] };
+  const turbo = { ...intent, checkpoint: 'z_image_turbo_bf16.safetensors', steps: 8, cfg: 1, sampler: 'res_multistep', scheduler: 'simple', diffusion: { textEncoder: 'qwen_3_4b.safetensors', clipType: 'lumina2', vae: 'ae.safetensors' } };
+  const g = compileRecipe(turbo, allow).graph;
+  expect(g['4'].class_type).toBe('EmptySD3LatentImage');
+  expect(g['3']).toEqual({ class_type: 'ConditioningZeroOut', inputs: { conditioning: ['2', 0] } });
+  expect(g.M).toEqual({ class_type: 'ModelSamplingAuraFlow', inputs: { shift: 3, model: ['1', 0] } });
+  expect(g['5'].inputs.model).toEqual(['M', 0]);
+  expect(() => compileRecipe(turbo, { ...allow, nodes: nodes.filter(n => n !== 'ModelSamplingAuraFlow') })).toThrow(/ModelSamplingAuraFlow/);
+  // MOSS keeps its Flux2 latent through the same family data instead of a compiler branch.
+  const moss = compileRecipe({ ...intent, diffusion: { textEncoder: 'moss.safetensors', clipType: 'moss_image', vae: 'flux2.safetensors' } },
+    { ...allow, diffusionModels: [intent.checkpoint], textEncoders: ['moss.safetensors'], clipTypes: ['moss_image'], vaes: ['flux2.safetensors'], samplers: ['euler'], schedulers: ['normal'] }).graph;
+  expect(moss['4'].class_type).toBe('EmptyFlux2LatentImage');
+});
 // Qwen Image 2.1 Turbo: the checkpoint's saved 8-step schedule (official ComfyUI template) replaces KSampler — same graph as jobs.rs.
 test('fixed sigmas compile to ManualSigmas → SamplerCustomAdvanced in place of KSampler', () => {
   const nodes = ['CheckpointLoaderSimple', 'CLIPTextEncode', 'EmptyLatentImage', 'KSampler', 'VAEDecode', 'SaveImage', 'LoadImage', 'VAEEncode', 'RandomNoise', 'CFGGuider', 'KSamplerSelect', 'ManualSigmas', 'SamplerCustomAdvanced'];

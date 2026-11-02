@@ -407,6 +407,7 @@
   "studio.run.edit.layerRemove": "移除 {name}",
   "studio.run.edit.layerHelp": "拖动以移动，拖动角以缩放。按键：方向键移动，+ / − 缩放，Delete 移除。",
   "studio.run.textEncoder": "文本编码器",
+  "studio.run.textEncoder2": "第二文本编码器",
   "studio.run.vae": "VAE",
   "studio.run.family.diffusionFolder": "此配方需要 diffusion_models（或 unet）中的扩散模型，而不是 checkpoints 中的文件。请移动文件并刷新模型列表。",
   "studio.run.family.checkpointFolder": "此配方需要 checkpoints 中的检查点，而不是 diffusion_models 或 unet 中的文件。请移动文件并刷新模型列表。",

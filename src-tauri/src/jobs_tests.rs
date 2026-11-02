@@ -1401,6 +1401,7 @@ async fn video_prepare_checks_every_graph_node_and_reads_gifs_outputs() {
     let mut all = json!({"UNETLoader":{"input":{"required":{"unet_name":[["LTX2/ltx.safetensors"]]}}},
         "CLIPLoader":{"input":{"required":{"clip_name":[["gemma_3_12B_it_fp8.safetensors","ltx-2.3_text_projection_bf16.safetensors"]],"type":[["ltxv","wan","minimax"]]}}},
         "VAELoader":{"input":{"required":{"vae_name":[["LTX2/video_vae.safetensors","LTX2/audio_vae.safetensors"]]}}},
+        "DualCLIPLoader":{"input":{"required":{"clip_name1":[["gemma_3_12B_it_fp8.safetensors","ltx-2.3_text_projection_bf16.safetensors"]],"type":[["ltxv"]]}}},
         "KSampler":{"input":{"required":{"sampler_name":[["euler_cfg_pp"]],"scheduler":[["linear_quadratic"]]}}}});
     for n in graph.as_object().unwrap().values() {
         let name = n["class_type"].as_str().unwrap();
@@ -2838,6 +2839,15 @@ async fn prepare_latent_upscale_requires_exact_catalog_id_without_changing_legac
             }
             info["KSampler"]["input"]["required"]["sampler_name"] = json!([[intent["sampler"]]]);
             info["KSampler"]["input"]["required"]["scheduler"] = json!([[intent["scheduler"]]]);
+            // LTX compiles DualCLIPLoader (Gemma + text projection); the prerequisites list its combo.
+            if graph["C"]["class_type"] == "DualCLIPLoader" {
+                info["DualCLIPLoader"]["input"]["required"]["clip_name1"] = json!([[
+                    graph["C"]["inputs"]["clip_name1"],
+                    graph["C"]["inputs"]["clip_name2"]
+                ]]);
+                info["DualCLIPLoader"]["input"]["required"]["type"] =
+                    json!([[graph["C"]["inputs"]["type"]]]);
+            }
             let (base, task) = server(move |path, _| {
                 assert_eq!(
                     path, "GET /comfy/object_info HTTP/1.1",
@@ -3348,6 +3358,147 @@ async fn prepare_requires_only_used_resize_nodes() {
         assert_eq!(jobs.prepare(base, v).await.is_ok(), absent.is_none());
         task.abort();
     }
+}
+
+#[test]
+fn mage_flow_compiles_the_combined_encode_node() {
+    let mut value = intent();
+    value["checkpoint"] = json!("mage_flow_int8_convrot.safetensors");
+    value["steps"] = json!(30);
+    value["cfg"] = json!(5);
+    value["sampler"] = json!("euler");
+    value["scheduler"] = json!("simple");
+    value["diffusion"] = json!({"textEncoder":"qwen3vl_4b_bf16.safetensors","clipType":"mage","vae":"mage_flow_vae_bf16.safetensors","family":"mage"});
+    let g = compile(&value).unwrap();
+    assert_eq!(g["2"]["class_type"], json!("TextEncodeMageFlowEdit"));
+    assert_eq!(g["2"]["inputs"]["negative_prompt"], json!(""));
+    assert_eq!(g["2"]["inputs"]["batch_size"], json!(1));
+    assert!(g.get("3").is_none());
+    assert!(g.get("4").is_none());
+    assert_eq!(g["5"]["inputs"]["negative"], json!(["2", 1]));
+    assert_eq!(g["5"]["inputs"]["latent_image"], json!(["2", 2]));
+}
+
+#[test]
+fn flux2_compiles_the_family_scheduler_instead_of_ksampler() {
+    let mut value = intent();
+    value["checkpoint"] = json!("flux-2-klein-base-4b-fp8.safetensors");
+    value["cfg"] = json!(5);
+    value["diffusion"] = json!({"textEncoder":"qwen_3_4b.safetensors","clipType":"flux2","vae":"flux2-vae.safetensors","family":"flux2"});
+    let g = compile(&value).unwrap();
+    assert_eq!(g["4"]["class_type"], json!("EmptyFlux2LatentImage"));
+    assert_eq!(
+        g["Z"],
+        json!({"class_type":"Flux2Scheduler","inputs":{"steps":20,"width":512,"height":768}})
+    );
+    assert_eq!(g["5"]["class_type"], json!("SamplerCustomAdvanced"));
+    assert_eq!(g["5"]["inputs"]["sigmas"], json!(["Z", 0]));
+    assert_eq!(g["G"]["inputs"]["cfg"], json!(5));
+}
+
+#[test]
+fn lumina2_compiles_the_checkpoint_recipe_points_by_family_id() {
+    let mut value = intent();
+    value["steps"] = json!(30);
+    value["cfg"] = json!(4);
+    value["sampler"] = json!("res_multistep");
+    value["scheduler"] = json!("simple");
+    value["family"] = json!("lumina2");
+    let g = compile(&value).unwrap();
+    assert_eq!(g["1"]["class_type"], json!("CheckpointLoaderSimple"));
+    assert_eq!(g["4"]["class_type"], json!("EmptySD3LatentImage"));
+    assert_eq!(
+        g["M"],
+        json!({"class_type":"ModelSamplingAuraFlow","inputs":{"model":["1",0],"shift":4.0}})
+    );
+    assert_eq!(g["5"]["inputs"]["model"], json!(["M", 0]));
+    assert_eq!(g["3"]["class_type"], json!("CLIPTextEncode"));
+}
+
+#[test]
+fn sd3_and_chroma_compile_the_family_recipe_points() {
+    let mut value = intent();
+    value["checkpoint"] = json!("sd3.safetensors");
+    value["diffusion"] = json!({"textEncoder":"clip_l.safetensors","textEncoder2":"t5xxl_fp16.safetensors","clipType":"sd3","vae":"ae.safetensors","family":"sd3"});
+    value["steps"] = json!(28);
+    value["cfg"] = json!(4.5);
+    value["sampler"] = json!("dpmpp_2m");
+    value["scheduler"] = json!("karras");
+    let g = compile(&value).unwrap();
+    assert_eq!(g["4"]["class_type"], json!("EmptySD3LatentImage"));
+    assert_eq!(
+        g["M"],
+        json!({"class_type":"ModelSamplingSD3","inputs":{"model":["1",0],"shift":3.0}})
+    );
+    assert_eq!(g["3"]["class_type"], json!("CLIPTextEncode"));
+    // Chroma Radiance shares the chroma CLIP type but uses the pixel latent; the family id picks it.
+    value["checkpoint"] = json!("chroma-radiance.safetensors");
+    value["diffusion"] = json!({"textEncoder":"t5xxl_fp16.safetensors","clipType":"chroma","vae":"ae.safetensors","family":"chroma-radiance"});
+    let radiance = compile(&value).unwrap();
+    assert_eq!(
+        radiance["4"]["class_type"],
+        json!("EmptyChromaRadianceLatentImage")
+    );
+    assert!(radiance.get("M").is_none());
+    value["diffusion"] =
+        json!({"textEncoder":"t5xxl_fp16.safetensors","clipType":"chroma","vae":"ae.safetensors"});
+    let shared = compile(&value).unwrap();
+    assert_eq!(shared["4"]["class_type"], json!("EmptySD3LatentImage"));
+}
+
+#[test]
+fn flux_compiles_the_dual_clip_loader_and_family_points() {
+    let mut value = intent();
+    value["checkpoint"] = json!("flux1-dev.safetensors");
+    value["diffusion"] = json!({"textEncoder":"clip_l.safetensors","textEncoder2":"t5xxl_fp16.safetensors","clipType":"flux","vae":"ae.safetensors"});
+    value["steps"] = json!(20);
+    value["cfg"] = json!(1);
+    value["sampler"] = json!("euler");
+    value["scheduler"] = json!("simple");
+    let g = compile(&value).unwrap();
+    assert_eq!(
+        g["C"],
+        json!({"class_type":"DualCLIPLoader","inputs":{"clip_name1":"clip_l.safetensors","clip_name2":"t5xxl_fp16.safetensors","type":"flux"}})
+    );
+    assert_eq!(g["2"]["inputs"]["clip"], json!(["C", 0]));
+    assert_eq!(g["4"]["class_type"], json!("EmptySD3LatentImage"));
+    assert_eq!(
+        g["3"],
+        json!({"class_type":"ConditioningZeroOut","inputs":{"conditioning":["2",0]}})
+    );
+    // The second encoder must differ from the first and stay a safe model name.
+    value["diffusion"] = json!({"textEncoder":"clip_l.safetensors","textEncoder2":"clip_l.safetensors","clipType":"flux","vae":"ae.safetensors"});
+    assert!(compile(&value).is_err());
+}
+
+#[test]
+fn z_image_compiles_the_family_recipe_points() {
+    let mut value = intent();
+    value["checkpoint"] = json!("z_image_turbo_bf16.safetensors");
+    value["diffusion"] =
+        json!({"textEncoder":"qwen_3_4b.safetensors","clipType":"lumina2","vae":"ae.safetensors"});
+    value["steps"] = json!(8);
+    value["cfg"] = json!(1);
+    value["sampler"] = json!("res_multistep");
+    value["scheduler"] = json!("simple");
+    let g = compile(&value).unwrap();
+    assert_eq!(g["4"]["class_type"], json!("EmptySD3LatentImage"));
+    assert_eq!(
+        g["3"],
+        json!({"class_type":"ConditioningZeroOut","inputs":{"conditioning":["2",0]}})
+    );
+    assert_eq!(
+        g["M"],
+        json!({"class_type":"ModelSamplingAuraFlow","inputs":{"model":["1",0],"shift":3.0}})
+    );
+    assert_eq!(g["5"]["inputs"]["model"], json!(["M", 0]));
+    assert_eq!(g["5"]["inputs"]["negative"], json!(["3", 0]));
+    // Unknown clip types keep the plain graph: generic latent, encoded negative, no patch.
+    value["diffusion"] = json!({"textEncoder":"qwen_3_4b.safetensors","clipType":"unknown_type","vae":"ae.safetensors"});
+    let plain = compile(&value).unwrap();
+    assert_eq!(plain["4"]["class_type"], json!("EmptyLatentImage"));
+    assert_eq!(plain["3"]["class_type"], json!("CLIPTextEncode"));
+    assert!(plain.get("M").is_none());
 }
 
 #[test]

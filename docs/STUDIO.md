@@ -156,6 +156,44 @@ Starting sampling values follow the Comfy-Org t2i template (25 steps, CFG 2.5, `
 
 Header detection identifies the MOSS diffusion model and supported full-width Qwen3.5-9B/Flux2 companion signatures. The locally inspected packed `mossImage_sft_txt_int4.safetensors` encoder remains **unknown**: Matching does not claim compatibility. An explicit category-scoped **All files** choice can select it, but selection is not successful loading. Required nodes/components are checked against the final emitted graph; an unused checkpoint loader or generic empty latent is not a MOSS requirement. Later fixed-seed 512x512 GPU reference-effect runs provide narrow MOSS execution evidence; see [the recorded model/settings limits](VERIFICATION.md#unified-image-reference-wiring-0147). Other variants, ordinary i2i quality, Windows runtime and broad image-quality/resource acceptance remain open.
 
+### SD3, Chroma and Chroma Radiance
+
+**SD3 / SD3.5** is a two-encoder family: pick `clip_l` (or `clip_g`) plus `t5xxl` in the second picker, the SD3 VAE, then run Text to Image or Image to Image. The recipe compiles `DualCLIPLoader` with type `sd3`, uses `EmptySD3LatentImage` and chains `ModelSamplingSD3` with shift 3 (ComfyUI core's declared SD3 shift). Starting values are 28 steps at CFG 4.5 `dpmpp_2m`/`karras`; SD3.5 Large Turbo wants CFG 1. Negative prompts are encoded normally.
+
+**Chroma** (Chroma1-HD/Flash) uses the single T5-XXL encoder with type `chroma`, the Flux latent (`EmptySD3LatentImage`) and no sampling patch (core declares multiplier 1.0). **Chroma Radiance** is a separate family with the pixel-space `EmptyChromaRadianceLatentImage`; both share the `chroma` CLIP type, so the recipe carries the family id to pick the right latent. Steps/CFG for both are starting values, not verified against a blueprint. Canvas edges must be multiples of 16.
+
+**HiDream** (I1 Full/Dev/Fast) is a two-encoder family: `llama_3_8b` plus `t5xxl` in the second picker, type `hidream`, the Flux VAE and latent, no sampling patch. Starting values are 50 steps at CFG 5 (Full/Dev) or 16 at CFG 1 (Fast). HiDream-O1 has its own latent and is not covered.
+
+**PixArt** (Alpha/Sigma) uses the single T5-XXL encoder with type `pixart` and the SD15/SDXL latent (`EmptyLatentImage`, grid 8), no sampling patch. **HunyuanDiT** (1.0/1.5) is a two-encoder family: `clip_l` + `mt5xl`, type `hunyuan_dit`, SDXL latent, no sampling patch. Steps/CFG for both are starting values.
+
+**Lumina2** (NetaYume v3.5, Lumina-Image 2.0) is an all-in-one checkpoint: pick the file in Checkpoint, no separate encoder or VAE. The recipe uses `EmptySD3LatentImage` and chains `ModelSamplingAuraFlow` with shift 4, starting on the Comfy-Org *Text to Image (NetaYume Lumina)* values: 30 steps, CFG 4, `res_multistep`, `simple`. Z-Image shares the same header key set, so detection compares the `cap_embedder` dimension (Lumina2 2304, Z-Image 3840); a GGUF Lumina2 file has no shapes and stays unknown. The NetaYume prompt prefix is not added automatically.
+
+**SD1.5 / SD2** are plain checkpoint families (`conditioner.embedders.0` only, so SDXL's two-embedder signature still wins): `EmptyLatentImage`, no sampling patch, grid 8, starting on 512×512 at 20 steps CFG 7 `dpmpp_2m`/`karras`. SD2.1 uses the same graph with its 768-token encoder. Inpainting and refiner checkpoints keep the plain graph too.
+
+**Kandinsky 5 Image** (Lite/Pro) uses the single Qwen2.5-VL-7B encoder with type `kandinsky5_image`, the Flux latent (`EmptySD3LatentImage`, grid 16) and no sampling patch (the shift is internal). Starting values are 20 steps at CFG 4; not verified against a blueprint.
+
+**Ideogram 4** uses the Qwen3-8B encoder with type `ideogram4`, the Flux2 latent (`EmptyFlux2LatentImage`) and no sampling patch (shift 1.0 internal). **Boogu Image** (OmniGen2 derivative) uses the full Qwen3-VL-8B encoder with type `boogu`, the Flux latent and no sampling patch (shift 3.16 internal). **OmniGen2** uses the Qwen2.5-VL-3B encoder with type `omnigen2`, the Flux latent and no patch (shift 2.6 internal). **Fibo 2.0** uses the Qwen3-VL-4B encoder with type `fibo2` and the Flux2 latent; **Ernie Image** the Ministral-3-3B encoder with the Flux2 latent. All keep their internal shift. Steps/CFG are starting values.
+
+**Flux.2** (Klein 4B / Dev) is a split family: the Qwen3-4B (`qwen_3_4b`) or Mistral-3-small encoder with type `flux2`, the `flux2-vae`, and `EmptyFlux2LatentImage`. The recipe compiles `Flux2Scheduler` (steps and canvas size) with `CFGGuider`, `KSamplerSelect` and `SamplerCustomAdvanced` instead of `KSampler`; the family declares the scheduler node, so no sigmas list is needed. Starting values are the Comfy-Org *Image Edit (Flux.2 Klein 4B)* blueprint: 20 steps, CFG 5, `euler`. Flux.2's edit/reference path (ReferenceLatent) is not covered.
+
+**Flux.3** uses the Qwen3-VL-4B encoder with type `flux3` and the same Flux2 latent/VAE and scheduler path. ComfyUI core ships no blueprint for it, so the graph and the 20/1 starting values are unverified.
+
+**Mage-Flow** (and Turbo) uses the Qwen3-VL-4B encoder with type `mage` and the Mage-Flow VAE. Its recipe is a single `TextEncodeMageFlowEdit` node that carries prompt, negative prompt and the output size and returns positive, negative *and* the latent — so there is no `EmptyLatentImage` and no separate negative node; the sampler links output 0/1/2 of that node. Starting values are the Comfy-Org *Text to Image (Mage-Flow)* blueprint: 30 steps at CFG 5 `euler`/`simple` (Turbo 4 steps at CFG 1). Core has no header branch for Mage-Flow, so the family is only picked by the modelspec architecture or an explicit family id; edit references are not covered.
+
+**PixelDiT** (T2I) uses the Gemma-2 encoder with type `pixeldit` and the pixel latent (`EmptyChromaRadianceLatentImage`, grid 16), no sampling patch (shift 4.0 internal). Its VAE file name and the 20/4 starting values are unverified.
+
+### Flux.1 generation
+
+The header-detected **Flux.1** family covers the dev, schnell and Krea diffusion files in **Text → Image** and ordinary denoise-based **Image → Image**. Flux.1 needs two encoders, so the Model files panel shows a second **Second text encoder** picker next to the first one: pick `clip_l` and `t5xxl` (the `flux` CLIP type comes from the family), then the Flux VAE (`ae`). The recipe compiles `DualCLIPLoader`, uses `EmptySD3LatentImage`, zeroes the negative conditioning and starts on the Comfy-Org *Text to Image (Flux.1 Dev)* blueprint values: 20 steps, CFG 1, `euler`, `simple`. Canvas edges must be multiples of 16.
+
+The second encoder is matched by file name, not by header identity, so a renamed T5 file still lists under the second picker. `DualCLIPLoaderGGUF` is used when either encoder is a GGUF file. Flux.1 Fill (the inpaint variant) is not covered; Flux.1 LoRA key rules are not declared yet, so a Flux LoRA lists as unknown. Real-model quality and VRAM remain unverified.
+
+### Z-Image generation
+
+The header-detected **Z-Image** family (Z-Image Turbo) supports **Text → Image** and ordinary denoise-based **Image → Image** through the shared image recipe. Select the diffusion file in Checkpoint, then its Qwen3-4B text encoder with the `lumina2` loader type and the Flux VAE (`ae`) under **Model files**. The recipe uses the core `EmptySD3LatentImage`, chains `ModelSamplingAuraFlow` with shift 3 after the LoRA and option patches, and replaces the encoded negative with `ConditioningZeroOut`. Canvas edges must be multiples of 16.
+
+Starting sampling values follow the Comfy-Org *Text to Image (Z-Image-Turbo)* blueprint: 8 steps, CFG 1, `res_multistep`, `simple`. **Z-Image Base** is not covered by this entry: it wants 25–30 steps at CFG 3–5 and an encoded negative prompt, so set those values yourself and expect the zeroed negative. LoRA detection has no Z-Image key rules yet, so a Z-Image LoRA lists as unknown and still compiles through the shared `LoraLoader`; its compatibility is unverified. The latent node, the zeroed negative and the sampling patch are family data in `src/families/builtin.json`; unknown architectures keep the plain `EmptyLatentImage` graph. Real-model quality, VRAM and the Windows runtime remain unverified.
+
 ### Queue output controls and generation time
 
 Live progress/preview observation belongs to the native job and survives navigation or a remounted Studio view. Native terminal results, confirmed whole-Workbench Stop and final native job release end that optional observer promptly. Closing observation does not prove backend termination: uncertain jobs stay **unknown** and retain their normal reconciliation path. Last preview data, outputs and history are retained under their existing bounds. Stop keeps its existing confirmation and ownership restrictions. This observer-lifetime correction has authored native fixtures; native/platform runtime acceptance remains pending.

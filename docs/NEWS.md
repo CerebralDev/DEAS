@@ -1,5 +1,32 @@
 # News
 
+## 0.2.13 BETA
+
+- **SD3 and SD3.5 are selectable.** Pick `clip_l`/`clip_g` and `t5xxl` in the two encoder slots plus the SD3 VAE; the recipe uses the dual CLIP loader, the SD3 latent and a shift-3 sampling patch.
+- **Chroma and Chroma Radiance are selectable.** Both use the T5-XXL encoder with type `chroma`; Chroma runs the Flux latent, Radiance the pixel latent. The family id keeps the two apart.
+- **HiDream is selectable.** `llama_3_8b` plus `t5xxl` in the two encoder slots, the Flux VAE and latent, no sampling patch.
+- **PixArt and HunyuanDiT are selectable.** PixArt takes the single T5 encoder, HunyuanDiT the dual `clip_l` + `mt5xl` pair; both use the SD latent and need no sampling patch.
+- **Lumina2 is selectable.** Pick the all-in-one NetaYume checkpoint; the family brings the SD3 latent and the AuraFlow shift-4 sampling patch. Z-Image stays separate through the tensor-shape check.
+- **SD1.5 and SD2 are selectable.** Plain checkpoint families: SD latent, no sampling patch, grid 8, 512×512 at 20 steps CFG 7. SDXL keeps its own two-encoder signature.
+- **Kandinsky 5 Image is selectable.** Qwen2.5-VL-7B encoder, Flux latent, no sampling patch.
+- **Ideogram 4 and Boogu Image are selectable.** Ideogram 4 uses the Qwen3-8B encoder and the Flux2 latent; Boogu the full Qwen3-VL-8B encoder and the Flux latent.
+- **OmniGen2 is selectable.** Qwen2.5-VL-3B encoder, Flux latent, no sampling patch.
+- **Fibo 2.0 and Ernie Image are selectable.** Fibo 2.0 uses Qwen3-VL-4B and Ernie Ministral-3-3B; both take the Flux2 latent.
+- **Flux.2 is selectable.** Klein/Dev with the Qwen3-4B or Mistral-3-small encoder, Flux2 latent and VAE; the graph uses Flux2Scheduler with CFGGuider instead of KSampler.
+- **Flux.3 is selectable (unverified).** Qwen3-VL-4B encoder with the Flux2 latent and the same scheduler path.
+- **Mage-Flow is selectable.** Qwen3-VL-4B encoder and Mage-Flow VAE; prompt, negative and latent come from one encode node, 30 steps at CFG 5.
+- **PixelDiT is selectable (unverified).** Gemma-2 encoder, pixel latent, no sampling patch.
+
+## 0.2.12 BETA
+
+- **Flux.1 is selectable.** Pick the Flux.1 diffusion file, its `clip_l` and `t5xxl` encoders (the second one in the new **Second text encoder** picker) and the Flux VAE, then run Text to Image or Image to Image. The recipe uses the dual CLIP loader, the SD3 latent, a zeroed negative and the blueprint's 20 steps at CFG 1.
+- **Two-encoder families no longer need compiler code.** A family declares its dual loader and the second encoder slot; both compilers read the same optional field.
+
+## 0.2.11 BETA
+
+- **Z-Image is selectable.** Choose the Z-Image Turbo diffusion file, its Qwen3-4B text encoder and the Flux VAE, then run Text to Image or Image to Image. The family brings its own SD3 latent, sampling shift and zeroed negative, so the numbers are the model's, not generic ones.
+- **New image families are data, not code.** A family now declares its latent node, negative handling and sampling patch in the bundled family file; unknown models keep the plain recipe.
+
 ## 0.2.10 BETA
 
 - **Prompt Forge:** dropping a picture on the Reference images zone works in the native shell, and a drop with no usable picture says so.

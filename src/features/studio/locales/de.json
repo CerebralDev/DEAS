@@ -407,6 +407,7 @@
   "studio.run.edit.layerRemove": "{name} entfernen",
   "studio.run.edit.layerHelp": "Ziehen verschiebt, Ecke skaliert. Tasten: Pfeile verschieben, + / − skalieren, Entf entfernt.",
   "studio.run.textEncoder": "Text-Encoder",
+  "studio.run.textEncoder2": "Zweiter Text-Encoder",
   "studio.run.vae": "VAE",
   "studio.run.family.diffusionFolder": "Dieses Rezept benötigt ein Diffusionsmodell unter diffusion_models (oder unet), nicht checkpoints. Verschiebe die Datei und aktualisiere die Modellliste.",
   "studio.run.family.checkpointFolder": "Dieses Rezept benötigt einen Checkpoint unter checkpoints, nicht diffusion_models oder unet. Verschiebe die Datei und aktualisiere die Modellliste.",

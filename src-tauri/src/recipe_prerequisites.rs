@@ -13,10 +13,13 @@ const REQUIRED_NODES: [&str; 6] = [
 ];
 /// Image-to-image (`LoadImage`, `VAEEncode`), split diffusion-model loading and the DaSiWa
 /// Civitai-metadata saver; their absence blocks only the recipe variant that needs them.
-const OPTIONAL_NODES: [&str; 30] = [
+const OPTIONAL_NODES: [&str; 34] = [
     "TextEncodeQwenImage21",
     "DEAS_ImagePromptEncode",
     "EmptyFlux2LatentImage",
+    "EmptySD3LatentImage",
+    "ModelSamplingAuraFlow",
+    "ConditioningZeroOut",
     "LoraLoader",
     "CLIPVisionLoader",
     "CLIPVisionEncode",
@@ -46,13 +49,15 @@ const OPTIONAL_NODES: [&str; 30] = [
     "VAELoader",
     "DaSiWa_MetadataImageSaver",
     "DaSiWa_MetadataConfig",
+    "TextEncodeMageFlowEdit",
 ];
-/// Model-fixed sigma schedules (Qwen Image 2.1 Turbo): `ManualSigmas` → `SamplerCustomAdvanced` instead of `KSampler`.
-pub(crate) const SIGMA_NODES: [&str; 5] = [
+/// Model-fixed sigma schedules (Qwen Image 2.1 Turbo, Flux.2): `ManualSigmas`/`Flux2Scheduler` → `SamplerCustomAdvanced` instead of `KSampler`.
+pub(crate) const SIGMA_NODES: [&str; 6] = [
     "RandomNoise",
     "CFGGuider",
     "KSamplerSelect",
     "ManualSigmas",
+    "Flux2Scheduler",
     "SamplerCustomAdvanced",
 ];
 /// Workbench Options patches (attention, step caches, compile, tiled VAE);
@@ -170,6 +175,8 @@ fn parse(base: &reqwest::Url, nodes: &Value) -> Result<Value, String> {
             "diffusionModels":combo(nodes, "UNETLoader", "unet_name")?,
             "ggufDiffusionModels":combo(nodes, "UnetLoaderGGUF", "unet_name")?,
             "textEncoders":combo(nodes, "CLIPLoader", "clip_name")?,
+            "dualTextEncoders":combo(nodes, "DualCLIPLoader", "clip_name1")?,
+            "dualClipTypes":combo(nodes, "DualCLIPLoader", "type")?,
             "ggufTextEncoders":combo(nodes, "CLIPLoaderGGUF", "clip_name")?,
             "ggufClipTypes":combo(nodes, "CLIPLoaderGGUF", "type")?,
             "ggufDualTextEncoders":combo(nodes, "DualCLIPLoaderGGUF", "clip_name1")?,
@@ -756,7 +763,7 @@ mod tests {
                 "allowlist":{
                     "nodes":["CheckpointLoaderSimple","CLIPTextEncode","EmptyLatentImage","KSampler","VAEDecode","SaveImage","LoraLoader","CLIPVisionLoader","CLIPVisionEncode","unCLIPConditioning"],
                     "checkpoints":["sd/model.safetensors"], "loras":["style/detail.safetensors"], "images":[], "samplers":["euler","dpmpp_2m"], "schedulers":["normal","karras"],
-                    "diffusionModels":[], "ggufDiffusionModels":[], "ggufTextEncoders":[], "ggufClipTypes":[], "ggufDualTextEncoders":[], "ggufDualClipTypes":[], "textEncoders":[], "clipTypes":[], "vaes":[], "visionModels":["clip-vit.safetensors"], "attention":[], "sage":[], "compile":[], "upscaleModels":[], "latentUpscaleModels":[], "h3LatentUpscaleModels":[], "frameInterpolationModels":[], "rtxUpscaleModes":[], "audioEncoders":[]
+                    "diffusionModels":[], "ggufDiffusionModels":[], "ggufTextEncoders":[], "ggufClipTypes":[], "ggufDualTextEncoders":[], "ggufDualClipTypes":[], "textEncoders":[], "dualTextEncoders":[], "dualClipTypes":[], "clipTypes":[], "vaes":[], "visionModels":["clip-vit.safetensors"], "attention":[], "sage":[], "compile":[], "upscaleModels":[], "latentUpscaleModels":[], "h3LatentUpscaleModels":[], "frameInterpolationModels":[], "rtxUpscaleModes":[], "audioEncoders":[]
                 }, "missingNodes":[], "generationReady":false
             })
         );

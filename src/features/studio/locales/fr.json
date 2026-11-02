@@ -407,6 +407,7 @@
   "studio.run.edit.layerRemove": "Retirer {name}",
   "studio.run.edit.layerHelp": "Glisser pour déplacer, coin pour redimensionner. Touches : flèches déplacent, + / − redimensionnent, Suppr retire.",
   "studio.run.textEncoder": "Encodeur de texte",
+  "studio.run.textEncoder2": "Second encodeur de texte",
   "studio.run.vae": "VAE",
   "studio.run.family.diffusionFolder": "Cette recette exige un modèle dans diffusion_models (ou unet), pas checkpoints. Déplacez le fichier et actualisez la liste.",
   "studio.run.family.checkpointFolder": "Cette recette exige un checkpoint dans checkpoints, pas diffusion_models ou unet. Déplacez le fichier et actualisez la liste.",

@@ -383,16 +383,34 @@ fn compile(i: &Value) -> Result<Value, String> {
             "Invalid inputLayers: 1-4 {image, x, y, width, height} on an inputImage".into(),
         );
     }
+    // `family` names a checkpoint-loader family whose recipe points differ (Lumina2 latent/patch); optional.
+    let family = object.get("family");
+    if family.is_some_and(|f| !f.as_str().is_some_and(safe_choice)) {
+        return Err("Invalid family: a safe bundled family id".into());
+    }
     // `diffusion` loads `checkpoint` as a diffusion model with a separate text encoder and VAE.
     let diffusion = object.get("diffusion");
     if diffusion.is_some_and(|d| {
-        d.as_object().is_none_or(|o| o.len() != 3)
-            || !["textEncoder", "vae"]
-                .iter()
-                .all(|k| d[*k].as_str().is_some_and(comfy_model_name))
+        d.as_object().is_none_or(|o| {
+            !(3..=5).contains(&o.len())
+                || o.keys().any(|k| {
+                    !["textEncoder", "textEncoder2", "clipType", "vae", "family"]
+                        .contains(&k.as_str())
+                })
+        }) || !["textEncoder", "vae"]
+            .iter()
+            .all(|k| d[*k].as_str().is_some_and(comfy_model_name))
             || !d["clipType"].as_str().is_some_and(safe_choice)
+            || d.get("family")
+                .is_some_and(|v| !v.as_str().is_some_and(safe_choice))
+            || d.get("textEncoder2").is_some_and(|v| {
+                !v.as_str().is_some_and(comfy_model_name) || v == &d["textEncoder"]
+            })
     }) {
-        return Err("Invalid diffusion: expected {textEncoder, clipType, vae}".into());
+        return Err(
+            "Invalid diffusion: expected {textEncoder, clipType, vae} and an optional textEncoder2"
+                .into(),
+        );
     }
     if diffusion.is_some_and(|d| d["clipType"] == "moss_image") {
         let multiple =
@@ -499,6 +517,7 @@ fn compile(i: &Value) -> Result<Value, String> {
             + usize::from(blur.is_some())
             + usize::from(crop.is_some())
             + usize::from(layers.is_some())
+            + usize::from(family.is_some())
         || fields.iter().any(|key| !object.contains_key(*key))
     {
         return Err("Missing or unknown diagnostic intent fields".into());
@@ -668,15 +687,44 @@ fn compile(i: &Value) -> Result<Value, String> {
         return Err("Unsafe output prefix".into());
     }
     let gguf = is_gguf(i["checkpoint"].as_str().unwrap());
+    // The family declares latent/negative/sampling patch; unknown architectures keep the plain graph.
+    let recipe = object
+        .get("family")
+        .and_then(Value::as_str)
+        .and_then(crate::model_families::image_recipe_by_id)
+        .or_else(|| {
+            diffusion.and_then(|d| {
+                d.get("family")
+                    .and_then(Value::as_str)
+                    .and_then(crate::model_families::image_recipe_by_id)
+                    .or_else(|| {
+                        d["clipType"]
+                            .as_str()
+                            .map(crate::model_families::image_recipe)
+                    })
+            })
+        })
+        .unwrap_or_default();
     let mut graph = json!({
         "1":{"class_type":"CheckpointLoaderSimple","inputs":{"ckpt_name":i["checkpoint"]}},
         "2":{"class_type":"CLIPTextEncode","inputs":{"text":i["positivePrompt"],"clip":["1",1]}},
         "3":{"class_type":"CLIPTextEncode","inputs":{"text":i["negativePrompt"],"clip":["1",1]}},
-        "4":{"class_type":if diffusion.is_some_and(|d| d["clipType"] == "moss_image") { "EmptyFlux2LatentImage" } else { "EmptyLatentImage" },"inputs":{"width":i["width"],"height":i["height"],"batch_size":1}},
+        "4":{"class_type":recipe.latent.unwrap_or("EmptyLatentImage"),"inputs":{"width":i["width"],"height":i["height"],"batch_size":1}},
         "5":{"class_type":"KSampler","inputs":{"model":["1",0],"positive":["2",0],"negative":["3",0],"latent_image":["4",0],"seed":i["seed"],"steps":i["steps"],"cfg":i["cfg"],"sampler_name":i["sampler"],"scheduler":i["scheduler"],"denoise":1}},
         "6":{"class_type":"VAEDecode","inputs":{"samples":["5",0],"vae":["1",2]}},
         "7":{"class_type":"SaveImage","inputs":{"images":["6",0],"filename_prefix":i["outputPrefix"]}}
     });
+    // Mage-Flow encodes prompt, negative and latent in one node (outputs positive/negative/latent).
+    if let Some(enc) = recipe.encode_node {
+        graph["2"] = json!({"class_type":enc,"inputs":{"clip":["1",1],"prompt":i["positivePrompt"],"negative_prompt":i["negativePrompt"],"width":i["width"],"height":i["height"],"batch_size":1}});
+        if let Some(object) = graph.as_object_mut() {
+            object.remove("3");
+            object.remove("4");
+        }
+        graph["5"]["inputs"]["negative"] = json!(["2", 1]);
+        graph["5"]["inputs"]["latent_image"] = json!(["2", 2]);
+    }
+    let latent = graph["5"]["inputs"]["latent_image"].clone();
     let (mut model, mut clip, mut vae) = (json!(["1", 0]), json!(["1", 1]), json!(["1", 2]));
     if let Some(rules) = wildcard {
         let mut inputs = rules.clone();
@@ -685,7 +733,9 @@ fn compile(i: &Value) -> Result<Value, String> {
         inputs["negative_input"] = i["negativePrompt"].clone();
         graph["WP"] = json!({"class_type":crate::wildcard::NODE,"inputs":inputs});
         graph["2"]["inputs"]["text"] = json!(["WP", 0]);
-        graph["3"]["inputs"]["text"] = json!(["WP", 1]);
+        if !recipe.zero_negative && recipe.encode_node.is_none() {
+            graph["3"]["inputs"]["text"] = json!(["WP", 1]);
+        }
     }
     if let Some(d) = diffusion {
         graph["1"] = if gguf {
@@ -693,7 +743,14 @@ fn compile(i: &Value) -> Result<Value, String> {
         } else {
             json!({"class_type":"UNETLoader","inputs":{"unet_name":i["checkpoint"],"weight_dtype":"default"}})
         };
-        graph["C"] = clip_loader(&d["textEncoder"], &d["clipType"]);
+        graph["C"] = match d.get("textEncoder2") {
+            Some(second) => dual_clip_loader(
+                &d["textEncoder"],
+                second,
+                d["clipType"].as_str().unwrap_or_default(),
+            ),
+            None => clip_loader(&d["textEncoder"], &d["clipType"]),
+        };
         graph["V"] = json!({"class_type":"VAELoader","inputs":{"vae_name":d["vae"]}});
         (clip, vae) = (json!(["C", 0]), json!(["V", 0]));
     }
@@ -727,8 +784,20 @@ fn compile(i: &Value) -> Result<Value, String> {
     if let Some(b) = o["compile"].as_str() {
         patch("T", "TorchCompileModel", json!({"backend":b}));
     }
+    // Family-declared sampling patch chains after every model patch, so it sees the final model.
+    if let Some((node, shift)) = recipe.patch {
+        graph["M"] = json!({"class_type":node,"inputs":{"model":model.clone(),"shift":shift}});
+        model = json!(["M", 0]);
+    }
     graph["2"]["inputs"]["clip"] = clip.clone();
-    graph["3"]["inputs"]["clip"] = clip;
+    if recipe.encode_node.is_none() {
+        if recipe.zero_negative {
+            graph["3"] =
+                json!({"class_type":"ConditioningZeroOut","inputs":{"conditioning":["2",0]}});
+        } else {
+            graph["3"]["inputs"]["clip"] = clip;
+        }
+    }
     graph["5"]["inputs"]["model"] = model;
     graph["6"]["inputs"]["vae"] = vae.clone();
     if let Some(s) = sigmas {
@@ -741,11 +810,19 @@ fn compile(i: &Value) -> Result<Value, String> {
             .map(|v| v.to_string())
             .collect::<Vec<_>>()
             .join(", ");
+        let schedule = json!({"class_type":"ManualSigmas","inputs":{"sigmas":list}});
         graph["N"] = json!({"class_type":"RandomNoise","inputs":{"noise_seed":i["seed"]}});
         graph["G"] = json!({"class_type":"CFGGuider","inputs":{"model":graph["5"]["inputs"]["model"],"positive":["2",0],"negative":["3",0],"cfg":i["cfg"]}});
         graph["Q"] = json!({"class_type":"KSamplerSelect","inputs":{"sampler_name":i["sampler"]}});
-        graph["Z"] = json!({"class_type":"ManualSigmas","inputs":{"sigmas":list}});
-        graph["5"] = json!({"class_type":"SamplerCustomAdvanced","inputs":{"noise":["N",0],"guider":["G",0],"sampler":["Q",0],"sigmas":["Z",0],"latent_image":["4",0]}});
+        graph["Z"] = schedule;
+        graph["5"] = json!({"class_type":"SamplerCustomAdvanced","inputs":{"noise":["N",0],"guider":["G",0],"sampler":["Q",0],"sigmas":["Z",0],"latent_image":latent.clone()}});
+    } else if let Some(node) = recipe.sigma_node {
+        // Family-declared scheduler (Flux2Scheduler): it derives the sigmas from steps and canvas.
+        graph["N"] = json!({"class_type":"RandomNoise","inputs":{"noise_seed":i["seed"]}});
+        graph["G"] = json!({"class_type":"CFGGuider","inputs":{"model":graph["5"]["inputs"]["model"],"positive":["2",0],"negative":["3",0],"cfg":i["cfg"]}});
+        graph["Q"] = json!({"class_type":"KSamplerSelect","inputs":{"sampler_name":i["sampler"]}});
+        graph["Z"] = json!({"class_type":node,"inputs":{"steps":i["steps"],"width":i["width"],"height":i["height"]}});
+        graph["5"] = json!({"class_type":"SamplerCustomAdvanced","inputs":{"noise":["N",0],"guider":["G",0],"sampler":["Q",0],"sigmas":["Z",0],"latent_image":latent.clone()}});
     }
     if let Some(image) = image {
         graph["8"] = json!({"class_type":"LoadImage","inputs":{"image":image}});
@@ -1362,11 +1439,43 @@ impl Jobs {
                         vec![intent["checkpoint"].as_str().unwrap()],
                     ),
                     (
-                        if is_gguf(diffusion["textEncoder"].as_str().unwrap_or_default()) {"ggufTextEncoders"} else {"textEncoders"},
-                        diffusion["textEncoder"].as_str().into_iter().collect(),
+                        match diffusion["textEncoder2"].as_str() {
+                            Some(second) => {
+                                if is_gguf(diffusion["textEncoder"].as_str().unwrap_or_default())
+                                    || is_gguf(second)
+                                {
+                                    "ggufDualTextEncoders"
+                                } else {
+                                    "dualTextEncoders"
+                                }
+                            }
+                            None if is_gguf(diffusion["textEncoder"].as_str().unwrap_or_default()) => {
+                                "ggufTextEncoders"
+                            }
+                            None => "textEncoders",
+                        },
+                        diffusion["textEncoder"]
+                            .as_str()
+                            .into_iter()
+                            .chain(diffusion["textEncoder2"].as_str())
+                            .collect(),
                     ),
                     (
-                        if is_gguf(diffusion["textEncoder"].as_str().unwrap_or_default()) {"ggufClipTypes"} else {"clipTypes"},
+                        match diffusion["textEncoder2"].as_str() {
+                            Some(second) => {
+                                if is_gguf(diffusion["textEncoder"].as_str().unwrap_or_default())
+                                    || is_gguf(second)
+                                {
+                                    "ggufDualClipTypes"
+                                } else {
+                                    "dualClipTypes"
+                                }
+                            }
+                            None if is_gguf(diffusion["textEncoder"].as_str().unwrap_or_default()) => {
+                                "ggufClipTypes"
+                            }
+                            None => "clipTypes",
+                        },
                         diffusion["clipType"].as_str().into_iter().collect(),
                     ),
                     ("vaes", diffusion["vae"].as_str().into_iter().collect()),

@@ -31,6 +31,76 @@ struct Family {
     /// (Qwen Image 2.1 Turbo declares the same architecture as the base model).
     #[serde(default, rename = "fileMatch")]
     file_match: Vec<String>,
+    /// Latent node the family's image recipe creates; `EmptyLatentImage` when absent.
+    #[serde(default)]
+    latent: Option<String>,
+    /// `"zero"` replaces the encoded negative with `ConditioningZeroOut` (cfg-1 distilled models).
+    #[serde(default)]
+    negative: Option<String>,
+    /// Model-sampling patch the family's recipe chains after the model (e.g. `ModelSamplingAuraFlow`).
+    #[serde(default)]
+    patch: Option<Patch>,
+    /// Header tensor shapes that must match, because architectures share a key set (Z-Image 3840 vs Lumina2 2304).
+    #[serde(default, rename = "modelShapes")]
+    model_shapes: Vec<ShapeRule>,
+    /// Scheduler node that derives the sigmas from steps/canvas (Flux2Scheduler), replacing KSampler.
+    #[serde(default, rename = "sigmaNode")]
+    sigma_node: Option<String>,
+    /// Conditioning node that also carries the latent (Mage-Flow's TextEncodeMageFlowEdit: outputs positive/negative/latent).
+    #[serde(default, rename = "encodeNode")]
+    encode_node: Option<String>,
+}
+
+#[derive(Deserialize, Default)]
+struct ShapeRule {
+    key: String,
+    /// Tensor shape prefix; an empty list matches any shape.
+    #[serde(default)]
+    shape: Vec<u64>,
+}
+
+#[derive(Deserialize, Default)]
+struct Patch {
+    node: String,
+    #[serde(default)]
+    shift: Option<f64>,
+}
+
+/// Image-recipe points a family declares instead of a compiler branch; the defaults are the
+/// plain checkpoint graph every unknown architecture keeps.
+#[derive(Default)]
+pub(crate) struct ImageRecipe {
+    pub(crate) latent: Option<&'static str>,
+    pub(crate) zero_negative: bool,
+    pub(crate) patch: Option<(&'static str, f64)>,
+    pub(crate) sigma_node: Option<&'static str>,
+    pub(crate) encode_node: Option<&'static str>,
+}
+
+pub(crate) fn image_recipe(clip_type: &str) -> ImageRecipe {
+    families()
+        .iter()
+        .find(|f| f.clip_type.as_deref() == Some(clip_type))
+        .map(recipe_of)
+        .unwrap_or_default()
+}
+
+/// Recipe by explicit family id: families that share a CLIP type (Chroma / Chroma Radiance) differ in latent.
+pub(crate) fn image_recipe_by_id(id: &str) -> Option<ImageRecipe> {
+    families().iter().find(|f| f.id == id).map(recipe_of)
+}
+
+fn recipe_of(f: &'static Family) -> ImageRecipe {
+    ImageRecipe {
+        latent: f.latent.as_deref(),
+        zero_negative: f.negative.as_deref() == Some("zero"),
+        patch: f
+            .patch
+            .as_ref()
+            .map(|p| (p.node.as_str(), p.shift.unwrap_or(1.0))),
+        sigma_node: f.sigma_node.as_deref(),
+        encode_node: f.encode_node.as_deref(),
+    }
 }
 
 fn families() -> &'static [Family] {
@@ -105,8 +175,11 @@ fn read_header(path: &Path) -> Option<(serde_json::Map<String, Value>, u64)> {
     Some((serde_json::from_slice(&buf).ok()?, meta.len() - 8 - len))
 }
 
-/// Header keys joined with `_` folded to `.`, preserving the existing main-family policy.
-fn header(path: &Path) -> Option<(String, String)> {
+/// Folded tensor name → shape, read once per file.
+type TensorShapes = Vec<(String, Vec<u64>)>;
+
+/// Header keys joined with `_` folded to `.`, preserving the existing main-family policy; tensor shapes are folded the same way.
+fn header(path: &Path) -> Option<(String, String, TensorShapes)> {
     let (head, _) = read_header(path)?;
     let arch = head
         .get("__metadata__")
@@ -114,13 +187,40 @@ fn header(path: &Path) -> Option<(String, String)> {
         .and_then(Value::as_str)
         .unwrap_or("")
         .to_ascii_lowercase();
+    let shapes = head
+        .iter()
+        .filter(|(k, _)| k.as_str() != "__metadata__")
+        .map(|(k, tensor)| {
+            (
+                k.replace('_', "."),
+                tensor
+                    .get("shape")
+                    .and_then(Value::as_array)
+                    .map(|s| s.iter().filter_map(Value::as_u64).collect::<Vec<u64>>())
+                    .unwrap_or_default(),
+            )
+        })
+        .collect::<Vec<(String, Vec<u64>)>>();
     Some((
         head.keys()
             .map(|k| k.replace('_', "."))
             .collect::<Vec<_>>()
             .join("\n"),
         arch,
+        shapes,
     ))
+}
+
+/// `modelShapes` rules narrow a key-set match: every rule's tensor must exist with the declared shape prefix.
+fn shapes_match(f: &Family, shapes: &TensorShapes) -> bool {
+    f.model_shapes.iter().all(|rule| {
+        let key = rule.key.replace('_', ".");
+        shapes.iter().any(|(name, shape)| {
+            name.ends_with(&key)
+                && shape.len() >= rule.shape.len()
+                && shape[..rule.shape.len()] == rule.shape[..]
+        })
+    })
 }
 
 /// Validate tensor descriptors and payload bounds without reading any weight bytes.
@@ -742,23 +842,25 @@ pub fn detect(category: &str, path: &Path, base: Option<&str>) -> Option<String>
     let by_header = (if safetensors(path) {
         header(path)
     } else if gguf_file(path) {
-        gguf_metadata(path)
+        gguf_metadata(path).map(|(keys, arch)| (keys, arch, Vec::new()))
     } else {
         None
     })
-    .and_then(|(keys, arch)| {
+    .and_then(|(keys, arch, shapes)| {
         let declared = !arch.is_empty();
         all.iter()
             .find(|f| declared && f.architectures.iter().any(|a| arch.starts_with(a.as_str())))
             .or_else(|| {
                 all.iter().find(|f| {
-                    (if lora { &f.lora } else { &f.model })
-                        .iter()
-                        .any(|signature| {
-                            signature
-                                .iter()
-                                .all(|s| keys.contains(&s.replace('_', ".")))
-                        })
+                    shapes_match(f, &shapes)
+                        && (if lora { &f.lora } else { &f.model })
+                            .iter()
+                            .any(|signature| {
+                                !signature.is_empty()
+                                    && signature
+                                        .iter()
+                                        .all(|s| keys.contains(&s.replace('_', ".")))
+                            })
                 })
             })
     });
@@ -801,6 +903,300 @@ mod tests {
         std::fs::write(&complete, &full).unwrap();
         assert_eq!(intact(&complete), Some(true));
         assert_eq!(intact(&dir.path().join("x.pt")), None);
+    }
+
+    #[test]
+    fn pixeldit_signature_uses_the_pixel_latent() {
+        let dir = tempfile::tempdir().unwrap();
+        let t = serde_json::json!({"dtype":"BF16","shape":[1],"data_offsets":[0,2]});
+        let path = write(
+            dir.path(),
+            "pixeldit_t2i.safetensors",
+            serde_json::json!({
+                "model.diffusion_model.core.pixel_embedder.proj.weight": t,
+            }),
+        );
+        assert_eq!(
+            detect("diffusion_models", &path, None).as_deref(),
+            Some("pixeldit")
+        );
+        assert_eq!(
+            image_recipe("pixeldit").latent,
+            Some("EmptyChromaRadianceLatentImage")
+        );
+    }
+
+    #[test]
+    fn flux2_and_flux3_signatures_use_the_flux2_scheduler() {
+        let dir = tempfile::tempdir().unwrap();
+        let t = serde_json::json!({"dtype":"BF16","shape":[1],"data_offsets":[0,2]});
+        let flux2 = write(
+            dir.path(),
+            "flux-2-klein-base-4b-fp8.safetensors",
+            serde_json::json!({
+                "model.diffusion_model.double_stream_modulation_img.lin.weight": t.clone(),
+                "model.diffusion_model.img_in.weight": t.clone(),
+            }),
+        );
+        assert_eq!(
+            detect("diffusion_models", &flux2, None).as_deref(),
+            Some("flux2")
+        );
+        let flux3 = write(
+            dir.path(),
+            "flux3.safetensors",
+            serde_json::json!({
+                "model.diffusion_model.content_mode_blocks.image.0.attn_out.weight": t.clone(),
+                "model.diffusion_model.single_stream_modulations.txt.lin.weight": t,
+            }),
+        );
+        assert_eq!(
+            detect("diffusion_models", &flux3, None).as_deref(),
+            Some("flux3")
+        );
+        for id in ["flux2", "flux3"] {
+            let recipe = image_recipe_by_id(id).unwrap();
+            assert_eq!(recipe.latent, Some("EmptyFlux2LatentImage"));
+            assert_eq!(recipe.sigma_node, Some("Flux2Scheduler"));
+        }
+    }
+
+    #[test]
+    fn fibo2_and_ernie_signatures_use_the_flux2_latent() {
+        let dir = tempfile::tempdir().unwrap();
+        let t = serde_json::json!({"dtype":"BF16","shape":[1],"data_offsets":[0,2]});
+        let fibo = write(
+            dir.path(),
+            "fibo2.safetensors",
+            serde_json::json!({
+                "model.diffusion_model.perceiver.latent_queries": t.clone(),
+                "model.diffusion_model.layers.0.attention.qkv.weight": t.clone(),
+            }),
+        );
+        assert_eq!(
+            detect("diffusion_models", &fibo, None).as_deref(),
+            Some("fibo2")
+        );
+        let ernie = write(
+            dir.path(),
+            "ernie_image.safetensors",
+            serde_json::json!({
+                "model.diffusion_model.layers.0.mlp.linear_fc2.weight": t,
+            }),
+        );
+        assert_eq!(
+            detect("diffusion_models", &ernie, None).as_deref(),
+            Some("ernie")
+        );
+        for id in ["fibo2", "ernie"] {
+            assert_eq!(
+                image_recipe_by_id(id).unwrap().latent,
+                Some("EmptyFlux2LatentImage")
+            );
+        }
+    }
+
+    #[test]
+    fn omnigen2_signature_is_kept_apart_from_boogu() {
+        let dir = tempfile::tempdir().unwrap();
+        let t = serde_json::json!({"dtype":"BF16","shape":[1],"data_offsets":[0,2]});
+        let path = write(
+            dir.path(),
+            "omnigen2.safetensors",
+            serde_json::json!({
+                "model.diffusion_model.time_caption_embed.timestep_embedder.linear_1.bias": t,
+            }),
+        );
+        assert_eq!(
+            detect("diffusion_models", &path, None).as_deref(),
+            Some("omnigen2")
+        );
+        assert_eq!(
+            image_recipe_by_id("omnigen2").unwrap().latent,
+            Some("EmptySD3LatentImage")
+        );
+    }
+
+    #[test]
+    fn ideogram4_and_boogu_signatures_keep_the_plain_recipe() {
+        let dir = tempfile::tempdir().unwrap();
+        let t = serde_json::json!({"dtype":"BF16","shape":[1],"data_offsets":[0,2]});
+        let ideogram = write(
+            dir.path(),
+            "ideogram4.safetensors",
+            serde_json::json!({
+                "model.diffusion_model.embed_image_indicator.weight": t.clone(),
+                "model.diffusion_model.input_proj.weight": t.clone(),
+            }),
+        );
+        assert_eq!(
+            detect("diffusion_models", &ideogram, None).as_deref(),
+            Some("ideogram4")
+        );
+        let boogu = write(
+            dir.path(),
+            "boogu_image.safetensors",
+            serde_json::json!({
+                "model.diffusion_model.double_stream_layers.0.img_instruct_attn.processor.img_to_q.weight": t.clone(),
+                "model.diffusion_model.x_embedder.weight": t,
+            }),
+        );
+        assert_eq!(
+            detect("diffusion_models", &boogu, None).as_deref(),
+            Some("boogu")
+        );
+        assert_eq!(
+            image_recipe_by_id("ideogram4").unwrap().latent,
+            Some("EmptyFlux2LatentImage")
+        );
+        assert_eq!(
+            image_recipe_by_id("boogu").unwrap().latent,
+            Some("EmptySD3LatentImage")
+        );
+    }
+
+    #[test]
+    fn kandinsky5_image_signature_keeps_the_plain_recipe() {
+        let dir = tempfile::tempdir().unwrap();
+        let t = serde_json::json!({"dtype":"BF16","shape":[1],"data_offsets":[0,2]});
+        let path = write(
+            dir.path(),
+            "kandinsky5-image-lite.safetensors",
+            serde_json::json!({
+                "model.diffusion_model.visual_embeddings.in_layer.bias": t.clone(),
+                "model.diffusion_model.text_transformer_blocks.0.feed_forward.in_layer.weight": t,
+            }),
+        );
+        assert_eq!(
+            detect("diffusion_models", &path, None).as_deref(),
+            Some("kandinsky5-image")
+        );
+        let recipe = image_recipe("kandinsky5_image");
+        assert_eq!(recipe.latent, Some("EmptySD3LatentImage"));
+        assert_eq!((recipe.zero_negative, recipe.patch), (false, None));
+    }
+
+    #[test]
+    fn sd15_signature_is_kept_below_sdxl() {
+        let dir = tempfile::tempdir().unwrap();
+        let t = serde_json::json!({"dtype":"BF16","shape":[1],"data_offsets":[0,2]});
+        let sd15 = write(
+            dir.path(),
+            "v1-5-pruned.safetensors",
+            serde_json::json!({
+                "model.diffusion_model.conditioner.embedders.0.transformer.text_model.embeddings.token_embedding.weight": t.clone(),
+            }),
+        );
+        assert_eq!(detect("checkpoints", &sd15, None).as_deref(), Some("sd15"));
+        // SDXL keeps its two-embedder signature, so the CLIP-L-only rule never wins there.
+        let sdxl = write(
+            dir.path(),
+            "sd_xl_base_1.0.safetensors",
+            serde_json::json!({
+                "model.diffusion_model.conditioner.embedders.0.transformer.text_model.embeddings.token_embedding.weight": t.clone(),
+                "model.diffusion_model.conditioner.embedders.1.transformer.text_model.embeddings.token_embedding.weight": t,
+            }),
+        );
+        assert_eq!(detect("checkpoints", &sdxl, None).as_deref(), Some("sdxl"));
+    }
+
+    #[test]
+    fn pixart_and_hunyuan_dit_signatures_keep_the_plain_recipe() {
+        let dir = tempfile::tempdir().unwrap();
+        let t = serde_json::json!({"dtype":"BF16","shape":[1],"data_offsets":[0,2]});
+        let pixart = write(
+            dir.path(),
+            "pixart_sigma.safetensors",
+            serde_json::json!({
+                "model.diffusion_model.y_embedder.y_embedding": t.clone(),
+                "model.diffusion_model.adaln_single.linear.weight": t.clone(),
+            }),
+        );
+        assert_eq!(
+            detect("diffusion_models", &pixart, None).as_deref(),
+            Some("pixart")
+        );
+        let hydit = write(
+            dir.path(),
+            "hunyuan_dit_1.5.safetensors",
+            serde_json::json!({
+                "model.diffusion_model.mlp_t5.0.weight": t.clone(),
+                "model.diffusion_model.x_embedder.proj.weight": t,
+            }),
+        );
+        assert_eq!(
+            detect("diffusion_models", &hydit, None).as_deref(),
+            Some("hunyuan-dit")
+        );
+        for id in ["pixart", "hunyuan-dit"] {
+            let recipe = image_recipe_by_id(id).unwrap();
+            assert_eq!(
+                (recipe.latent, recipe.zero_negative, recipe.patch),
+                (None, false, None)
+            );
+        }
+    }
+
+    #[test]
+    fn hidream_signature_selects_the_family_without_a_sampling_patch() {
+        let dir = tempfile::tempdir().unwrap();
+        let t = serde_json::json!({"dtype":"BF16","shape":[1],"data_offsets":[0,2]});
+        let path = write(
+            dir.path(),
+            "hidream_i1_full.safetensors",
+            serde_json::json!({
+                "model.diffusion_model.caption_projection.0.linear.weight": t,
+            }),
+        );
+        assert_eq!(
+            detect("diffusion_models", &path, None).as_deref(),
+            Some("hidream")
+        );
+        let recipe = image_recipe("hidream");
+        assert_eq!(recipe.latent, Some("EmptySD3LatentImage"));
+        assert_eq!((recipe.zero_negative, recipe.patch), (false, None));
+    }
+
+    #[test]
+    fn z_image_signature_declares_its_recipe_points() {
+        let dir = tempfile::tempdir().unwrap();
+        let t = serde_json::json!({"dtype":"BF16","shape":[1],"data_offsets":[0,2]});
+        let dim = |n: u64| serde_json::json!({"dtype":"BF16","shape":[n,16],"data_offsets":[0,2]});
+        let path = write(
+            dir.path(),
+            "z_image_turbo_bf16.safetensors",
+            serde_json::json!({
+                "model.diffusion_model.cap_embedder.1.weight": dim(3840),
+                "model.diffusion_model.noise_refiner.0.attention.k_norm.weight": t.clone(),
+            }),
+        );
+        assert_eq!(
+            detect("diffusion_models", &path, None).as_deref(),
+            Some("z-image")
+        );
+        // Lumina2 shares the key set; the 2304 shape selects it, not Z-Image.
+        let lumina = write(
+            dir.path(),
+            "NetaYumev35_pretrained_all_in_one.safetensors",
+            serde_json::json!({
+                "model.diffusion_model.cap_embedder.1.weight": dim(2304),
+                "model.diffusion_model.noise_refiner.0.attention.k_norm.weight": t.clone(),
+            }),
+        );
+        assert_eq!(
+            detect("checkpoints", &lumina, None).as_deref(),
+            Some("lumina2")
+        );
+        let recipe = image_recipe("lumina2");
+        assert_eq!(recipe.latent, Some("EmptySD3LatentImage"));
+        assert!(recipe.zero_negative);
+        assert_eq!(recipe.patch, Some(("ModelSamplingAuraFlow", 3.0)));
+        // Unknown clip types keep the plain graph.
+        let plain = image_recipe("unknown_type");
+        assert_eq!(
+            (plain.latent, plain.zero_negative, plain.patch),
+            (None, false, None)
+        );
     }
 
     #[test]

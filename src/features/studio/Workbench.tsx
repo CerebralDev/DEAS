@@ -17,7 +17,7 @@ import { defaultPlan, isContinuityPlan, nextStep, resolveClip, continuitySource,
 import { checkRecipePrerequisites } from '../../lib/recipePrerequisites';
 import { scanModels, type LocalModel } from '../../lib/models';
 import { ModelMetadataTarget, ModelDeclaredBadge, useModelMetadataUpdates } from '../../components/models/ModelMetadataEditor';
-import { componentFiles, defaultComponentOverrides, isComponentOverrides, type ComponentFamily, type ComponentSlot } from '../../lib/modelComponents';
+import { componentFiles, componentFilesNamed, defaultComponentOverrides, isComponentOverrides, type ComponentFamily, type ComponentSlot } from '../../lib/modelComponents';
 import { ComponentPicker } from './ComponentPicker';
 import { TvePostControls, defaultTve, fromVideoPost, isTvePref, toVideoPost } from './TvePostControls';
 import { ReferencePeople, type FramePeople, directorTags, firstVisualRef, forgeLabels, h3ForgeContext, prefillItems, h3Full, over, refCounts, refsProblem, slotsOf, type RefAdd, type RefMod, type VideoRef } from './ReferencesPanel';
@@ -55,7 +55,7 @@ import { containedImageHit, flattenLayer, visibleImages, type ImageLayer } from 
 import './workbench.css';
 import { NativeVideo, nativeVideo } from './NativeVideo';
 /** Data-only family plugin (also read natively for header detection): loader, runnable pipelines, encoder/VAE file patterns, starting settings. */
-interface Family extends ComponentFamily { id:string; name:string; multiple?:number; temporalLatent?:boolean; imagePrompting?:'revision'|'qwen-image-2.1'|'krea-2'|'moss-image'; loader:string; pipelines:string[]; clipType?:string; textEncoders?:string[]; textProjections?:string[]; vaes?:string[]; audioVaes?:string[]; defaults?:{width:number;height:number;steps:number;cfg:number;sampler:string;scheduler:string}; sigmas?:number[]; loraFamily?:string; /** Video families: native fps/seconds, fixed fps (H3 is 24), Wan's high→low file-name pair. */ video?:{fps:number;seconds:number;fixedFps?:boolean;lowModel?:[string,string]} }
+interface Family extends ComponentFamily { id:string; name:string; multiple?:number; temporalLatent?:boolean; imagePrompting?:'revision'|'qwen-image-2.1'|'krea-2'|'moss-image'; loader:string; pipelines:string[]; clipType?:string; /** Two-encoder families (Flux.1, SD3): slot 2 is picked by its filename pattern. */ clip?:{loader:'single'|'dual';encoders?:string[]}; textEncoders?:string[]; textProjections?:string[]; vaes?:string[]; audioVaes?:string[]; defaults?:{width:number;height:number;steps:number;cfg:number;sampler:string;scheduler:string}; sigmas?:number[]; loraFamily?:string; /** Video families: native fps/seconds, fixed fps (H3 is 24), Wan's high→low file-name pair. */ video?:{fps:number;seconds:number;fixedFps?:boolean;lowModel?:[string,string]} }
 /** Remembered video controls; family rows read only their own keys. */
 interface VideoPref { seconds:number; fps:number; passes:1|2|3; upscaler:string; shiftHigh:number; shiftLow:number; refinerStep:number; shiftVideo:number; shiftAudio:number; audioVae:string; textProjection:string }
 interface LatentPref {enabled:boolean;model:string;scale:number;steps:number;denoise:number;advanced?:H3LatentAdvanced}
@@ -186,6 +186,7 @@ function WorkbenchContent({endpoint,roots={},root,incoming,onCanvasContext,onOpe
  const [sampler,setSampler]=usePref('studio.run.sampler','euler',isString);
  const [scheduler,setScheduler]=usePref('studio.run.scheduler','normal',isString);
  const [textEncoderPref,setTextEncoder]=usePref('studio.run.textEncoder','',isString);
+ const [textEncoder2Pref,setTextEncoder2]=usePref('studio.run.textEncoder2','',isString);
  const [vaePref,setVae]=usePref('studio.run.vae','',isString);
  const [componentOverrides,setComponentOverrides]=usePref('studio.run.componentOverrides',defaultComponentOverrides,isComponentOverrides);
  // Sampler/scheduler choices are whatever the running backend lists (read-only object_info); read once per endpoint, before a picker can open.
@@ -378,6 +379,9 @@ const loadChoices=()=>{if(native&&!choices&&endpoint.trim())void refreshChoices(
  };
  const recommended=family?{textEncoders:componentFiles(models??[],family,'textEncoders'),vaes:componentFiles(models??[],family,'vaes'),audioVaes:componentFiles(models??[],family,'audioVaes'),textProjections:componentFiles(models??[],family,'textProjections')}:null;
  const textEncoder=textEncoderPref||recommended?.textEncoders[0]||'';
+ const dualClip=family?.clip?.loader==='dual';
+ const recommendedSecond=dualClip?componentFilesNamed(models??[],family?.clip?.encoders?.[1]?[family.clip.encoders[1]]:[]):[];
+ const textEncoder2=textEncoder2Pref||recommendedSecond[0]||'';
  const vae=vaePref||recommended?.vaes[0]||'';
  const videoFamily=family?.video?family.id as VideoFamily:undefined;
  const latent=isVideo&&(videoFamily==='minimax-h3'||videoFamily==='ltx-2');
@@ -450,6 +454,10 @@ const loadChoices=()=>{if(native&&!choices&&endpoint.trim())void refreshChoices(
   ...(models?loras.filter(l=>!loraNames.includes(l.name)).map(l=>`LoRA: ${l.name}`):[]),
  ...loraModels.filter(m=>(m.metadataError||!supportedLoraFormat(m))&&loras.some(l=>l.name===m.name)).map(m=>`${t(m.metadataError?'modelMeta.invalid':'modelMeta.format')} LoRA: ${m.name}`),
   ...(split&&!split.encoders.includes(textEncoder)?[textEncoder||t('studio.run.textEncoder')]:[]),
+  ...(dualClip&&split&&(!textEncoder2||!split.encoders.includes(textEncoder2))?[textEncoder2||t('studio.run.textEncoder2')]:[]),
+  ...(dualClip&&choices?[...(!choices.nodes.includes(isGguf(textEncoder)||isGguf(textEncoder2)?'DualCLIPLoaderGGUF':'DualCLIPLoader')?[isGguf(textEncoder)||isGguf(textEncoder2)?'DualCLIPLoaderGGUF':'DualCLIPLoader']:[]),
+   ...((!choices.dualTextEncoders?.includes(textEncoder)||!choices.dualTextEncoders?.includes(textEncoder2))?[textEncoder2||t('studio.run.textEncoder2')]:[]),
+   ...(!choices.dualClipTypes?.includes(family?.clipType??'')?[`DualCLIPLoader: ${family?.clipType??''}`]:[])]:[]),
   ...(split&&!split.vaes.includes(vae)?[vae||t('studio.run.vae')]:[]),
   ...(split&&isVideo&&family?.audioVaes&&!split.audioVaes.includes(audioVae)?[audioVae||t('studio.run.video.audioVae')]:[]),
   ...(split&&isVideo&&family?.textProjections&&!split.projections.includes(textProjection)?[textProjection||t('studio.run.video.textProjection')]:[]),
@@ -586,7 +594,7 @@ const loadChoices=()=>{if(native&&!choices&&endpoint.trim())void refreshChoices(
   const refinePass=post&&!h3Image;
   const inputLayers=visibleImages(layers);
   const refineSigmas=only?.upscaleOnly?[]:tail(refineDenoise); // Upscale alone: no diffusion tail, the pass is resize + model upscale.
-  const common={recipeId:'checkpoint-text-to-image-diagnostic',version:1,positivePrompt:positive,negativePrompt:negative,checkpoint,seed,cfg,sampler,scheduler,outputPrefix:naming,...(wildcardEnabled?{wildcard:structuredClone(wildcard)}:{}),...(activeLoras.length?{loras:activeLoras}:{}),...(split&&family?.clipType?{diffusion:{textEncoder,clipType:family.clipType,vae}}:{}),...(h3Image?{h3Edit:{shiftVideo:video.shiftVideo,shiftAudio:video.shiftAudio}}:{}),...(imageRefs.length&&referenceMethod?(referenceMethod==='revision'?{imageReference:{visionModel:refVision,images:imageRefs.map(r=>({image:comfyName(r.item)||r.item.path!,strength:r.strength}))}}:{nativeImageReference:{method:referenceMethod,images:imageRefs.map(r=>comfyName(r.item)||r.item.path!)}}):{}),...(options?{options}:{}),...(out.imageFormat!=='png'||out.imageCompression!==44?{imageFormat:out.imageFormat,imageCompression:out.imageCompression}:{})} as const;
+  const common={recipeId:'checkpoint-text-to-image-diagnostic',version:1,positivePrompt:positive,negativePrompt:negative,checkpoint,seed,cfg,sampler,scheduler,outputPrefix:naming,...(wildcardEnabled?{wildcard:structuredClone(wildcard)}:{}),...(activeLoras.length?{loras:activeLoras}:{}),...(split&&family?.clipType?{diffusion:{textEncoder,...(dualClip&&textEncoder2?{textEncoder2}:{}),clipType:family.clipType,vae,family:family.id}}:{}),...(family?{family:family.id}:{}),...(h3Image?{h3Edit:{shiftVideo:video.shiftVideo,shiftAudio:video.shiftAudio}}:{}),...(imageRefs.length&&referenceMethod?(referenceMethod==='revision'?{imageReference:{visionModel:refVision,images:imageRefs.map(r=>({image:comfyName(r.item)||r.item.path!,strength:r.strength}))}}:{nativeImageReference:{method:referenceMethod,images:imageRefs.map(r=>comfyName(r.item)||r.item.path!)}}):{}),...(options?{options}:{}),...(out.imageFormat!=='png'||out.imageCompression!==44?{imageFormat:out.imageFormat,imageCompression:out.imageCompression}:{})} as const;
   const resized=!!upscaleModel||target.width!==only?.size.width||target.height!==only?.size.height;
   return Object.freeze(only
    ?{...common,width:target.width,height:target.height,steps:refineSigmas?refineSigmas.length-1:steps,...(refineSigmas?{sigmas:refineSigmas}:{}),inputImage:only.image,denoise:only.upscaleOnly?0:refineDenoise,...(resized?{inputResize:{...target,crop:'disabled' as const}}:{}),...(upscaleModel?{upscaleModel}:{})}
@@ -1176,7 +1184,7 @@ const promptTools=forgeContext&&<>
    else if(intent.family==='wan')setVideo({...shared,shiftHigh:intent.wan.shiftHigh,shiftLow:intent.wan.shiftLow,refinerStep:intent.wan.refinerStep});
    else {setVideo({...shared,audioVae:intent.h3.audioVae,shiftVideo:intent.h3.shiftVideo,shiftAudio:intent.h3.shiftAudio});setH3Scaling(intent.h3.inputScaling??'Fill and crop');}
   }else{
-   setTextEncoder(intent.diffusion?.textEncoder??'');setVae(intent.diffusion?.vae??'');
+   setTextEncoder(intent.diffusion?.textEncoder??'');setTextEncoder2(intent.diffusion?.textEncoder2??'');setVae(intent.diffusion?.vae??'');
    setDenoise(intent.denoise??0.6);setInpaintDenoise(intent.denoise??0.8);setEdit(intent.inputMask?'inpaint':'resample');setMaskBlur(intent.maskBlur??0);setInpaintOnlyMasked(false);
    setRefVision(intent.imageReference?.visionModel??'');
    if(intent.wildcard){setWildcard(structuredClone(intent.wildcard));setWildcardEnabled(true);}
@@ -1287,6 +1295,7 @@ const promptTools=forgeContext&&<>
      </div>
      {split&&<details className="wb-model-files"><summary>{t('studio.components.title')}</summary><div className="wb-component-menu">
       {componentPick('studio.run.textEncoder','textEncoders',textEncoderPref,split.encoders,setTextEncoder)}
+      {dualClip&&<ComponentPicker key="textEncoders2" label={t('studio.run.textEncoder2')} value={textEncoder2Pref} automatic={recommendedSecond[0]??''} files={componentFilesNamed(models??[],family?.clip?.encoders?.[1]?[family.clip.encoders[1]]:[])} all={componentOverrides.textEncoders} onAll={all=>setComponentOverrides({...componentOverrides,textEncoders:all})} onChange={setTextEncoder2}/>}
       {componentPick('studio.run.vae','vaes',vaePref,split.vaes,setVae)}
       {isVideo&&family?.audioVaes&&componentPick('studio.run.video.audioVae','audioVaes',video.audioVae,split.audioVaes,v=>setVideo({...video,audioVae:v}))}
       {isVideo&&family?.textProjections&&componentPick('studio.run.video.textProjection','textProjections',video.textProjection,split.projections,v=>setVideo({...video,textProjection:v}))}

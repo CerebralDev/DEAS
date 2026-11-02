@@ -407,6 +407,7 @@
   "studio.run.edit.layerRemove": "{name} を削除",
   "studio.run.edit.layerHelp": "ドラッグで移動、角でサイズ変更。キー：矢印で移動、+ / − でサイズ変更、Delete で削除。",
   "studio.run.textEncoder": "テキストエンコーダー",
+  "studio.run.textEncoder2": "2番目のテキストエンコーダー",
   "studio.run.vae": "VAE",
   "studio.run.family.diffusionFolder": "このレシピには checkpoints ではなく diffusion_models（または unet）内の拡散モデルが必要です。ファイルを移動してモデル一覧を更新してください。",
   "studio.run.family.checkpointFolder": "このレシピには diffusion_models や unet ではなく checkpoints 内のチェックポイントが必要です。ファイルを移動してモデル一覧を更新してください。",
