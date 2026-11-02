@@ -18,6 +18,18 @@ function replacement(el: HTMLTextAreaElement, tag: string) {
   return { value: el.value.slice(0, start) + leading + tag + trailing + el.value.slice(end), caret: start + leading.length + tag.length };
 }
 
+const commonPrefix = (a: string, b: string) => { let n = 0; while (n < a.length && n < b.length && a[n] === b[n]) n++; return n; };
+const commonSuffix = (a: string, b: string, floor: number) => { let n = 0; while (n < a.length - floor && n < b.length - floor && a[a.length - 1 - n] === b[b.length - 1 - n]) n++; return n; };
+/** Typed through the editing command so Ctrl+Z can take it back: assigning `value` wipes the undo stack. `whole` is the fallback where that command is missing. */
+function replaceRange(el: HTMLTextAreaElement, start: number, end: number, text: string, whole: string) {
+  el.focus();
+  el.setSelectionRange(start, end);
+  if (document.execCommand?.('insertText', false, text) && el.value === whole) return;
+  // Use the native input path so controlled and uncontrolled textarea callers behave alike.
+  Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(el, whole);
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
 export const PromptTextarea = forwardRef<HTMLTextAreaElement, PromptTextareaProps>(function PromptTextarea({ root, target, onChange, onSelect, onFocus, onBlur, onKeyDown, onCompositionStart, onCompositionEnd, ...props }, ref) {
   const tools = usePromptTools();
   const { t } = useI18n();
@@ -76,9 +88,7 @@ export const PromptTextarea = forwardRef<HTMLTextAreaElement, PromptTextareaProp
     const value = el.value.slice(0, mark.start) + word + el.value.slice(mark.end);
     if (props.maxLength !== undefined && props.maxLength >= 0 && value.length > props.maxLength) return;
     setFix(null);
-    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(el, value);
-    el.dispatchEvent(new Event('input', { bubbles: true }));
-    el.focus();
+    replaceRange(el, mark.start, mark.end, word, value);
     el.setSelectionRange(mark.start + word.length, mark.start + word.length);
     sync();
   };
@@ -113,10 +123,8 @@ export const PromptTextarea = forwardRef<HTMLTextAreaElement, PromptTextareaProp
     const { value, caret } = replacement(el, hit.tag);
     if (props.maxLength !== undefined && props.maxLength >= 0 && value.length > props.maxLength) return;
     close();
-    // Use the native input path so controlled and uncontrolled textarea callers behave alike.
-    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(el, value);
-    el.dispatchEvent(new Event('input', { bubbles: true }));
-    el.focus();
+    const start = commonPrefix(el.value, value), tail = commonSuffix(el.value, value, start);
+    replaceRange(el, start, el.value.length - tail, value.slice(start, value.length - tail), value);
     el.setSelectionRange(caret, caret);
     dismissed.current = fingerprint();
     sync();

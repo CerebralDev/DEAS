@@ -15,6 +15,9 @@ Vitest pins Auto in the submitted intent; Workbench suite 297 passed. The native
 ## Multi-reference Auto aspect (0.2.10)
 
 Vitest covers the slot and sound-only rule in `firstVisualRef`. Workbench fixtures cover Run waiting for the size with stubbed media. The canvas from a real file has not been exercised by a real run.
+## Prompt undo (0.2.10)
+
+Vitest covers the editing command and the fallback. Windows WebView2 result: see the pull request.
 
 ## Compact native checkpoint selector (0.2.10 unreleased)
 

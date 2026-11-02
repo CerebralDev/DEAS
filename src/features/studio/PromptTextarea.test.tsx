@@ -248,6 +248,19 @@ it('right-click or Ctrl+. on an underlined word offers suggestions and replaces 
   expect(event).toBe(true);
 });
 
+it('sends a picked tag through the editing command so Ctrl+Z can take it back', async () => {
+  tools.autocomplete = true;
+  const insert = vi.fn((_c: string, _u: boolean, text: string) => { const el = textarea(); el.setRangeText(text); fireEvent.input(el); return true; });
+  Object.defineProperty(document, 'execCommand', { configurable: true, value: insert });
+  try {
+    render(<Editor />);
+    select('rain,  bluZZ  , sky\ncloud', 10);
+    await act(async () => { vi.advanceTimersByTime(150); });
+    fireEvent.mouseDown(screen.getByRole('option', { name: /blue_eyes/ }));
+    expect(insert).toHaveBeenCalledWith('insertText', false, expect.any(String));
+    expect(textarea().value).toBe('rain,  blue_eyes  , sky\ncloud');
+  } finally { Reflect.deleteProperty(document, 'execCommand'); }
+});
 it('a missing dictionary leaves the text unmarked instead of failing', async () => {
   native.on = true;
   vi.mocked(spellcheckWords).mockRejectedValue('SPELLCHECK_DICTIONARY_MISSING');
