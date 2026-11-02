@@ -31,6 +31,8 @@ type Lane='image'|'video'|'audio';
 export const laneOf=(r:VideoRef):Lane=>r.item.media==='video'&&r.mediaMode==='audio'?'audio':r.item.media as Lane;
 /** Slot per lane in list order — the Director's `<Picture N>`/`<Video N>`/`<Audio N>` numbering is slot + 1. */
 export const slotsOf=(refs:VideoRef[])=>{const used:Record<string,number>={};return refs.map(r=>used[laneOf(r)]=(used[laneOf(r)]??-1)+1);};
+/** The reference that sets Auto aspect, as the Director's `sourceDimensions` picks it: lowest slot, then list order, among pictures and video (sound-only uses don't count). */
+export const firstVisualRef=(refs:VideoRef[])=>{const slots=slotsOf(refs);return refs.map((_,i)=>i).filter(i=>refs[i].item.media==='image'||(refs[i].item.media==='video'&&refs[i].mediaMode!=='audio')).sort((a,b)=>slots[a]-slots[b]||a-b).map(i=>refs[i])[0];};
 const tagName={image:'Picture',video:'Video',audio:'Audio'} as const;
 /** Director prompt labels per reference (`<Picture 1>`, `<Video 2> <Audio 1>`), numbered as the node loads media: images, then video items
  * (picture and/or sound), then audio files, each by slot — the same order as the Director's own label prefill. */

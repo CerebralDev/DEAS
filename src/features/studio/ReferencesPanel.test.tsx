@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { I18nProvider } from '../../i18n/I18nProvider';
 import { MEDIA_DRAG, type MediaItem } from '../../lib/media';
-import { ReferencesPanel, directorTags, forgeLabels, fromPack, h3ForgeContext, prefillItems, refsProblem, slotsOf, toPack, type VideoRef } from './ReferencesPanel';
+import { ReferencesPanel, directorTags, firstVisualRef, forgeLabels, fromPack, h3ForgeContext, prefillItems, refsProblem, slotsOf, toPack, type VideoRef } from './ReferencesPanel';
 
 const os=vi.hoisted(()=>({drop:null as null|((e:{payload:unknown})=>void)}));
 vi.mock('@tauri-apps/api/core',()=>({isTauri:vi.fn(()=>false),invoke:vi.fn(),convertFileSrc:(p:string)=>`asset://${p}`}));
@@ -474,4 +474,11 @@ test('H3 validates implicit trim starts, known source bounds, aggregate stream d
  expect(refsProblem([...pictures,refAt('v.mp4','video',{mediaMode:'video_audio'}),refAt('a.wav','audio')])).toBe('');
  expect(refsProblem([...pictures,refAt('v.mp4','video',{mediaMode:'video_audio'}),refAt('a.wav','audio'),refAt('b.wav','audio')])).toBe('studio.run.video.refFull');
 });
-
+test('Auto aspect takes the first picture or video by slot, skipping sound-only uses',()=>{
+ const ref=(name:string,media:MediaItem['media'],extra={})=>({item:item(name,media),second:0,strength:1,mediaMode:'video',...extra}) as VideoRef;
+ expect(firstVisualRef([])).toBeUndefined();
+ expect(firstVisualRef([ref('a.wav','audio'),ref('b.png','image')])?.item.name).toBe('b.png');
+ expect(firstVisualRef([ref('v.mp4','video',{mediaMode:'audio'}),ref('b.png','image')])?.item.name).toBe('b.png');
+ expect(firstVisualRef([ref('p1.png','image'),ref('p2.png','image')])?.item.name).toBe('p1.png');
+ expect(firstVisualRef([ref('v.mp4','video'),ref('b.png','image')])?.item.name).toBe('v.mp4');
+});
