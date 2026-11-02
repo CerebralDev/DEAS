@@ -9,6 +9,9 @@ Vitest covers no press while Run is disabled, plain Enter, repeats, an open dial
 ## Tiled refine gate (0.2.10)
 
 Source inspection of ComfyUI d07dff4: `Anima`, `Krea2` and `QwenImage` declare `latent_formats.Wan21` and H3 `MiniMaxH3AV`, all `latent_dimensions = 3`; `Flux2` (MOSS) and `QwenImage21` do not, and the DEAS `qwen-image-2.1` families use the latter. Vitest covers the disabled control and reason on Anima and Krea 2 and the history refusal. No real Anima, Krea 2 or SDXL refine run has been done, and Krea 2 failing is inferred from its latent format, not observed.
+## H3 input scaling default (0.2.10)
+
+Vitest pins Auto in the submitted intent; Workbench suite 297 passed. The native absent-field fallback and its Rust test are unchanged on purpose. No real H3 run has been done with the new default.
 
 ## Compact native checkpoint selector (0.2.10 unreleased)
 
