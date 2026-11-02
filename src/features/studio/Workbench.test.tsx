@@ -34,7 +34,7 @@ beforeEach(()=>{
  Object.defineProperty(HTMLDialogElement.prototype,'close',{configurable:true,value:function(this:HTMLDialogElement){this.open=false;}});
  vi.spyOn(HTMLCanvasElement.prototype,'getContext').mockReturnValue({save:vi.fn(),restore:vi.fn(),arc:vi.fn(),fill:vi.fn(),beginPath:vi.fn(),clearRect:vi.fn(),fillRect:vi.fn(),drawImage:vi.fn(),getImageData:vi.fn(()=>({data:new Uint8ClampedArray([0,0,0,0])}))} as unknown as CanvasRenderingContext2D);
 });
-afterEach(()=>{cleanup();Reflect.deleteProperty(HTMLDialogElement.prototype,'showModal');Reflect.deleteProperty(HTMLDialogElement.prototype,'close');vi.clearAllMocks();vi.unstubAllGlobals();});
+afterEach(()=>{cleanup();Reflect.deleteProperty(HTMLDialogElement.prototype,'showModal');Reflect.deleteProperty(HTMLDialogElement.prototype,'close');Reflect.deleteProperty(HTMLVideoElement.prototype,'src');vi.clearAllMocks();vi.unstubAllGlobals();});
 test('model metadata action enables an unknown supported file while GGUF stays usable',async()=>{
  const unknown={category:'diffusion_models',name:'unknown.safetensors',path:'/m/unknown.safetensors',size:1,info:null};
  const bad={...unknown,name:'bad.safetensors',path:'/m/bad.safetensors',family:'anima',metadataError:'invalid sidecar'};
@@ -3140,6 +3140,10 @@ test('MiniMax H3 Image → Video runs a last frame alone (L2VA) and badges frame
 });
 
 test('IPC fixture: LTX Video → Video uploads the source video; Multi-reference → Video sends image keyframes at their seconds',async()=>{
+ // jsdom never loads media: the first reference's size is what Auto aspect waits for.
+ vi.stubGlobal('Image',class{naturalWidth=1024;naturalHeight=640;onload?:()=>void;set src(_:string){queueMicrotask(()=>this.onload?.());}});
+ vi.spyOn(HTMLMediaElement.prototype,'load').mockImplementation(()=>{});
+ Object.defineProperty(HTMLVideoElement.prototype,'src',{configurable:true,set(this:HTMLVideoElement){queueMicrotask(()=>{Object.defineProperties(this,{videoWidth:{value:1024},videoHeight:{value:640}});this.onloadedmetadata?.(new Event('loadedmetadata'));});}});
  vi.mocked(scanModels).mockResolvedValue([...ltxModels]);
  vi.mocked(invoke).mockImplementation(async(_c,args)=>({path:(args as {path:string}).path,parent:'/env',entries:mediaEntries,truncated:false}));
  vi.mocked(uploadInput).mockImplementation(async(_b,path)=>path.endsWith('.mp4')?'deas-input-u.mp4':'deas-inputs/u.png');
@@ -3209,6 +3213,10 @@ test('IPC fixture: LTX Video → Video uploads the source video; Multi-reference
 });
 
 test('IPC fixture: MiniMax H3 runs Video → Video and Multi-reference → Video as REF2VA timeline media',async()=>{
+ // jsdom never loads media: the first reference's size is what Auto aspect waits for.
+ vi.stubGlobal('Image',class{naturalWidth=1024;naturalHeight=640;onload?:()=>void;set src(_:string){queueMicrotask(()=>this.onload?.());}});
+ vi.spyOn(HTMLMediaElement.prototype,'load').mockImplementation(()=>{});
+ Object.defineProperty(HTMLVideoElement.prototype,'src',{configurable:true,set(this:HTMLVideoElement){queueMicrotask(()=>{Object.defineProperties(this,{videoWidth:{value:1024},videoHeight:{value:640}});this.onloadedmetadata?.(new Event('loadedmetadata'));});}});
  vi.mocked(scanModels).mockResolvedValue([
   {category:'diffusion_models',name:'MiniMaxH3/h3_ref2va.safetensors',path:'/m/diffusion_models/MiniMaxH3/h3_ref2va.safetensors',size:1,info:null,family:'minimax-h3'},
   {category:'text_encoders',name:'qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors',path:'/m/t.safetensors',size:1,info:null},

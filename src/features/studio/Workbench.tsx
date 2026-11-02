@@ -20,7 +20,7 @@ import { ModelMetadataTarget, ModelDeclaredBadge, useModelMetadataUpdates } from
 import { componentFiles, defaultComponentOverrides, isComponentOverrides, type ComponentFamily, type ComponentSlot } from '../../lib/modelComponents';
 import { ComponentPicker } from './ComponentPicker';
 import { TvePostControls, defaultTve, fromVideoPost, isTvePref, toVideoPost } from './TvePostControls';
-import { ReferencePeople, type FramePeople, directorTags, forgeLabels, h3ForgeContext, prefillItems, h3Full, over, refCounts, refsProblem, slotsOf, type RefAdd, type RefMod, type VideoRef } from './ReferencesPanel';
+import { ReferencePeople, type FramePeople, directorTags, firstVisualRef, forgeLabels, h3ForgeContext, prefillItems, h3Full, over, refCounts, refsProblem, slotsOf, type RefAdd, type RefMod, type VideoRef } from './ReferencesPanel';
 import { mediaTypes, mediaViews, type MediaAction, type MediaRoots, type MediaType, type MediaView } from '../media/MediaLibrary';
 import { MediaPanel, MediaControls } from '../media/MediaPanel';
 import { dragItem, draggedItem, MEDIA_DRAG, MEDIA_IMAGE_DRAG, relativeMediaPath, relocatedJob, relocatedMediaItem, type MediaItem, type MediaRelocation } from '../../lib/media';
@@ -180,6 +180,7 @@ function WorkbenchContent({endpoint,roots={},root,incoming,onCanvasContext,onOpe
  const [megapixels,setMegapixels]=usePref('studio.run.megapixels',1,isNumber);
  const [inputScaling,setInputScaling]=usePref<ScalingMode>('studio.run.inputScaling','off',oneOf(...scalingModes));
  const [mediaSize,setMediaSize]=useState<(Size&{src:string})|null>(null);
+ const [refSize,setRefSize]=useState<(Size&{src:string})|null>(null);
  const [steps,setSteps]=usePref('studio.run.steps',20,isNumber);
  const [cfg,setCfg]=usePref('studio.run.cfg',5,isNumber);
  const [sampler,setSampler]=usePref('studio.run.sampler','euler',isString);
@@ -490,7 +491,19 @@ const loadChoices=()=>{if(native&&!choices&&endpoint.trim())void refreshChoices(
  const modelSize=family?.defaults??{width:1024,height:1024};
  // Canvas edges snap to the family's latent/patch multiple (SDXL: 64 buckets, H3/LTX: 32); unknown models use the safe 16.
  const grid=qwenRefs?32:family?.multiple??16;
- const selectedCanvas=canvasSize(aspect,resolution,{width:aspectWidth,height:aspectHeight},megapixels,{width,height},modelSize,mediaPipeline?source:undefined,grid);
+ // Multi-reference Auto follows the Director: the first picture or video by slot, never whatever the preview shows.
+ const firstRef=pipeline==='ref2v'?firstVisualRef(refs):undefined;
+ const firstRefSrc=firstRef?.item.src;const firstRefMedia=firstRef?.item.media;
+ useEffect(()=>{
+  if(!firstRefSrc)return;
+  let live=true;
+  const done=(width:number,height:number)=>{if(live&&width>0&&height>0)setRefSize({src:firstRefSrc,width,height});};
+  if(firstRefMedia==='video'){const v=document.createElement('video');v.preload='metadata';v.onloadedmetadata=()=>done(v.videoWidth,v.videoHeight);v.src=firstRefSrc;}
+  else{const i=new Image();i.onload=()=>done(i.naturalWidth,i.naturalHeight);i.src=firstRefSrc;}
+  return()=>{live=false;};
+ },[firstRefSrc,firstRefMedia]);
+ const autoSource=pipeline==='ref2v'?(refSize&&refSize.src===firstRefSrc?refSize:undefined):source;
+ const selectedCanvas=canvasSize(aspect,resolution,{width:aspectWidth,height:aspectHeight},megapixels,{width,height},modelSize,mediaPipeline?autoSource:undefined,grid);
  const canvas=qwenRefs?{width:Math.round(selectedCanvas.width/32)*32,height:Math.round(selectedCanvas.height/32)*32}:selectedCanvas;
  // Post-processing scales both edges and snaps each to the model grid.
  const up=(s:Size):Size=>({width:Math.max(grid,Math.round(s.width*upscale/grid)*grid),height:Math.max(grid,Math.round(s.height*upscale/grid)*grid)});
@@ -517,7 +530,7 @@ const loadChoices=()=>{if(native&&!choices&&endpoint.trim())void refreshChoices(
   :moss&&pipeline==='i2i'&&source&&!scaled?.resize&&(source.width%grid!==0||source.height%grid!==0)?'studio.run.moss.resize'
   :(!validCanvas(outputSize)||((moss||qwenRefs)&&(outputSize.width%grid!==0||outputSize.height%grid!==0)))?'studio.run.resolution.invalid'
   :(pipeline==='i2i'||pipeline==='i2v'||pipeline==='v2v')&&!source&&!(continuing&&resolution==='fixed')?'studio.run.resolution.waiting'
-  :mediaPipeline&&aspect==='auto'&&resolution!=='fixed'&&media&&media.media!=='audio'&&!source?'studio.run.resolution.waiting':'';
+  :mediaPipeline&&aspect==='auto'&&resolution!=='fixed'&&(firstRef||(pipeline!=='ref2v'&&media&&media.media!=='audio'))&&!autoSource?'studio.run.resolution.waiting':'';
  const sizeError=sizeErrorFor();
  const continuitySizeError=sizeErrorFor(continuationWithoutReferences);
  const historyProblems=historyDraft?[

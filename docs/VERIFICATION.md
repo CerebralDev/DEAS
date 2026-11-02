@@ -12,6 +12,9 @@ Source inspection of ComfyUI d07dff4: `Anima`, `Krea2` and `QwenImage` declare `
 ## H3 input scaling default (0.2.10)
 
 Vitest pins Auto in the submitted intent; Workbench suite 297 passed. The native absent-field fallback and its Rust test are unchanged on purpose. No real H3 run has been done with the new default.
+## Multi-reference Auto aspect (0.2.10)
+
+Vitest covers the slot and sound-only rule in `firstVisualRef`. Workbench fixtures cover Run waiting for the size with stubbed media. The canvas from a real file has not been exercised by a real run.
 
 ## Compact native checkpoint selector (0.2.10 unreleased)
 
