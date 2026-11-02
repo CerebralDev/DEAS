@@ -1,5 +1,19 @@
 # DEAS verification — native baseline, optional capabilities and languages
 
+## Release 0.2.13 (published)
+
+Published 2026-11-02 as the rollup of the 0.2.11–0.2.13 development cycle (last published release was v0.2.10). Source commit `662252b606ec7241e527f8c7b3a3d139dd001ab2` (tree `7dac2343f420158412a9cad2cacce0cc292c6e1b`); tag `v0.2.13` at that commit, pushed to both remotes; GitHub release `v0.2.13` created with `--target` pinned to the source commit. Fresh gates on that source: tsc clean; core 125/125; UI 1318/1318; `cargo test --lib` 703 passed (`--test-threads=1`); `cargo clippy --locked --lib -- -D warnings` clean; rustfmt clean on the touched Rust files. One UI run failed once in `Forge.test.tsx` ("H3 cast cards") and passed on rerun and in the full suite — a timing flake, unrelated to the family data.
+
+Assets in `artifacts/releases/v0.2.13/`, downloaded back from the release and verified with `sha256sum -c SHA256SUMS` (all OK):
+- `deas-linux-amd64` `3670511ce01f805619427568b3175d28f361364836370ca9115c4724cdae4775` (32534152 bytes)
+- `deas.exe` `7d44b1a7560127102847eb4cea3bc25c4a3dfc63ac19518f701cf866facdbd11` (35822592 bytes)
+- `SHA256SUMS` `a7e75b875c8acbf23589008aa4daf257fd9ac183c160c254e6b97ff41b207f34` (244 bytes)
+- `BUILD-MANIFEST.json` `7412964bb8a7c6eaeba902e6723a7cff03cf0c4aac4da37d273ec4ab8a201acf` (405 bytes)
+
+The Linux binary is built on this host and requires glibc 2.39 directly (`GLIBC_2.39`, `objdump -T`); `ldd` reports no missing libraries. The MSVC exe is cross-built and unsigned; Windows runtime acceptance is still open. Bundles (deb/AppImage/NSIS/portable zip) were skipped because `patchelf`/`makensis` are absent on this host.
+
+The new families (SD3, Chroma, HiDream, PixArt, HunyuanDiT, Lumina2, SD1.5/SD2, Kandinsky 5 Image, Ideogram 4, Boogu, OmniGen2, Fibo 2.0, Ernie Image, Flux.2, Flux.3, Mage-Flow, PixelDiT) are graph- and detection-tested but have no GPU run: no model files exist on this host, so their step/CFG values are starting values.
+
 ## Release 0.2.10 (published)
 
 Published 2026-11-02 as the rollup of the 0.2.10 development cycle (last published release was v0.2.9). Source commit `2eb21c263c82c037b8f4be31c1cb6b872eb4b441` (tree `0486b4303004b4b450b081d19f8f9bfcaacf5ab4`); tag `v0.2.10` at that commit, pushed to both remotes; GitHub release `v0.2.10` created with `--target` pinned to the source commit (Actions workflows disabled and runners billing-gated — local fallback build). Fresh gates on the source commit: tsc clean; core 125/125; UI 1311/1311; version strings 0.2.10 consistent across package.json/package-lock.json (both fields)/Cargo.toml/Cargo.lock/tauri.conf.json; `cargo fmt --check` clean (after formatting `jobs.rs`, unformatted since the MOSS inpaint commit); `cargo clippy --locked --release --lib --bins -- -D warnings` clean; Rust suite 687 passed with `--test-threads=1`; `cargo xwin check --locked --all-targets` and `cargo xwin clippy --locked -- -D warnings` clean.
