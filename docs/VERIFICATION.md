@@ -1,5 +1,17 @@
 # DEAS verification — native baseline, optional capabilities and languages
 
+## Release 0.2.10 (published)
+
+Published 2026-11-02 as the rollup of the 0.2.10 development cycle (last published release was v0.2.9). Source commit `2eb21c263c82c037b8f4be31c1cb6b872eb4b441` (tree `0486b4303004b4b450b081d19f8f9bfcaacf5ab4`); tag `v0.2.10` at that commit, pushed to both remotes; GitHub release `v0.2.10` created with `--target` pinned to the source commit (Actions workflows disabled and runners billing-gated — local fallback build). Fresh gates on the source commit: tsc clean; core 125/125; UI 1311/1311; version strings 0.2.10 consistent across package.json/package-lock.json (both fields)/Cargo.toml/Cargo.lock/tauri.conf.json; `cargo fmt --check` clean (after formatting `jobs.rs`, unformatted since the MOSS inpaint commit); `cargo clippy --locked --release --lib --bins -- -D warnings` clean; Rust suite 687 passed with `--test-threads=1`; `cargo xwin check --locked --all-targets` and `cargo xwin clippy --locked -- -D warnings` clean.
+
+Assets in `artifacts/releases/v0.2.10/`, downloaded back from the release and verified with `sha256sum -c SHA256SUMS` (all OK):
+- `deas-linux-amd64` `e34f2a79282b3ebd19cbe4da95711a608a7b32e9ab856a276b6fc8890f7a89a3` (32461768 bytes)
+- `deas.exe` `28af4e1801aaecb0b4ff1ac4c736b5f8d0faeba2b1ef4dcf9986a7384108294d` (35716608 bytes)
+- `SHA256SUMS` `8322920aade91a9542bc175bd3c9305f1417a8a5efd28540efa582c19085f36b`
+- `BUILD-MANIFEST.json` `da7f002e203edd48c6bd755d20f936a37f18801106e177de7218ef4673effa35`
+
+The Linux binary is built on this host and requires glibc 2.39 directly (`GLIBC_2.39`, `objdump -T`), not the Ubuntu 22.04 baseline; `ldd` reports no missing libraries. Both binaries embed `dist/assets/index-C3cDQUON.js`. The MSVC exe is cross-built and unsigned; Windows runtime acceptance is still open. Bundles (deb/AppImage/NSIS/portable zip) were skipped because `patchelf`/`makensis` are absent on this host.
+
 ## Forge picture drop (0.2.10)
 
 Vitest with a mocked `onDragDropEvent` covers a drop inside and outside the zone, behind a dialog, past the picture limit and with no picture. Windows WebView2 acceptance: see the pull request. Linux WebKitGTK is not checked.
