@@ -390,6 +390,7 @@
   "studio.run.post.tiled": "Döşemeli iyileştirme (DaSiWa Tiled Diffusion)",
   "studio.run.post.tiledHint": "İyileştirme geçişini her adımda harmanlanan {overlap} px bindirmeli {width}×{height} döşemelerle örnekler — modelin yerel boyutu, böylece büyük çıktılar keskin ve dikişsiz kalır.",
   "studio.run.post.tiledMissing": "Backend DaSiWaTiledDiffusion’ı listelemiyor; DaSiWa node paketini kurun.",
+  "studio.run.post.tiledFamily": "Bu modelin latent'leri düz görüntü olmadığından tiled refine çalışamaz. Normal refine çalışır.",
   "studio.run.edit.slider": "Kaydırıcı",
   "studio.run.edit.original": "Orijinal",
   "studio.run.edit.divider": "Orijinal / düzenlenmiş ayırıcı",

@@ -7,7 +7,7 @@
     "defaults": { "width": 1024, "height": 1024, "steps": 28, "cfg": 5.5, "sampler": "euler_ancestral", "scheduler": "normal" }
   },
   {
-    "id": "anima", "multiple": 16, "name": "Anima", "forge": "Anima", "loader": "diffusion", "pipelines": ["t2i", "i2i"],
+    "id": "anima", "temporalLatent": true, "multiple": 16, "name": "Anima", "forge": "Anima", "loader": "diffusion", "pipelines": ["t2i", "i2i"],
     "components": {"textEncoders": ["qwen3-0.6b"], "vaes": ["wan-2.1-vae"]},
     "clipType": "stable_diffusion", "textEncoders": ["qwen_3_600m", "qwen3_06b", "qwen_3_06b", "qwen3-0.6b"], "vaes": ["qwen_image_vae", "wan_2.1_vae"],
     "architectures": ["anima"], "bases": ["Anima"],
@@ -25,7 +25,7 @@
     "defaultsNote": "Comfy-Org image_moss_image_t2i template sampling values; bounded adapter omits template SLG and prompt upsampling. Reference-image t2i verified at 512 pixels; other resolutions and variants remain unverified."
   },
   {
-    "id": "krea-2", "imagePrompting": "krea-2", "multiple": 16, "name": "Krea 2", "forge": "Krea2", "loader": "diffusion", "pipelines": ["t2i", "i2i"],
+    "id": "krea-2", "temporalLatent": true, "imagePrompting": "krea-2", "multiple": 16, "name": "Krea 2", "forge": "Krea2", "loader": "diffusion", "pipelines": ["t2i", "i2i"],
     "components": {"textEncoders": ["qwen3-vl-4b"], "vaes": ["wan-2.1-vae"]},
     "clipType": "krea2", "textEncoders": ["qwen3vl_4b", "qwen3-vl-4b", "qwen_3_vl_4b"], "vaes": ["qwen_image_vae", "wan_2.1_vae"],
     "architectures": ["krea-2", "krea2"], "bases": ["Krea 2"],
@@ -53,7 +53,7 @@
     "defaults": { "width": 2048, "height": 2048, "steps": 20, "cfg": 4, "sampler": "euler", "scheduler": "simple" }
   },
   {
-    "id": "minimax-h3", "multiple": 32, "name": "MiniMax H3", "forge": "MiniMax H3", "loader": "diffusion", "pipelines": ["i2i", "t2v", "i2v", "v2v", "ref2v"],
+    "id": "minimax-h3", "temporalLatent": true, "multiple": 32, "name": "MiniMax H3", "forge": "MiniMax H3", "loader": "diffusion", "pipelines": ["i2i", "t2v", "i2v", "v2v", "ref2v"],
     "clipType": "minimax", "textEncoders": ["minimax_h3"], "vaes": ["h3_video_vae", "h3_sol_vae"], "audioVaes": ["h3_audio_vae"],
     "defaults": {"width": 1024, "height": 768, "steps": 4, "cfg": 1, "sampler": "euler", "scheduler": "simple"},
     "video": {"fps": 24, "seconds": 5, "fixedFps": true},

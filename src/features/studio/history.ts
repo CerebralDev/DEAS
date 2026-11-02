@@ -67,7 +67,7 @@ export function historyRestore(record:HistoryRecord,context:RestoreContext):Hist
  const resolve=(name:string,strength=1):RestoredReference=>({name,strength});
  const model=video?intent.model:intent.checkpoint;
  const modelFamily=context.models.find(m=>m.name===model)?.family;
- const family=(builtinFamilies as {id:string;loader:string;clipType?:string;sigmas?:number[];imagePrompting?:string;defaults?:{width:number;height:number};multiple?:number;video?:{lowModel?:string[];fixedFps?:boolean;fps:number}}[]).find(f=>f.id===modelFamily);
+ const family=(builtinFamilies as {id:string;loader:string;temporalLatent?:boolean;clipType?:string;sigmas?:number[];imagePrompting?:string;defaults?:{width:number;height:number};multiple?:number;video?:{lowModel?:string[];fixedFps?:boolean;fps:number}}[]).find(f=>f.id===modelFamily);
  if(!context.models.some(m=>m.name===model))unavailable.push(`model: ${model}`);
  for(const l of intent.loras??[])if(!context.allow?.loras?.includes(l.name)||!context.models.some(m=>m.name===l.name&&(!m.family||!modelFamily||m.family===modelFamily)))unavailable.push(`LoRA: ${l.name}`);
  for(const [field,value,list] of [['sampler',intent.sampler,context.allow?.samplers],['scheduler',intent.scheduler,context.allow?.schedulers]] as const)if(!list?.includes(value))unavailable.push(`${field}: ${value}`);
@@ -111,6 +111,7 @@ export function historyRestore(record:HistoryRecord,context:RestoreContext):Hist
    const expected=intent.sigmas?.slice(-(Math.max(1,Math.round((intent.sigmas.length-1)*r.denoise))+1));
    if(JSON.stringify(r.sigmas)!==JSON.stringify(expected))unsupported.push('refine.sigmas');
    if(r.tiled){
+    if(family?.temporalLatent)unsupported.push('refine.tiled');
     const native=family?.defaults??{width:1024,height:1024};const snap=(n:number)=>Math.max(grid,Math.round(n/grid)*grid);
     if(r.tiled.tileWidth!==snap(native.width)||r.tiled.tileHeight!==snap(native.height)||r.tiled.overlap!==snap(Math.max(64,Math.min(native.width,native.height)/8)))unsupported.push('refine.tiled');
    }

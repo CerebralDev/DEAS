@@ -125,3 +125,7 @@ test('music history restores to its own pipeline, names the unresolved source an
  expect(missing.unavailable).toEqual(expect.arrayContaining(['EmptyYuE2LatentAudio','SheetSage2AudioToABC','audioEncoder: sheetsage2_bf16.safetensors','family: yue2','input: deas-input-old.wav']));
  expect(missing.unavailable).not.toContain('YuE2GenerateMusic');expect(missing.unavailable).not.toContain('YuE2GenerateABC');
 });
+test('a saved tiled refine on a temporal-latent family is named, not silently dropped',()=>{
+ const restored=historyRestore(record({...image,refine:{width:2432,height:1664,denoise:0.35,tiled:{tileWidth:1024,tileHeight:1024,overlap:128}}}),{...context,models:[{name:'exact.safetensors',family:'anima'}]});
+ expect(restored.unsupported).toContain('refine.tiled');
+});

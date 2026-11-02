@@ -4,6 +4,7 @@
 
 - **Prompt Forge: dropping a picture on Reference images works.** Native webviews hand over OS file drops as paths, never as DOM files, so the zone's drop handler got nothing and did nothing. It now takes the path like the References panel does. A drop with no usable picture says so.
 - **Ctrl+Enter runs.** It presses the Run button, so a disabled Run stays disabled and the job goes through the same checks. It also works with tag or spelling suggestions open, while plain Enter still picks a suggestion. It does nothing from another tab, while a dialog is open, or on a held key.
+- **Tiled refine is refused up front on Anima, Krea 2 and H3.** Their latents are 5-D, so ticking it reached the sampler and failed with `Tiled Diffusion (Image) only supports 4-D image latents`. The checkbox is now off with a reason, plain refine still runs, and restoring an old tiled job names `refine.tiled` as unsupported. The family flag is data (`temporalLatent` in `src/families/builtin.json`).
 
 - **GitHub issue forms.** Bug, enhancement, question and documentation forms apply the corresponding existing label and ask for the DEAS version and update status. Bug reports collect reproduction steps, system/GPU details, effective model settings and a reviewed `.txt` log export (or an explanation if unavailable). The Logs guide documents export, attachment and privacy steps; no automatic uploads or app changes.
 

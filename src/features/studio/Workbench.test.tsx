@@ -1723,6 +1723,17 @@ test.each([false,true])('environment transition saves the active last edit under
  expect(screen.getByLabelText('Steps')).toHaveProperty('value','52');expect(runWorkbenchJob).not.toHaveBeenCalled();
 });
 
+test.each([['anima','Anima'],['krea-2','Krea 2']])('tiled refine is refused with a reason on %s, whose latents are not flat',async(familyId)=>{
+ localStorage.setItem('deas.pref.studio.run.post.tiled','true');
+ vi.mocked(checkRecipePrerequisites).mockResolvedValue({...evidence,allowlist:{...evidence.allowlist,nodes:[...evidence.allowlist.nodes,'DaSiWaTiledDiffusion']}});
+ vi.mocked(scanModels).mockResolvedValue([{category:'diffusion_models',name:'a.safetensors',family:familyId,path:'/m/a',size:1,info:null}]);
+ render(<I18nProvider><Workbench endpoint={evidence.baseUrl} roots={{models:'/m'}}/></I18nProvider>);
+ fireEvent.click(await screen.findByRole('tab',{name:/Post-Processing/}));
+ const box=await screen.findByRole('checkbox',{name:'Tiled refine (DaSiWa Tiled Diffusion)'});
+ await waitFor(()=>expect(box.hasAttribute('disabled')).toBe(true));
+ expect(box).toHaveProperty('checked',false);
+ expect(screen.getByText(/cannot run on it/)).toBeTruthy();
+});
 test('session cache distinguishes same names in separate categories and absolute model roots',async()=>{
  const files=[{...sessionModels[0],name:'same.safetensors',path:'/one/same.safetensors'},{...sessionModels[0],name:'same.safetensors',category:'diffusion_models',family:'qwen-image-2.1',path:'/two/same.safetensors'},{...sessionModels[0],name:'same.safetensors',path:'/three/same.safetensors'}];
  vi.mocked(scanModels).mockResolvedValue(files);vi.mocked(checkRecipePrerequisites).mockResolvedValue(evidence);

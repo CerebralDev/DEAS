@@ -390,6 +390,7 @@
   "studio.run.post.tiled": "タイル分割リファイン（DaSiWa Tiled Diffusion）",
   "studio.run.post.tiledHint": "リファインパスを {width}×{height} のタイルで、{overlap} px の重なりを毎ステップ合成してサンプリングします。モデルのネイティブサイズなので大きな出力でも鮮明で継ぎ目がありません。",
   "studio.run.post.tiledMissing": "バックエンドに DaSiWaTiledDiffusion がありません。DaSiWa ノードパックをインストールしてください。",
+  "studio.run.post.tiledFamily": "このモデルの潜在表現は平面画像ではないため、タイルリファインは実行できません。通常のリファインは使えます。",
   "studio.run.edit.slider": "スライダー",
   "studio.run.edit.original": "元画像",
   "studio.run.edit.divider": "元画像／編集後の境界線",

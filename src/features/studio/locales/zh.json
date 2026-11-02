@@ -390,6 +390,7 @@
   "studio.run.post.tiled": "分块精修（DaSiWa Tiled Diffusion）",
   "studio.run.post.tiledHint": "以 {width}×{height} 的分块、{overlap} px 重叠并在每一步融合来采样精修阶段——即模型的原生尺寸，大图保持清晰且无接缝。",
   "studio.run.post.tiledMissing": "后端未列出 DaSiWaTiledDiffusion；请安装 DaSiWa 节点包。",
+  "studio.run.post.tiledFamily": "此模型的潜变量不是平面图像，因此无法运行分块精修。普通精修可用。",
   "studio.run.edit.slider": "滑块",
   "studio.run.edit.original": "原图",
   "studio.run.edit.divider": "原图 / 编辑后分隔线",
