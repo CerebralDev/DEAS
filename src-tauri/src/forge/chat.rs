@@ -65,7 +65,7 @@ fn request(r: &Round<'_>, stream: bool) -> Result<(reqwest::Url, Value, bool), S
             return Err(
                 "No LLM server is set: pick a local GGUF, or set a server under Backend → LLM."
                     .into(),
-            )
+            );
         }
     };
     let mut body = if ollama {
@@ -108,6 +108,7 @@ fn request(r: &Round<'_>, stream: bool) -> Result<(reqwest::Url, Value, bool), S
 }
 
 async fn post(
+    config: &LlmConfig,
     url: reqwest::Url,
     body: &Value,
     timeout: Duration,
@@ -119,7 +120,12 @@ async fn post(
         .timeout(timeout)
         .build()
         .map_err(|_| "Cannot create LLM HTTP client")?;
-    client.post(url).json(body).send().await.map_err(|e| {
+    let mut builder = client.post(url).json(body);
+    // OpenAI-compatible servers need the saved key; Ollama and an empty key stay unauthenticated.
+    if config.provider == Provider::Openai && !config.api_key.is_empty() {
+        builder = builder.bearer_auth(&config.api_key);
+    }
+    builder.send().await.map_err(|e| {
         if e.is_timeout() {
             "The LLM took too long to answer".to_string()
         } else {
@@ -271,7 +277,7 @@ pub async fn round(r: Round<'_>) -> Result<Reply, String> {
         return local_round(&r).await;
     }
     let (url, body, ollama) = request(&r, false)?;
-    let mut response = post(url, &body, r.timeout).await?;
+    let mut response = post(r.config, url, &body, r.timeout).await?;
     let status = response.status();
     let mut bytes = Vec::new();
     while let Some(chunk) = response.chunk().await.map_err(|_| "LLM response failed")? {
@@ -298,7 +304,7 @@ pub async fn stream_round(
     let (url, body, ollama) = request(&r, true)?;
     let mut parser = StreamParser::new(ollama);
     let receive = async {
-        let mut response = post(url, &body, r.timeout).await?;
+        let mut response = post(r.config, url, &body, r.timeout).await?;
         let status = response.status();
         if !status.is_success() {
             let mut bytes = Vec::new();
@@ -685,12 +691,82 @@ pub(super) mod tests {
             .contains("not available"));
     }
 
+    #[tokio::test]
+    async fn openai_rounds_send_the_saved_key_while_ollama_and_empty_keys_stay_plain() {
+        for stream in [false, true] {
+            for (provider, key) in [
+                (Provider::Openai, "fixture-key"),
+                (Provider::Ollama, "fixture-key"),
+                (Provider::Openai, ""),
+            ] {
+                let body = if stream {
+                    match provider {
+                        Provider::Ollama => "{\"message\":{\"content\":\"ok\"},\"done\":true}\n",
+                        Provider::Openai => "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\ndata: [DONE]\n\n",
+                        Provider::Local => unreachable!(),
+                    }
+                    .to_string()
+                } else {
+                    match provider {
+                        Provider::Ollama => "{\"message\":{\"content\":\"ok\"},\"done\":true}",
+                        Provider::Openai => {
+                            "{\"choices\":[{\"message\":{\"content\":\"ok\"},\"finish_reason\":\"stop\"}]}"
+                        }
+                        Provider::Local => unreachable!(),
+                    }
+                    .to_string()
+                };
+                let response = if stream {
+                    format!(
+                        "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n{:x}\r\n{body}\r\n0\r\n\r\n",
+                        body.len()
+                    )
+                } else {
+                    complete(&body)
+                };
+                let (url, mut received, server) = fixture(vec![response]).await;
+                let expects_auth = provider == Provider::Openai && !key.is_empty();
+                let config = LlmConfig {
+                    provider,
+                    base_url: url,
+                    api_key: key.into(),
+                };
+                let r = Round {
+                    config: &config,
+                    model: "fixture",
+                    messages: &[],
+                    tools: None,
+                    temperature: None,
+                    top_p: None,
+                    max_tokens: None,
+                    timeout: Duration::from_secs(2),
+                };
+                let reply = if stream {
+                    stream_round(r, &mut |_| {}, &std::sync::atomic::AtomicBool::new(false)).await
+                } else {
+                    round(r).await
+                }
+                .unwrap_or_else(|e| panic!("{provider:?} stream={stream}: {e}"));
+                assert_eq!(reply.content, "ok");
+                let head = received.recv().await.unwrap().1.to_ascii_lowercase();
+                let auth = head.lines().find(|line| line.starts_with("authorization:"));
+                if expects_auth {
+                    let expected = ["authorization: bearer ", key].concat();
+                    assert!(auth.is_some_and(|line| line == expected), "{head}");
+                } else {
+                    assert!(auth.is_none(), "{head}");
+                }
+                server.await.unwrap();
+            }
+        }
+    }
+
     // Real HTTP peers: an unfinished response stays open until the client drops it.
     pub(in crate::forge) async fn fixture(
         responses: Vec<String>,
     ) -> (
         String,
-        tokio::sync::mpsc::Receiver<usize>,
+        tokio::sync::mpsc::Receiver<(usize, String)>,
         tokio::task::JoinHandle<()>,
     ) {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -700,13 +776,14 @@ pub(super) mod tests {
             for (index, response) in responses.into_iter().enumerate() {
                 let (mut socket, _) = listener.accept().await.unwrap();
                 let mut request = vec![];
+                let mut head;
                 let mut buf = [0; 4096];
                 loop {
                     let n = socket.read(&mut buf).await.unwrap();
                     assert!(n > 0);
                     request.extend_from_slice(&buf[..n]);
                     if let Some(end) = request.windows(4).position(|b| b == b"\r\n\r\n") {
-                        let head = String::from_utf8_lossy(&request[..end]);
+                        head = String::from_utf8_lossy(&request[..end]).into_owned();
                         let length: usize = head
                             .lines()
                             .find_map(|line| {
@@ -721,7 +798,7 @@ pub(super) mod tests {
                     }
                 }
                 socket.write_all(response.as_bytes()).await.unwrap();
-                tx.send(index).await.unwrap();
+                tx.send((index, head)).await.unwrap();
                 if !response.contains("Content-Length:") {
                     socket.read_to_end(&mut vec![]).await.unwrap();
                 }

@@ -1095,7 +1095,7 @@ mod tests {
                         == format!("INFO: Chat: write_prompt chat={id} route={expected_route}")
             }));
             for i in 0..count {
-                assert_eq!(received.recv().await, Some(i));
+                assert_eq!(received.recv().await.map(|(index, _)| index), Some(i));
             }
             tokio::time::timeout(Duration::from_secs(1), server)
                 .await
@@ -1148,7 +1148,7 @@ mod tests {
             &mut emit,
         );
         let cancel = async {
-            assert_eq!(received.recv().await, Some(0));
+            assert_eq!(received.recv().await.map(|(index, _)| index), Some(0));
             assert!(native_chat_cancel(id.lock().unwrap().clone().unwrap()));
         };
         let (reply, ()) =
@@ -1215,8 +1215,8 @@ mod tests {
                 &mut emit,
             );
             let cancel = async {
-                assert_eq!(received.recv().await, Some(0));
-                assert_eq!(received.recv().await, Some(1));
+                assert_eq!(received.recv().await.map(|(index, _)| index), Some(0));
+                assert_eq!(received.recv().await.map(|(index, _)| index), Some(1));
                 assert!(native_chat_cancel(id.lock().unwrap().clone().unwrap()));
             };
             let (result, ()) =
