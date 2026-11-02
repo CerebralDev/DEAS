@@ -64,6 +64,24 @@ test('model metadata action enables an unknown supported file while GGUF stays u
  expect(screen.getByRole('button',{name:'Run'})).toHaveProperty('disabled',true);
  expect(runWorkbenchJob).not.toHaveBeenCalled();
 });
+test('Ctrl+Enter presses Run once, and never while Run is disabled, hidden or behind a dialog',async()=>{
+ vi.mocked(checkRecipePrerequisites).mockResolvedValue(evidence);
+ vi.mocked(scanModels).mockResolvedValue([{category:'checkpoints',name:'a.safetensors',family:'sdxl',path:'/m/a',size:1,info:null}]);
+ const view=render(<I18nProvider><div data-host><Workbench endpoint={evidence.baseUrl} roots={{models:'/m'}}/></div></I18nProvider>);
+ const run=document.querySelector<HTMLButtonElement>('[data-run]')!;
+ const prompt=document.querySelector('#run-negative')!;
+ const clicked=vi.spyOn(run,'click');clicked.mockImplementation(()=>{});
+ await waitFor(()=>expect(run.disabled).toBe(false));
+ fireEvent.keyDown(prompt,{key:'Enter'});
+ fireEvent.keyDown(prompt,{key:'Enter',ctrlKey:true,repeat:true});
+ const dialog=document.body.appendChild(document.createElement('dialog'));dialog.setAttribute('open','');
+ fireEvent.keyDown(prompt,{key:'Enter',ctrlKey:true});dialog.remove();
+ const host=view.container.querySelector<HTMLElement>('[data-host]')!;host.hidden=true;
+ fireEvent.keyDown(prompt,{key:'Enter',ctrlKey:true});host.hidden=false;
+ expect(clicked).not.toHaveBeenCalled();
+ fireEvent.keyDown(prompt,{key:'Enter',ctrlKey:true});
+ expect(clicked).toHaveBeenCalledTimes(1);
+});
 test('checkpoint picker stays a compact native select without a custom filter or list',async()=>{
  const files=['anima_a','anima_b','illu_c','krea_d','wan_e','ltx_f','sdxl_g','pony_h','moss_i'].map(n=>({category:'checkpoints',name:`${n}.safetensors`,path:`/m/${n}.safetensors`,size:1,info:null,family:'sdxl'}));
  vi.mocked(scanModels).mockResolvedValue(files);

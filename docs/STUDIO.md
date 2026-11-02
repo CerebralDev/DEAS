@@ -92,6 +92,8 @@ Drag the vertical lines between Settings/View and View/Queue left or right to re
 
 The gear immediately left of GitHub opens **Quick Settings**. Reset actions are unavailable with an explanation until Studio has been opened and its controls exist. **Reset layout** restores pane sizes only. **Reset to defaults…** asks before resetting editable generation controls, Options, LoRAs, preset/wildcard activation/configuration and post-processing to canonical/model-family defaults. It leaves media/library files, credentials, backend configuration, queued/submitted jobs, seed history and Continuity job references intact. In a project it resets that project draft and warns about autosave; global Studio preferences remain separate.
 
+**Ctrl+Enter** presses Run, from a prompt field or anywhere else in Generate, while no dialog is open.
+
 **Global search** sits as a magnifier in the top tab band, directly left of GitHub; **Ctrl+K** opens it from anywhere. Type part of a control's name (English synonyms work in any language) and every hit reads **tab › section › control**. Choosing one switches the tab, opens the collapsed group, scrolls to the control and flashes it for 1.4 s — reduced motion keeps a static outline. A hit whose control needs a model, the owned backend, an installation or a Run Plan stage the draft does not use shows that reason and leaves the control greyed in place; a disabled control keeps its own tooltip first. The search is read-only: it never changes a setting, starts a run, downloads or asks the backend.
 
 ### Colour schemes
