@@ -390,6 +390,7 @@
   "studio.run.post.tiled": "Raffinage en tuiles (DaSiWa Tiled Diffusion)",
   "studio.run.post.tiledHint": "Échantillonne la passe de raffinage en tuiles de {width}×{height} avec {overlap} px de recouvrement fondu à chaque étape — la taille native du modèle, pour des sorties grandes, nettes et sans raccords.",
   "studio.run.post.tiledMissing": "Le backend ne liste pas DaSiWaTiledDiffusion ; installez le pack de nœuds DaSiWa.",
+  "studio.run.post.tiledFamily": "Les latents de ce modèle ne sont pas des images plates, le raffinage en tuiles ne peut donc pas s’y exécuter. Le raffinage normal fonctionne.",
   "studio.run.edit.slider": "Curseur",
   "studio.run.edit.original": "Original",
   "studio.run.edit.divider": "Séparateur original / modifié",

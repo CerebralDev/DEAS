@@ -390,6 +390,7 @@
   "studio.run.post.tiled": "Tiled refine (DaSiWa Tiled Diffusion)",
   "studio.run.post.tiledHint": "Samples the refine pass in {width}×{height} tiles with {overlap} px overlap blended every step — the model’s native size, so large outputs stay sharp and seamless.",
   "studio.run.post.tiledMissing": "The backend does not list DaSiWaTiledDiffusion; install the DaSiWa node pack.",
+  "studio.run.post.tiledFamily": "This model's latents are not flat images, so tiled refine cannot run on it. The plain refine works.",
   "studio.run.edit.slider": "Slider",
   "studio.run.edit.original": "Original",
   "studio.run.edit.divider": "Original / edited divider",

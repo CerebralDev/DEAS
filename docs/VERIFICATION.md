@@ -6,6 +6,9 @@ Vitest with a mocked `onDragDropEvent` covers a drop inside and outside the zone
 ## Ctrl+Enter (0.2.10)
 
 Vitest covers no press while Run is disabled, plain Enter, repeats, an open dialog and a hidden host, one press otherwise, and suggestions left alone. Workbench and PromptTextarea suites: 329 passed. Native keyboard acceptance is listed in PLAN.
+## Tiled refine gate (0.2.10)
+
+Source inspection of ComfyUI d07dff4: `Anima`, `Krea2` and `QwenImage` declare `latent_formats.Wan21` and H3 `MiniMaxH3AV`, all `latent_dimensions = 3`; `Flux2` (MOSS) and `QwenImage21` do not, and the DEAS `qwen-image-2.1` families use the latter. Vitest covers the disabled control and reason on Anima and Krea 2 and the history refusal. No real Anima, Krea 2 or SDXL refine run has been done, and Krea 2 failing is inferred from its latent format, not observed.
 
 ## Compact native checkpoint selector (0.2.10 unreleased)
 

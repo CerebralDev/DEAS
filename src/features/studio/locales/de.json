@@ -390,6 +390,7 @@
   "studio.run.post.tiled": "Gekachelte Verfeinerung (DaSiWa Tiled Diffusion)",
   "studio.run.post.tiledHint": "Sampelt den Verfeinerungsdurchlauf in {width}×{height}-Kacheln mit {overlap} px Überlappung, in jedem Schritt verblendet — die native Modellgröße, damit große Ausgaben scharf und nahtlos bleiben.",
   "studio.run.post.tiledMissing": "Das Backend listet DaSiWaTiledDiffusion nicht; installiere das DaSiWa-Node-Paket.",
+  "studio.run.post.tiledFamily": "Die Latents dieses Modells sind keine flachen Bilder, daher kann Tiled Refine damit nicht laufen. Der normale Refine funktioniert.",
   "studio.run.edit.slider": "Schieberegler",
   "studio.run.edit.original": "Original",
   "studio.run.edit.divider": "Trennlinie Original / bearbeitet",
