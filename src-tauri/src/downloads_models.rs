@@ -864,7 +864,7 @@ pub async fn fetch(
     .await
     .map_err(|_| "Hashing task failed")??;
     let u = providers::endpoint(p, &["api", "v1", "model-versions", "by-hash", &sha256])?;
-    let client = client_for(false)?;
+    let client = client_for(false, None)?;
     let found = tokio::time::timeout(
         Duration::from_secs(30),
         providers::json_optional(&client, p, u, &header),

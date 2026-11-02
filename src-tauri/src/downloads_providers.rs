@@ -272,7 +272,10 @@ pub(super) async fn list(
     next: Option<Url>,
     header: Option<HeaderValue>,
 ) -> Result<Page, String> {
-    let client = client_for(p.kind == "ollama")?;
+    let client = client_for(
+        p.kind == "ollama",
+        Some(Duration::from_secs(MAX_HTTP_SECONDS)),
+    )?;
     let mut warnings = vec![];
     let mut u = match (p.kind.as_str(), r.scope.as_str()) {
         ("huggingface", "user") => {

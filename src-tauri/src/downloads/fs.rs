@@ -290,6 +290,49 @@ impl Anchor {
             Err("Unsupported platform".into())
         }
     }
+    /// The partial opened for reading and appending, with its current length; `None` when absent.
+    pub fn resume_partial(&self, name: &str) -> Result<Option<(File, u64)>, String> {
+        #[cfg(target_os = "linux")]
+        {
+            let name = CString::new(name).map_err(|_| "Unsafe filename")?;
+            let fd = unsafe {
+                libc::openat(
+                    self.0.as_raw_fd(),
+                    name.as_ptr(),
+                    libc::O_RDWR | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+                )
+            };
+            if fd < 0 {
+                return if std::io::Error::last_os_error().raw_os_error() == Some(libc::ENOENT) {
+                    Ok(None)
+                } else {
+                    Err("Cannot resume partial".into())
+                };
+            }
+            let file = unsafe { File::from_raw_fd(fd) };
+            let size = file.metadata().map_err(|_| "Cannot resume partial")?.len();
+            Ok(Some((file, size)))
+        }
+        #[cfg(windows)]
+        {
+            let file = match std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(self.child(name)?)
+            {
+                Ok(file) => file,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+                Err(_) => return Err("Cannot resume partial".into()),
+            };
+            let size = file.metadata().map_err(|_| "Cannot resume partial")?.len();
+            Ok(Some((file, size)))
+        }
+        #[cfg(not(any(target_os = "linux", windows)))]
+        {
+            let _ = name;
+            Err("Unsupported platform".into())
+        }
+    }
     /// True when `name` inside this directory is still the regular file behind `file`.
     pub fn owns_partial(&self, name: &str, file: &File) -> bool {
         #[cfg(target_os = "linux")]

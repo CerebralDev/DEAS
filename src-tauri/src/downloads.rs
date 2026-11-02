@@ -23,9 +23,12 @@ use std::{
 };
 const MAX_RESOURCES: usize = 50;
 const MAX_FILES: usize = 16;
-const MAX_BYTES: u64 = 20 * 1024 * 1024 * 1024;
+/// One resource: a single 22–26 GB checkpoint must fit; the aggregate stays separate.
+const MAX_FILE_BYTES: u64 = 128 * 1024 * 1024 * 1024;
+const MAX_JOB_BYTES: u64 = 256 * 1024 * 1024 * 1024;
 const MAX_JSON: usize = 2 * 1024 * 1024;
-const MAX_JOB_SECONDS: u64 = 3600;
+/// Catalog/metadata requests; downloads themselves are bounded by an idle read timeout.
+const MAX_HTTP_SECONDS: u64 = 3600;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -281,8 +284,8 @@ fn validate_metadata(
     if hash.is_some_and(|s| s.len() != 64 || !s.bytes().all(|b| b.is_ascii_hexdigit())) {
         return Err("Invalid SHA-256".into());
     }
-    if size.is_some_and(|s| s > MAX_BYTES) {
-        return Err("Resource exceeds byte limit".into());
+    if size.is_some_and(|s| s > MAX_FILE_BYTES) {
+        return Err("Resource exceeds the 128 GiB limit".into());
     }
     if let Some(s) = license {
         bounded_text(s, 512)?;
@@ -383,22 +386,21 @@ fn public_ip(ip: std::net::IpAddr) -> bool {
         }
     }
 }
-fn client_for(local: bool) -> Result<reqwest::Client, String> {
+fn client_for(local: bool, timeout: Option<Duration>) -> Result<reqwest::Client, String> {
     let mut builder = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .no_proxy()
         .connect_timeout(Duration::from_secs(10))
-        .timeout(Duration::from_secs(MAX_JOB_SECONDS))
         .user_agent("DEAS/0.1 optional-downloads");
+    if let Some(timeout) = timeout {
+        builder = builder.timeout(timeout);
+    }
     if !local {
         builder = builder.dns_resolver(Arc::new(PublicDns));
     }
     builder
         .build()
         .map_err(|_| "Cannot construct HTTP client".into())
-}
-fn client() -> Result<reqwest::Client, String> {
-    client_for(false)
 }
 fn network_error() -> String {
     "Network request failed (details withheld to protect credentials)".into()
@@ -723,8 +725,8 @@ impl DownloadEngine {
                 ));
             }
         }
-        if total > MAX_BYTES {
-            return Err("Combined known size exceeds 20 GiB".into());
+        if total > MAX_JOB_BYTES {
+            return Err("Combined known size exceeds the 256 GiB limit".into());
         }
         let view = DownloadPlan {
             id: uuid::Uuid::new_v4().to_string(),
@@ -850,77 +852,10 @@ impl DownloadEngine {
         header: Option<HeaderValue>,
         cancel: &AtomicBool,
     ) -> Result<(), String> {
-        let client = client()?;
-        let deadline = tokio::time::Instant::now() + Duration::from_secs(MAX_JOB_SECONDS);
+        let client = client_for(false, None)?;
         for r in &p.view.resources {
-            let name = format!("deas-{}.partial", uuid::Uuid::new_v4());
-            let mut file = target.partial(&name)?;
-            let result = tokio::time::timeout_at(deadline, async {
-                let mut response = fetch(
-                    &client,
-                    &p.provider,
-                    r.url.as_deref().ok_or("Missing download URL")?,
-                    header.clone(),
-                    cancel,
-                )
+            self.transfer(r, &p.provider, &target, &client, header.clone(), cancel)
                 .await?;
-                let length = response.content_length();
-                if length.is_some_and(|n| n > MAX_BYTES) {
-                    return Err("Content-Length exceeds limit".into());
-                }
-                let mut digest = Sha256::new();
-                let mut count = 0u64;
-                loop {
-                    let chunk = cancellable(response.chunk(), cancel, 30)
-                        .await?
-                        .map_err(|_| network_error())?;
-                    let Some(chunk) = chunk else { break };
-                    count += chunk.len() as u64;
-                    {
-                        let mut i = self
-                            .inner
-                            .lock()
-                            .map_err(|_| "Download state unavailable")?;
-                        if i.status.bytes_downloaded.saturating_add(chunk.len() as u64) > MAX_BYTES
-                        {
-                            return Err("Job exceeds 20 GiB byte limit".into());
-                        }
-                        i.status.bytes_downloaded += chunk.len() as u64;
-                    }
-                    if r.size.is_some_and(|n| count > n) {
-                        return Err("Download exceeds declared size".into());
-                    }
-                    digest.update(&chunk);
-                    std::io::Write::write_all(&mut file, &chunk)
-                        .map_err(|_| "Cannot write partial")?;
-                }
-                if r.size.is_some_and(|n| n != count) || length.is_some_and(|n| n != count) {
-                    return Err("Download size mismatch".into());
-                }
-                let actual = format!("{:x}", digest.finalize());
-                if r.sha256
-                    .as_ref()
-                    .is_some_and(|s| !s.eq_ignore_ascii_case(&actual))
-                {
-                    return Err("SHA-256 mismatch; partial discarded".into());
-                }
-                if cancel.load(Ordering::SeqCst) {
-                    return Err("Download cancelled".into());
-                }
-                file.sync_all().map_err(|_| "Cannot sync partial")?;
-                target.publish(&name, &providers::filename(r)?)?;
-                self.inner
-                    .lock()
-                    .map_err(|_| "Download state unavailable")?
-                    .status
-                    .completed += 1;
-                Ok(())
-            })
-            .await
-            .map_err(|_| "Job exceeded one hour".to_string())
-            .and_then(|r| r);
-            target.remove_partial(&name);
-            result?;
         }
         if cancel.load(Ordering::SeqCst) {
             return Err("Download cancelled".into());
@@ -939,6 +874,141 @@ impl DownloadEngine {
         })();
         target.remove_partial(&name);
         result
+    }
+    /// One resource. A persisted partial resumes only when the catalog pins size and hash,
+    /// so a changed remote file cannot be appended silently; verification decides the retry.
+    async fn transfer(
+        &self,
+        r: &Resource,
+        provider: &Provider,
+        target: &fs::Anchor,
+        client: &reqwest::Client,
+        header: Option<HeaderValue>,
+        cancel: &AtomicBool,
+    ) -> Result<(), String> {
+        let name = format!("deas-{}.partial", providers::filename(r)?);
+        for attempt in 0..2 {
+            let resumable = attempt == 0 && r.size.is_some() && r.sha256.is_some();
+            let (mut file, mut count) = if resumable {
+                match target.resume_partial(&name)? {
+                    Some(kept) => kept,
+                    None => (target.partial(&name)?, 0),
+                }
+            } else {
+                target.remove_partial(&name);
+                (target.partial(&name)?, 0)
+            };
+            let mut digest = Sha256::new();
+            // shortcut: a resume re-reads the kept bytes (a 25 GB file costs 1–2 min); persist a
+            // rolling hash only when resumes get frequent.
+            if count > 0 {
+                let mut buf = vec![0; 1 << 20];
+                loop {
+                    let n = std::io::Read::read(&mut file, &mut buf)
+                        .map_err(|_| "Cannot read partial")?;
+                    if n == 0 {
+                        break;
+                    }
+                    digest.update(&buf[..n]);
+                }
+            }
+            let mut length = None;
+            let mut start = count;
+            // A kept partial that already holds the whole file (a crash before publish) needs no request.
+            if !r.size.is_some_and(|n| n == count) {
+                let mut response = fetch(
+                    client,
+                    provider,
+                    r.url.as_deref().ok_or("Missing download URL")?,
+                    header.clone(),
+                    cancel,
+                    (count > 0).then_some(count),
+                )
+                .await?;
+                length = response.content_length();
+                if length.is_some_and(|n| n.saturating_add(count) > MAX_FILE_BYTES) {
+                    return Err("Content-Length exceeds the 128 GiB limit".into());
+                }
+                if count > 0 && response.status() == reqwest::StatusCode::PARTIAL_CONTENT {
+                    // The slice must start where the kept bytes end, or it cannot be appended.
+                    let from = response
+                        .headers()
+                        .get(reqwest::header::CONTENT_RANGE)
+                        .and_then(|s| s.to_str().ok())
+                        .and_then(|s| s.strip_prefix("bytes "))
+                        .and_then(|s| s.split('-').next())
+                        .and_then(|s| s.parse::<u64>().ok());
+                    if from != Some(count) {
+                        target.remove_partial(&name);
+                        return Err("Resume range mismatch".into());
+                    }
+                } else if count > 0 {
+                    // 200: the server ignored Range and sent the whole file again.
+                    file.set_len(0).map_err(|_| "Cannot reset partial")?;
+                    std::io::Seek::seek(&mut file, std::io::SeekFrom::Start(0))
+                        .map_err(|_| "Cannot reset partial")?;
+                    digest = Sha256::new();
+                    count = 0;
+                }
+                start = count;
+                loop {
+                    let chunk = cancellable(response.chunk(), cancel, 30)
+                        .await?
+                        .map_err(|_| network_error())?;
+                    let Some(chunk) = chunk else { break };
+                    count += chunk.len() as u64;
+                    {
+                        let mut i = self
+                            .inner
+                            .lock()
+                            .map_err(|_| "Download state unavailable")?;
+                        if i.status.bytes_downloaded.saturating_add(chunk.len() as u64)
+                            > MAX_JOB_BYTES
+                        {
+                            return Err("Job exceeds the 256 GiB limit".into());
+                        }
+                        i.status.bytes_downloaded += chunk.len() as u64;
+                    }
+                    if r.size.is_some_and(|n| count > n) {
+                        return Err("Download exceeds declared size".into());
+                    }
+                    digest.update(&chunk);
+                    std::io::Write::write_all(&mut file, &chunk)
+                        .map_err(|_| "Cannot write partial")?;
+                }
+            }
+            if r.size.is_some_and(|n| n != count) || length.is_some_and(|n| start + n != count) {
+                target.remove_partial(&name);
+                // Only a resumed prefix can fail verification (the remote file changed): retry clean.
+                if start > 0 {
+                    continue;
+                }
+                return Err("Download size mismatch".into());
+            }
+            let actual = format!("{:x}", digest.finalize());
+            if r.sha256
+                .as_ref()
+                .is_some_and(|s| !s.eq_ignore_ascii_case(&actual))
+            {
+                target.remove_partial(&name);
+                if start > 0 {
+                    continue;
+                }
+                return Err("SHA-256 mismatch; partial discarded".into());
+            }
+            if cancel.load(Ordering::SeqCst) {
+                return Err("Download cancelled".into());
+            }
+            file.sync_all().map_err(|_| "Cannot sync partial")?;
+            target.publish(&name, &providers::filename(r)?)?;
+            self.inner
+                .lock()
+                .map_err(|_| "Download state unavailable")?
+                .status
+                .completed += 1;
+            return Ok(());
+        }
+        Ok(())
     }
 }
 fn source_url(p: &Provider, s: &str) -> Result<Url, String> {
@@ -1022,11 +1092,15 @@ async fn fetch(
     input: &str,
     header: Option<HeaderValue>,
     cancel: &AtomicBool,
+    range: Option<u64>,
 ) -> Result<reqwest::Response, String> {
     let mut url = source_url(p, input)?;
     let mut authorized = url.origin().ascii_serialization() == p.origin;
     for hop in 0..=5 {
         let mut request = client.get(url.clone());
+        if let Some(from) = range {
+            request = request.header(reqwest::header::RANGE, format!("bytes={from}-"));
+        }
         if p.kind == "github" && url.origin().ascii_serialization() == p.origin {
             request = request.header(reqwest::header::ACCEPT, "application/vnd.github.raw+json");
         }
@@ -1060,7 +1134,9 @@ async fn fetch(
             url = next;
             continue;
         }
-        if response.status() != reqwest::StatusCode::OK {
+        if response.status() != reqwest::StatusCode::OK
+            && !(range.is_some() && response.status() == reqwest::StatusCode::PARTIAL_CONTENT)
+        {
             return Err(format!(
                 "Provider returned HTTP {}; check gating, license and rate limits",
                 response.status().as_u16()

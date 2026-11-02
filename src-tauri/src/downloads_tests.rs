@@ -159,7 +159,7 @@ fn strict_catalog_and_extension() {
     for field in ["command='sh'", "token='secret'", "hook='evil'"] {
         assert!(Catalog::parse(&format!("version=1\nproviders=[]\n{field}")).is_err());
     }
-    let extra="version=1\n[[providers]]\nid='custom'\nkind='http'\nlabel='Files'\norigin='https://files.example.org'\nscopes=['index']\nanonymousNotice='Anonymous only'";
+    let extra = "version=1\n[[providers]]\nid='custom'\nkind='http'\nlabel='Files'\norigin='https://files.example.org'\nscopes=['index']\nanonymousNotice='Anonymous only'";
     assert_eq!(e.import(extra.into()).unwrap().providers.len(), 6);
     assert!(e.import(extra.into()).is_err());
     assert_eq!(e.catalog().unwrap().providers.len(), 6);
@@ -167,7 +167,7 @@ fn strict_catalog_and_extension() {
 #[test]
 fn catalog_entry_extension_references_existing_provider() {
     let e = DownloadEngine::default();
-    let text="version=1\nproviders=[]\n[[entries]]\nid='another-repo'\nlabel='Another repo'\nproviderId='github'\nscope='repo'\nlocator='alice/tiny'\nkind='repo'\ntarget='tiny-files'";
+    let text = "version=1\nproviders=[]\n[[entries]]\nid='another-repo'\nlabel='Another repo'\nproviderId='github'\nscope='repo'\nlocator='alice/tiny'\nkind='repo'\ntarget='tiny-files'";
     let c = e.import(text.into()).unwrap();
     assert_eq!(c.entries.last().unwrap().id, "another-repo");
     assert!(e.import(text.into()).is_err());
@@ -365,11 +365,12 @@ async fn foreign_redirect_strips_credential() {
     });
     let p = provider(origin.clone());
     let mut response = fetch(
-        &client().unwrap(),
+        &client_for(false, None).unwrap(),
         &p,
         &format!("{origin}/tiny.bin"),
         Some(HeaderValue::from_static("Bearer fixture-secret")),
         &AtomicBool::new(false),
+        None,
     )
     .await
     .unwrap();
@@ -387,7 +388,7 @@ async fn foreign_redirect_strips_credential() {
 }
 #[cfg(any(target_os = "linux", windows))]
 #[test]
-fn cancellation_interrupts_stalled_stream_and_cleans_partial() {
+fn cancellation_interrupts_stalled_stream_and_keeps_the_partial_for_resume() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let origin = format!("http://{}", listener.local_addr().unwrap());
     let (tx, rx) = std::sync::mpsc::channel();
@@ -407,10 +408,13 @@ fn cancellation_interrupts_stalled_stream_and_cleans_partial() {
     rx.recv_timeout(Duration::from_secs(3)).unwrap();
     e.cancel().unwrap();
     assert_eq!(finished(&e).state, "cancelled");
-    assert_eq!(
-        std::fs::read_dir(d.path().join("stage")).unwrap().count(),
-        0
-    );
+    // Cancelling keeps what arrived so the next run can resume it.
+    let kept: Vec<_> = std::fs::read_dir(d.path().join("stage"))
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(kept.len(), 1, "{kept:?}");
+    assert!(kept[0].starts_with("deas-") && kept[0].ends_with(".partial"));
     task.join().unwrap();
 }
 #[cfg(any(target_os = "linux", windows))]
@@ -824,6 +828,175 @@ async fn real_generic_index_and_ollama_non_downloadable() {
     assert!(!page.resources[0].downloadable);
     assert!(page.resources[0].url.is_none());
     server.join().unwrap();
+}
+
+#[cfg(any(target_os = "linux", windows))]
+#[test]
+fn interrupted_transfer_resumes_from_the_kept_partial() {
+    let bytes = b"resume fixture payload".to_vec();
+    let half = bytes.len() / 2;
+    let hash = format!("{:x}", Sha256::digest(&bytes));
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let origin = format!("http://{}", listener.local_addr().unwrap());
+    let served = bytes.clone();
+    let server = thread::spawn(move || {
+        let (mut s, _) = listener.accept().unwrap();
+        let req = request(&mut s);
+        write!(
+            s,
+            "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes {}-{}/{}\r\nConnection: close\r\n\r\n",
+            served.len() - half,
+            half,
+            served.len() - 1,
+            served.len()
+        )
+        .unwrap();
+        s.write_all(&served[half..]).unwrap();
+        req
+    });
+    let r = resource(&origin, Some(hash), Some(bytes.len() as u64));
+    let e = engine(provider(origin), &r);
+    let d = scratch();
+    // A previous run kept half the file; the shared model folder is where it survives.
+    std::fs::write(d.path().join("deas-tiny.bin.partial"), &bytes[..half]).unwrap();
+    let plan = e
+        .plan(PlanRequest {
+            provider_id: "fixture".into(),
+            resources: vec![r],
+            parent_path: d.path().to_str().unwrap().into(),
+            folder_name: String::new(),
+            authenticated: false,
+        })
+        .unwrap();
+    e.start(plan.id, true, &AuthState::default()).unwrap();
+    let status = finished(&e);
+    assert_eq!(status.state, "succeeded", "{:?}", status.error);
+    assert_eq!(status.bytes_downloaded, (bytes.len() - half) as u64);
+    assert_eq!(std::fs::read(d.path().join("tiny.bin")).unwrap(), bytes);
+    let req = server.join().unwrap().to_lowercase();
+    assert!(req.contains(&format!("range: bytes={half}-")), "{req}");
+}
+#[cfg(any(target_os = "linux", windows))]
+#[test]
+fn server_ignoring_range_restarts_the_partial_cleanly() {
+    let bytes = b"whole fixture payload".to_vec();
+    let (origin, server) = fixture(bytes.clone());
+    let r = resource(
+        &origin,
+        Some(format!("{:x}", Sha256::digest(&bytes))),
+        Some(bytes.len() as u64),
+    );
+    let e = engine(provider(origin), &r);
+    let d = scratch();
+    std::fs::write(d.path().join("deas-tiny.bin.partial"), &bytes[..4]).unwrap();
+    let plan = e
+        .plan(PlanRequest {
+            provider_id: "fixture".into(),
+            resources: vec![r],
+            parent_path: d.path().to_str().unwrap().into(),
+            folder_name: String::new(),
+            authenticated: false,
+        })
+        .unwrap();
+    e.start(plan.id, true, &AuthState::default()).unwrap();
+    let status = finished(&e);
+    assert_eq!(status.state, "succeeded", "{:?}", status.error);
+    assert_eq!(std::fs::read(d.path().join("tiny.bin")).unwrap(), bytes);
+    server.join().unwrap();
+}
+#[cfg(any(target_os = "linux", windows))]
+#[test]
+fn changed_remote_file_fails_verification_and_retries_once_from_zero() {
+    let bytes = b"changed fixture payload".to_vec();
+    let half = bytes.len() / 2;
+    let hash = format!("{:x}", Sha256::digest(&bytes));
+    let mut wrong = bytes.clone();
+    wrong[half] ^= 0xff;
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let origin = format!("http://{}", listener.local_addr().unwrap());
+    let served = bytes.clone();
+    let server = thread::spawn(move || {
+        let mut requests = vec![];
+        for (index, tail) in [&wrong[half..], &served[..]].into_iter().enumerate() {
+            let (mut s, _) = listener.accept().unwrap();
+            requests.push(request(&mut s));
+            let (status, range) = if index == 0 {
+                (
+                    206,
+                    format!(
+                        "Content-Range: bytes {}-{}/{}\r\n",
+                        half,
+                        served.len() - 1,
+                        served.len()
+                    ),
+                )
+            } else {
+                (200, String::new())
+            };
+            write!(
+                s,
+                "HTTP/1.1 {} X\r\nContent-Length: {}\r\n{}Connection: close\r\n\r\n",
+                status,
+                tail.len(),
+                range
+            )
+            .unwrap();
+            s.write_all(tail).unwrap();
+        }
+        requests.join("\n")
+    });
+    let r = resource(&origin, Some(hash), Some(bytes.len() as u64));
+    let e = engine(provider(origin), &r);
+    let d = scratch();
+    std::fs::write(d.path().join("deas-tiny.bin.partial"), &bytes[..half]).unwrap();
+    let plan = e
+        .plan(PlanRequest {
+            provider_id: "fixture".into(),
+            resources: vec![r],
+            parent_path: d.path().to_str().unwrap().into(),
+            folder_name: String::new(),
+            authenticated: false,
+        })
+        .unwrap();
+    e.start(plan.id, true, &AuthState::default()).unwrap();
+    let status = finished(&e);
+    assert_eq!(status.state, "succeeded", "{:?}", status.error);
+    assert_eq!(std::fs::read(d.path().join("tiny.bin")).unwrap(), bytes);
+    let requests = server.join().unwrap().to_lowercase();
+    assert!(
+        requests.contains(&format!("range: bytes={half}-")),
+        "{requests}"
+    );
+    assert_eq!(requests.matches("range: bytes=").count(), 1, "{requests}");
+}
+
+#[cfg(any(target_os = "linux", windows))]
+#[test]
+fn complete_partial_is_published_without_another_request() {
+    let bytes = b"finished fixture payload".to_vec();
+    let hash = format!("{:x}", Sha256::digest(&bytes));
+    // A dropped listener refuses connections, so any request would fail the run.
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let origin = format!("http://{}", listener.local_addr().unwrap());
+    drop(listener);
+    let r = resource(&origin, Some(hash), Some(bytes.len() as u64));
+    let e = engine(provider(origin), &r);
+    let d = scratch();
+    // A crash after the last byte, before publication, leaves the whole file in the partial.
+    std::fs::write(d.path().join("deas-tiny.bin.partial"), &bytes).unwrap();
+    let plan = e
+        .plan(PlanRequest {
+            provider_id: "fixture".into(),
+            resources: vec![r],
+            parent_path: d.path().to_str().unwrap().into(),
+            folder_name: String::new(),
+            authenticated: false,
+        })
+        .unwrap();
+    e.start(plan.id, true, &AuthState::default()).unwrap();
+    let status = finished(&e);
+    assert_eq!(status.state, "succeeded", "{:?}", status.error);
+    assert_eq!(std::fs::read(d.path().join("tiny.bin")).unwrap(), bytes);
 }
 
 /// Live CivitAI acceptance for a bundled checkpoint card; run with `cargo test -- --ignored live_civitai`.
