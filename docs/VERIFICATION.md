@@ -1,5 +1,9 @@
 # DEAS verification — native baseline, optional capabilities and languages
 
+## Forge picture drop (0.2.10)
+
+Vitest with a mocked `onDragDropEvent` covers a drop inside and outside the zone, behind a dialog, past the picture limit and with no picture. Windows WebView2 acceptance: see the pull request. Linux WebKitGTK is not checked.
+
 ## Compact native checkpoint selector (0.2.10 unreleased)
 
 Removed the custom checkpoint popup/filter state, list markup, event interception, CSS and unused keys in all six locales. The native select retains all options, disabled compatibility states and the existing selection/draft preferences. Regression proof was RED against the intercepted mouse event before the change, then the full Workbench suite passed (297/297). Typecheck and core tests passed (125/125). The Chromium viewport gate passed 423 checks across ten tabs, six locales and seven window sizes, including its broken-layout negative control; its fixture was updated with the current read-only spellcheck, history and monitoring replies. The compact closed control screenshot was visually inspected; this is Chromium fixture evidence, not native WebKit rendering acceptance.
