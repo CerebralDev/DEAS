@@ -1,9 +1,21 @@
 # News
 
-## 0.2.10 BETA (unreleased)
+## 0.2.10 BETA
 
+- **Prompt Forge:** dropping a picture on the Reference images zone works in the native shell, and a drop with no usable picture says so.
+- **Ctrl+Enter runs**, through the same Run button, so a disabled Run stays disabled; plain Enter still picks a tag or spelling suggestion.
+- **Tiled refine is refused up front on Anima, Krea 2 and H3**, whose latents are 5-D; plain refine still runs.
+- **H3 input scaling starts on Auto**, like the Director; a saved choice and jobs saved before this keep restoring as before.
+- **Multi-reference → Video Auto aspect** follows the first picture or video by slot, as the Director does; sound-only uses don't count.
+- **Undo survives tag and spelling picks**: Ctrl+Z works after picking a suggestion.
+- **Videos get the More menu** with **Use these settings** and **Reuse prompt** from the job that made them.
+- **Clicking the queue only previews**; right-click a job for **Use these settings**, and Stop stays for active jobs.
+- **Changing the checkpoint keeps your prompts** exactly; the model's other settings still come back.
+- **GitHub issue forms** for bug, enhancement, question and documentation reports, with version/update fields and a reviewed log export.
 - **Checkpoint picker:** the compact native dropdown is restored, without the custom expanding list or extra filter field.
 - **MOSS-Image inpaint:** a painted mask (Inpaint mode) works with MOSS now, with the same graph as every other image model.
+- **Prompt Forge and Chat use the saved LLM key** for an OpenAI-compatible server, instead of failing with HTTP 401.
+- **Library downloads:** files up to 128 GiB, a job up to 256 GiB, no one-hour cutoff, and an interrupted transfer resumes with `Range` and verifies the full SHA-256.
 
 ## 0.2.9 BETA
 

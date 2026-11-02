@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.10 BETA (unreleased)
+## 0.2.10 BETA
 
 - **Prompt Forge: dropping a picture on Reference images works.** Native webviews hand over OS file drops as paths, never as DOM files, so the zone's drop handler got nothing and did nothing. It now takes the path like the References panel does. A drop with no usable picture says so.
 - **Ctrl+Enter runs.** It presses the Run button, so a disabled Run stays disabled and the job goes through the same checks. It also works with tag or spelling suggestions open, while plain Enter still picks a suggestion. It does nothing from another tab, while a dialog is open, or on a held key.

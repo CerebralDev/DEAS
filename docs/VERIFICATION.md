@@ -22,7 +22,7 @@ Vitest covers the editing command and the fallback. Windows WebView2 result: see
 
 `Workbench.test.tsx` covers prompts kept across A→B→A with empty and spaced values, queue clicks changing no authoring state, explicit Use these settings from the queue menu, and the video More menu from the job's own intent. Native acceptance is listed in PLAN.
 
-## Compact native checkpoint selector (0.2.10 unreleased)
+## Compact native checkpoint selector (0.2.10, shipped in 0.2.10)
 
 Removed the custom checkpoint popup/filter state, list markup, event interception, CSS and unused keys in all six locales. The native select retains all options, disabled compatibility states and the existing selection/draft preferences. Regression proof was RED against the intercepted mouse event before the change, then the full Workbench suite passed (297/297). Typecheck and core tests passed (125/125). The Chromium viewport gate passed 423 checks across ten tabs, six locales and seven window sizes, including its broken-layout negative control; its fixture was updated with the current read-only spellcheck, history and monitoring replies. The compact closed control screenshot was visually inspected; this is Chromium fixture evidence, not native WebKit rendering acceptance.
 

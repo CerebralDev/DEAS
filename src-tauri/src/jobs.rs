@@ -406,8 +406,8 @@ fn compile(i: &Value) -> Result<Value, String> {
             ));
         }
         if ["inputLayers", "refine", "sigmas", "upscaleModel"]
-        .iter()
-        .any(|k| object.contains_key(*k))
+            .iter()
+            .any(|k| object.contains_key(*k))
             || loras.is_some_and(|l| !l.is_empty())
             || object
                 .get("options")
