@@ -5,7 +5,7 @@ import { convertFileSrc, isTauri } from '@tauri-apps/api/core';
 import { useI18n } from '../../i18n/I18nProvider';
 import { isGguf, clipLoaderName, nativeImageReferenceEncoders, type DiagnosticImageIntentV1, type RecipeAllowlist } from '../../lib/execution';
 import { stopWorkbench, stopWorkbenchJob, runWorkbenchJob, readCurrentWorkbench, pollWorkbench, uploadMask, uploadInput, readH3Session, readRefMods, isImageIntent, type JobStatus, type JobIntent, type H3ImportedVideo } from '../../lib/jobs';
-import { chunkCount, defaultVideoOutput, h3LatentChanged, h3LatentDefaults, h3Scalings, isVideoIntent, latentUpscaleSize, videoFrames, type H3LatentAdvanced, type H3Scaling, type VideoFamily, type VideoIntentV1, type VideoOutput } from '../../lib/videoIntent';
+import { chunkCount, defaultVideoOutput, h3LatentChanged, h3LatentDefaults, h3Scalings, isVideoEnhanceIntent, isVideoIntent, latentUpscaleSize, videoFrames, type H3LatentAdvanced, type H3Scaling, type VideoFamily, type VideoIntentV1, type VideoOutput } from '../../lib/videoIntent';
 import { defaultAbc, defaultMusicGeneration, isMusicIntent, isMusicPipeline, musicBounds, musicMaxDuration, type AbcSettings, type MusicGenerationSettings, type MusicIntentV1, type MusicPlanning } from '../../lib/musicIntent';
 import { MusicPrompts, type MusicField } from './MusicPrompts';
 import { MusicSettings } from './MusicSettings';
@@ -30,7 +30,7 @@ import type { ImageDraft, ProjectSnapshot } from '../../lib/projects';
 import { JobOutputPreview } from './JobOutputPreview';
 import { GenerationMetadata } from './GenerationMetadata';
 import { RecentHistory } from './RecentHistory';
-import { historyInputSelectionContext, type HistoryRestore } from './history';
+import { historyInputSelectionContext, historyRestore, type HistoryRestore } from './history';
 import type { ForgeCanvasContext, ForgeSendCanvas } from '../../lib/forgeCanvas';
 import { generationDuration } from './generationDuration';
 import { generationSettings, readImageMetadata, type GenerationSettings } from '../../lib/imageMetadata';
@@ -902,10 +902,7 @@ const loadChoices=()=>{if(native&&!choices&&endpoint.trim())void refreshChoices(
  const pickJob=(j:JobStatus,index=0)=>{
   setSelectedOutput(index);setSlider(false);
   setBrowsed(null);
-  setSelectedJob(j.id);const from=sources[j.id];
-  if(!from||media?.src===from.src||(media&&(masked||layers.length>0||editorRef.current?.imageEdited())))return;
-  if(j.intent&&isImageIntent(j.intent)&&j.intent.inputImage){pickPipeline('i2i',true);setEdit(j.intent.inputMask?'inpaint':'resample');}else rememberDraft();
-  sourceEpoch.current++;setEditorSnapshot(undefined);setMedia(from);setLayers([]);setMasked(false);setSelectedJob(j.id);
+  setSelectedJob(j.id); // Preview only: restoring a job's settings is the explicit Reuse action.
  };
  const closePreview=()=>{if(browsed){setBrowsed(null);return;}setSelectedJob('');sourceEpoch.current++;setEditorSnapshot(undefined);setMedia(null);setLayers([]);setMasked(false);};
  const pairedOriginal=shown?.outputs.find(o=>o.role==='original');
@@ -1029,15 +1026,17 @@ const promptTools=forgeContext&&<>
    <button type="button" data-run-upscale disabled={off||postOff} title={t(postOff?'studio.run.post.imageOnly':'studio.run.post.upscaleHint')} onClick={()=>{if(only)selectMoreAction(true,()=>void run({...only,upscaleOnly:true}));}}>{t('studio.run.post.upscale')}</button>
    <button type="button" data-more-apply disabled={metaOff} title={metaOff?t('studio.run.metadata.native'):t('studio.run.metadata.applyHint')} onClick={()=>selectMoreAction(true,()=>void applyFileSettings(item,'all'))}>{t('studio.run.metadata.apply')}</button>
    <button type="button" data-more-reuse disabled={metaOff} title={metaOff?t('studio.run.metadata.native'):t('studio.run.metadata.reuseHint')} onClick={()=>selectMoreAction(true,()=>void applyFileSettings(item,'prompt'))}>{t('studio.run.metadata.reuse')}</button></div></details>;})()}
+  {item.media==='video'&&(()=>{const job=jobs.find(j=>reusable(j)&&j.outputs.some(o=>outputItem(j,o)?.src===item.src));const off=!native||!job||scanning||admissionBlocked||autoPlan||resolving||!!planRun.current||historyProblems.length>0;const hint=job?(native?'':t('studio.run.metadata.native')):t('studio.run.metadata.videoNone');return <details ref={moreRef} className="wb-more" open={moreOpen} onToggle={e=>{if(e.currentTarget.open!==moreOpen)setMoreOpen(e.currentTarget.open);}}><summary data-more aria-haspopup="menu" onClick={e=>{e.preventDefault();setMoreResult(null);setMoreOpen(!moreOpen);}}>{t('studio.run.more')}<span className="wb-more-caret" aria-hidden="true">▾</span></summary><div className="wb-more-menu">
+   <button type="button" data-more-apply disabled={off} title={hint||t('studio.run.metadata.videoApplyHint')} onClick={()=>selectMoreAction(true,()=>{if(job)reuseJob(job);})}>{t('studio.run.metadata.apply')}</button>
+   <button type="button" data-more-reuse disabled={off} title={hint||t('studio.run.metadata.videoReuseHint')} onClick={()=>selectMoreAction(true,()=>{if(job?.intent&&isVideoIntent(job.intent)){setPositive(job.intent.positivePrompt);setNegative(job.intent.negativePrompt);}})}>{t('studio.run.metadata.reuse')}</button></div></details>;})()}
   {moreResult&&<p className="wb-more-feedback" role="status">{moreResult}</p>}
   {original&&(paired||media?.src!==item.src)&&<button type="button" className="wb-edit-view" data-edit-compare aria-pressed={slider} onClick={()=>setSlider(!slider)}>{t('studio.run.edit.slider')}</button>}
   {showStar&&<StarMediaButton item={item}/>}
  </div>;};
  // Canonical preview toolbar: one stage slot (top right, beside Metadata/Close) fed by whatever the stage shows.
  // Only the split view keeps a second, per-pane row for the draft editor.
- const stageOutput=shown&&terminalOutput(shown)&&shown.outputRoot&&!isVideoOut(shown.outputs[outputIndex])?shown.outputs[outputIndex]:null;
  const stageTools=()=>browsed?tools(browsed)
-  :shown?(stageOutput?tools(outputItem(shown,stageOutput),false):null)
+  :shown?(terminalOutput(shown)&&shown.outputRoot&&shown.outputs[outputIndex]?tools(outputItem(shown,shown.outputs[outputIndex]),false):null)
   :media?(inputImage||(!editableSource&&pipeline==='ref2v'&&media.path)?tools(media):editableSource?null:<div className="wb-media-tools" data-media-tools><StarMediaButton item={media}/></div>)
   :null;
  const modelValue=(m:LocalModel)=>allModels.filter(other=>other.name===m.name).length>1?identity(m):m.name;
@@ -1074,11 +1073,12 @@ const promptTools=forgeContext&&<>
   else if(outgoingDraft.current?.scope===scope)outgoingDraft.current.capture=captureDraft;
  });
  const startingSettings=(m:LocalModel)=>{setResolution('model');const d=familyOf(m)?.defaults;if(d){setWidth(d.width);setHeight(d.height);setSteps(d.steps);setCfg(d.cfg);setSampler(d.sampler);setScheduler(d.scheduler);}};
- const switchDraft=(p:Pipeline,m:LocalModel,defaults=false,keepSource=false)=>{
+ const switchDraft=(p:Pipeline,m:LocalModel,defaults=false,keepSource=false,keepPrompts=false)=>{
   if(p===pipeline&&model&&identity(m)===identity(model)){setCheckpoint(m.name);setModelIdentity(identity(m));if(!checkpointPref&&defaults)startingSettings(m);return;}
   rememberDraft();draftEpoch.current++;setPipeline(p);setCheckpoint(m.name);setModelIdentity(identity(m));
   const saved=drafts.current.get(draftKey(p,m));
-  if(saved)applyDraft(saved,keepSource);else if(defaults)startingSettings(m);
+  // Only the checkpoint changed: its remembered settings return, the prompts on screen stay.
+  if(saved)applyDraft(keepPrompts?{...saved,settings:{...saved.settings,'studio.run.positive':positive,'studio.run.negative':negative}}:saved,keepSource);else if(defaults)startingSettings(m);
  };
  const applyDraft=(saved:ReturnType<typeof captureDraft>,keepSource=false)=>{
   if(!applyStudioSettings(saved.settings))return;
@@ -1087,7 +1087,7 @@ const promptTools=forgeContext&&<>
   setHistoryDraft(saved.historyDraft);setHistorySelectionContext(saved.historySelectionContext);setHistorySourceSelected(saved.historySourceSelected);
   setBrowsed(null);setSelectedJob('');
  };
- const pickModel=(m:LocalModel)=>switchDraft(pipeline,m,true);
+ const pickModel=(m:LocalModel)=>switchDraft(pipeline,m,true,false,true);
  const pickPipeline=(p:Pipeline,keepSource=false)=>{
   const previous=pipelineModels.current.get(JSON.stringify([scope,p]));
   const next=allModels.find(m=>identity(m)===previous&&!blocked(m,p))??(model&&!blocked(model,p)?model:allModels.find(m=>!blocked(m,p)));
@@ -1105,6 +1105,13 @@ const promptTools=forgeContext&&<>
  useEffect(()=>{if(!moreOpen)return;const onDown=(e:Event)=>{if(!moreRef.current?.contains(e.target as Node))setMoreOpen(false);};document.addEventListener('mousedown',onDown);return()=>document.removeEventListener('mousedown',onDown);},[moreOpen]);
  // Explicit "use these settings": only values the metadata carries; a model/LoRA is picked only if this folder holds it (by full name, else by basename). Returns what was skipped.
  const base=(n:string)=>shortName(n).toLowerCase();
+ const stoppable=(j:JobStatus)=>stopAvailable&&(j.state==='queued'||j.state==='running');
+ const reusable=(j:JobStatus)=>!!j.intent&&!isVideoEnhanceIntent(j.intent);
+ // The clicked job's own immutable intent, through the same projection as Recent history.
+ const reuseJob=(j:JobStatus)=>{
+  if(!j.intent||isVideoEnhanceIntent(j.intent))return;
+  restoreHistory(historyRestore({id:j.id,clientId:null,promptId:j.promptId,origin:'studio',appVersion:j.appVersion??'',admittedAt:0,observedAt:0,revision:0,state:j.state,intent:j.intent,outputs:[],outputRoot:j.outputRoot??null,backendOrigin:j.baseUrl,error:j.error},{endpoint,inputRoot:roots.input,allow:choices,models:models??[]}));
+ };
  const applySettings=(s:GenerationSettings):string[]=>{
   rememberDraft();
   const skipped=[...(s.skipped??[])];
@@ -1336,10 +1343,10 @@ const promptTools=forgeContext&&<>
    <section id="studio-queue" style={{flexBasis:queueSize}} className="wb-queue" aria-label={t('studio.run.queue')}>
     <RecentHistory liveIds={jobs.map(j=>j.id)} context={{endpoint,inputRoot:roots.input,allow:choices,models:models??[]}} outputRoot={outputDir} projectOpen={!!project} authoringBusy={working||autoPlan||resolving||!!planRun.current} onRestore={restoreHistory} onOpenChange={setHistoryOpen}/>
     <h3>{t('studio.run.queue')}</h3>
-    {jobs.length===0?<p className="media-help">{t('studio.run.queueEmpty')}</p>:<ul hidden={historyOpen}>{jobs.map(j=><li key={j.id} data-job-id={j.id}>{(terminalOutput(j)?j.outputs:[null]).map((o,index)=><div className="wb-queue-output" key={index}><button className="wb-queue-select" type="button" aria-current={j.id===selectedJob&&(!j.outputs.some(o=>o.role)||index===outputIndex)} data-state={j.state} onClick={()=>pickJob(j,index)} onContextMenu={e=>{if(!native||!stopAvailable||(j.state!=='queued'&&j.state!=='running'))return;e.preventDefault();setJobMenu({x:e.clientX,y:e.clientY,job:j});}}>
+    {jobs.length===0?<p className="media-help">{t('studio.run.queueEmpty')}</p>:<ul hidden={historyOpen}>{jobs.map(j=><li key={j.id} data-job-id={j.id}>{(terminalOutput(j)?j.outputs:[null]).map((o,index)=><div className="wb-queue-output" key={index}><button className="wb-queue-select" type="button" aria-current={j.id===selectedJob&&(!j.outputs.some(o=>o.role)||index===outputIndex)} data-state={j.state} onClick={()=>pickJob(j,index)} onContextMenu={e=>{if(!native||!(reusable(j)||stoppable(j)))return;e.preventDefault();setJobMenu({x:e.clientX,y:e.clientY,job:j});}}>
      {o&&outputItem(j,o).media==='audio'?<span className="wb-thumb" aria-hidden="true">♪</span>:j.outputRoot&&o&&!isVideoOut(o)?<img src={fileSrc(j,o)!} alt="" draggable onDragStart={e=>dragItem(e.dataTransfer,outputItem(j,o))}/>:o&&isVideoOut(o)?<span className="wb-thumb" aria-hidden="true">▶</span>:j.preview?<img src={j.preview} alt=""/>:<span className="wb-thumb" aria-hidden="true">{j.state==='cancelled'?'×':j.state==='failed'||j.state==='unknown'?'!':j.state==='succeeded'?'✓':'…'}</span>}
      <span className="wb-queue-text"><strong>{t(`studio.jobs.${j.state}`)} · {j.id.slice(0,8)}{duration(j)}{j.progress&&<> {j.progress.value}/{j.progress.max}</>}</strong><small>{o?.role&&<strong>{t(`studio.jobs.role.${o.role}`)} · </strong>}{o?.filename??j.outputs[0]?.filename??j.id.slice(0,8)}</small></span></button>{o&&j.outputRoot&&<StarMediaButton item={outputItem(j,o)}/>}</div>)}</li>)}</ul>}
-    {jobMenu&&<div className="media-menu" role="menu" aria-label={jobMenu.job.id.slice(0,8)} style={{left:Math.min(jobMenu.x,window.innerWidth-200),top:Math.min(jobMenu.y,window.innerHeight-48)}}><button type="button" role="menuitem" autoFocus data-job-stop onClick={()=>{const job=jobMenu.job;setJobMenu(null);void stopJob(job);}}>{t('studio.run.stop.job')}</button></div>}
+    {jobMenu&&<div className="media-menu" role="menu" aria-label={jobMenu.job.id.slice(0,8)} style={{left:Math.min(jobMenu.x,window.innerWidth-200),top:Math.min(jobMenu.y,window.innerHeight-48)}}>{reusable(jobMenu.job)&&<button type="button" role="menuitem" autoFocus data-job-reuse disabled={working||autoPlan||resolving||!!planRun.current} onClick={()=>{const job=jobMenu.job;setJobMenu(null);reuseJob(job);}}>{t('studio.run.metadata.apply')}</button>}{stoppable(jobMenu.job)&&<button type="button" role="menuitem" autoFocus={!reusable(jobMenu.job)} data-job-stop onClick={()=>{const job=jobMenu.job;setJobMenu(null);void stopJob(job);}}>{t('studio.run.stop.job')}</button>}</div>}
      <div className="wb-run-actions">
      <button ref={runButton} type="button" className="aio-confirm-button wb-run" data-run disabled={!native||scanning||admissionBlocked||autoPlan||resolving||!!planRun.current||!!sizeError||(inpaint&&!masked)||!checkpoint||backendPending||unavailable.length>0||musicNeedsStyle||historyProblems.length>0} title={!native?t('studio.backendHelp'):backendPending?t('studio.run.backendPending'):historyProblems.length?t('studio.history.blocked',{items:historyProblems.join(' · ')}):busy||current?undefined:sizeError?t(sizeError,{multiple:String(grid)}):inpaint&&!masked?t('studio.run.edit.needsMask'):!checkpoint?t(why(pipeline)||'studio.run.noModels'):unavailable.length?t('studio.quick.unavailable',{names:unavailable.join(', ')}):musicNeedsStyle?t('studio.music.needsStyle'):undefined} onClick={()=>void run()}>{t('studio.run.run')}</button>{(working||current||autoPlan||resolving||preparing>0||frontendAdmitting||stopping||(!recovered&&!!error))&&<button type="button" className="wb-run-stop" data-run-stop disabled={stopping} aria-label={t('studio.run.stop.label')} title={t('studio.run.stop.hint')} onClick={()=>void stop()}>{t(stopping?'studio.run.stop.stopping':'studio.run.stop.label')}</button>}<span id="project-actions-slot"/></div>
      <div id="project-status-slot"/>{stopStatus&&<p role="status" data-run-stop-status>{stopStatus}</p>}

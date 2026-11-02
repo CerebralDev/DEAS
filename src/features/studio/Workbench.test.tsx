@@ -637,6 +637,22 @@ test('More closes on its own summary and outside clicks; metadata actions apply 
  expect((screen.getByLabelText('Prompt') as HTMLTextAreaElement).value).toBe('imported prompt');
  expect((screen.getByRole('spinbutton',{name:'Seed'}) as HTMLInputElement).value).toBe('11');
 });
+test('a video gets the More menu: its own job refills the prompt, a video without a job says why',async()=>{
+ const made={...heldJob('made','succeeded'),outputRoot:'/out',outputs:[{filename:'clip.mp4',subfolder:'',type:'output' as const}],intent:{recipeId:'video-generation',version:1,family:'ltx-2',positivePrompt:'made clip',negativePrompt:'no blur'} as unknown as JobStatus['intent']};
+ const bare={...heldJob('bare','succeeded'),outputRoot:'/out',outputs:[{filename:'other.mp4',subfolder:'',type:'output' as const}]};
+ vi.mocked(readCurrentWorkbench).mockResolvedValue(collection([made,bare]));
+ render(<I18nProvider><Workbench endpoint="http://original:7801/" roots={{output:'/out'}}/></I18nProvider>);
+ await waitFor(()=>expect(document.querySelector('[data-job-id="made"]')).not.toBeNull());
+ fireEvent.click(document.querySelector('[data-job-id="bare"] .wb-queue-select')!);
+ expect((await waitFor(()=>document.querySelector<HTMLButtonElement>('[data-more-apply]')!)).disabled).toBe(true);
+ expect(document.querySelector('[data-more-apply]')!.getAttribute('title')).toContain('no job in the queue');
+ fireEvent.click(document.querySelector('[data-job-id="made"] .wb-queue-select')!);
+ await waitFor(()=>expect(document.querySelector<HTMLButtonElement>('[data-more-reuse]')!.disabled).toBe(false));
+ fireEvent.click(document.querySelector('[data-more-reuse]')!);
+ expect(screen.getByLabelText('Prompt')).toHaveProperty('value','made clip');
+ expect(document.querySelector('#run-negative')).toHaveProperty('value','no blur');
+ expect(runWorkbenchJob).not.toHaveBeenCalled();
+});
 test.each([true,false])('native video playback uses captured root when available (owned=%s)',async owned=>{
  const agent=vi.spyOn(navigator,'userAgent','get').mockReturnValue('Linux');
  try{
@@ -1611,17 +1627,18 @@ test('session drafts restore last edited controls and prompts per full model pat
  expect((screen.getByLabelText('Steps') as HTMLInputElement).value).toBe('28'); // first visit retains family defaults
  sessionSettings({positive:'B draft',negative:'B negative',steps:41,seed:456,post:false});
  sessionModel('folder/a.safetensors');
- expect(captureStudioSettings()).toMatchObject(Object.fromEntries(Object.entries(a).map(([key,value])=>['studio.run.'+key,value])));
+ // The checkpoint's settings return; the prompts on screen stay.
+ expect(captureStudioSettings()).toMatchObject(Object.fromEntries(Object.entries({...a,positive:'B draft',negative:'B negative'}).map(([key,value])=>['studio.run.'+key,value])));
  choosePipe('Image → Image');sessionSettings({positive:'i2i draft',steps:53});
  sessionModel('other/a.safetensors');sessionSettings({positive:'i2i B',steps:55});
  choosePipe('Text → Image');
  expect(document.querySelector('[data-model-picker]')).toHaveProperty('value','folder/a.safetensors');
- expect(screen.getByLabelText('Prompt')).toHaveProperty('value',a.positive);
+ expect(screen.getByLabelText('Prompt')).toHaveProperty('value','B draft');
  expect(screen.getByLabelText('Steps')).toHaveProperty('value','37');
  choosePipe('Image → Image');
  expect(document.querySelector('[data-model-picker]')).toHaveProperty('value','other/a.safetensors');
  expect(screen.getByLabelText('Prompt')).toHaveProperty('value','i2i B');
- sessionModel('folder/a.safetensors');expect(screen.getByLabelText('Prompt')).toHaveProperty('value','i2i draft');
+ sessionModel('folder/a.safetensors');expect(screen.getByLabelText('Prompt')).toHaveProperty('value','i2i B');
  sessionModel('other/a.safetensors');choosePipe('Text → Image');sessionModel('other/a.safetensors');
  expect(screen.getByLabelText('Prompt')).toHaveProperty('value','B draft');
  expect(runWorkbenchJob).not.toHaveBeenCalled();expect(uploadInput).not.toHaveBeenCalled();
@@ -1680,12 +1697,12 @@ test('session video drafts restore video/audio references and trims without uplo
  sessionModel('h3-b.safetensors');sessionSettings({positive:'video B'});
  fireEvent.click(document.querySelector('[data-open-references]')!);fireEvent.click(screen.getByRole('button',{name:'Remove reference clip.mp4'}));dock('Media');
  sessionModel('h3-a.safetensors');
- expect(document.querySelector('[data-open-references]')?.textContent).toContain('3');expect(screen.getByLabelText('Prompt')).toHaveProperty('value','video A');
+ expect(document.querySelector('[data-open-references]')?.textContent).toContain('3');expect(screen.getByLabelText('Prompt')).toHaveProperty('value','video B');
  fireEvent.click(document.querySelector('[data-open-references]')!);fireEvent.click(screen.getByRole('button',{name:'Edit clip.mp4'}));
  expect(screen.getByLabelText('Use of clip.mp4')).toHaveProperty('value','audio');expect(screen.getByLabelText('Start of clip.mp4')).toHaveProperty('value','2');expect(screen.getByLabelText('End of clip.mp4')).toHaveProperty('value','6');
  fireEvent.click(within(screen.getByRole('dialog',{name:'Edit clip.mp4'})).getByRole('button',{name:'Close'}));dock('Media');
  choosePipe('Text → Video');sessionSettings({positive:'text video'});choosePipe('Multi-reference → Video');
- expect(screen.getByLabelText('Prompt')).toHaveProperty('value','video A');sessionModel('h3-b.safetensors');expect(document.querySelector('[data-open-references]')?.textContent).toContain('2');
+ expect(screen.getByLabelText('Prompt')).toHaveProperty('value','video B');sessionModel('h3-b.safetensors');expect(document.querySelector('[data-open-references]')?.textContent).toContain('2');
  expect(runWorkbenchJob).not.toHaveBeenCalled();expect(uploadInput).not.toHaveBeenCalled();view.unmount();
 });
 
@@ -1740,10 +1757,10 @@ test('session cache distinguishes same names in separate categories and absolute
  render(<I18nProvider><Workbench endpoint={evidence.baseUrl} roots={{models:'/m'}}/></I18nProvider>);
  await waitFor(()=>expect(document.querySelectorAll('[data-model-picker] option')).toHaveLength(3));
  const ids=files.map(m=>JSON.stringify([m.category,m.path,m.name]));
- sessionSettings({positive:'first'});sessionModel(ids[1]);sessionSettings({positive:'second'});sessionModel(ids[2]);sessionSettings({positive:'third'});
- sessionModel(ids[0]);expect(screen.getByLabelText('Prompt')).toHaveProperty('value','first');
- sessionModel(ids[1]);expect(screen.getByLabelText('Prompt')).toHaveProperty('value','second');
- sessionModel(ids[2]);expect(screen.getByLabelText('Prompt')).toHaveProperty('value','third');
+ sessionSettings({steps:31});sessionModel(ids[1]);sessionSettings({steps:32});sessionModel(ids[2]);sessionSettings({steps:33});
+ sessionModel(ids[0]);expect(screen.getByLabelText('Steps')).toHaveProperty('value','31');
+ sessionModel(ids[1]);expect(screen.getByLabelText('Steps')).toHaveProperty('value','32');
+ sessionModel(ids[2]);expect(screen.getByLabelText('Steps')).toHaveProperty('value','33');
 });
 
 const projectFixture={id:'project-1',root:'/projects/one',revision:1,draft:{positivePrompt:'saved project prompt',negativePrompt:'saved negative',checkpoint:'missing.safetensors',width:1024,height:1024,steps:24,cfg:6,sampler:'euler',scheduler:'normal',seed:42,denoise:0.5,pipeline:'i2i' as const},input:null};
@@ -2102,16 +2119,13 @@ test('IPC fixture: with an edit draft open, a queue pick opens beside the editor
  expect(within(dialog).getByRole('button',{name:'Fit'})).toBeTruthy();
  fireEvent.keyDown(window,{key:'Escape'});
  expect(screen.queryByRole('dialog')).toBeNull();
- // An edit job remembers its source: after ✕ a queue pick brings it back into the editor instead of asking for a pick.
+ // A queue pick is preview only: after ✕ it does not bring the job's source back into the editor.
  fireEvent.click(screen.getByRole('button',{name:'Run'}));
  await waitFor(()=>expect(runWorkbenchJob).toHaveBeenCalledTimes(2));
  fireEvent.click(screen.getByRole('button',{name:'Close preview'}));
  expect(document.querySelector('.wb-editor-host')).toBeNull();
  fireEvent.click(screen.getAllByRole('button',{name:/Succeeded/})[0]); // newest first = the image-to-image job
- const back=await screen.findByRole('img',{name:'out.png'});
- Object.defineProperties(back,{naturalWidth:{value:1024},naturalHeight:{value:640}});fireEvent.load(back);
- await waitFor(()=>expect(document.querySelector('.wb-editor-host')?.hasAttribute('hidden')).toBe(false));
- expect(screen.queryByText('Pick an image from the Input or Output folder in the Media dock.')).toBeNull();
+ expect(document.querySelector('.wb-editor-host')).toBeNull();
  // Slider compare zooms with the wheel at the cursor; double-click resets.
  fireEvent.click(within(document.querySelector<HTMLElement>('.wb-stage > [data-media-tools]')!).getByRole('button',{name:'Slider'}));
  const compare=document.querySelector<HTMLElement>('.wb-compare')!;
@@ -2121,7 +2135,7 @@ test('IPC fixture: with an edit draft open, a queue pick opens beside the editor
  expect(compare.dataset.zoom).toBe('1.00');
 });
 
-test('queue edit-job adoption restores i2i settings without losing t2i edits or its explicit source',async()=>{
+test('a queue click only previews; Use these settings is the explicit restore',async()=>{
  vi.mocked(scanModels).mockResolvedValue(sessionModels);vi.mocked(checkRecipePrerequisites).mockResolvedValue(evidence);
  vi.mocked(invoke).mockImplementation(async(_c,args)=>({path:(args as {path:string}).path,parent:'/',entries:[{name:'source.png',path:'/out/source.png',kind:'file',symlink:false,media:'image',size:1,modified:1}],truncated:false}));
  vi.mocked(runWorkbenchJob).mockImplementation(async()=>({...heldJob('edit-job','succeeded'),baseUrl:evidence.baseUrl,outputRoot:'/out',outputs:[{filename:'result.png',subfolder:'',type:'output'}],intent:vi.mocked(runWorkbenchJob).mock.lastCall![1]}));
@@ -2132,13 +2146,29 @@ test('queue edit-job adoption restores i2i settings without losing t2i edits or 
  await waitFor(()=>expect(screen.getByRole('button',{name:'Run'})).toHaveProperty('disabled',false));fireEvent.click(screen.getByRole('button',{name:'Run'}));
  await screen.findByRole('img',{name:'result.png'});fireEvent.click(screen.getByRole('button',{name:'Close preview'}));
  choosePipe('Text → Image');sessionSettings({positive:'outgoing t2i',steps:49});fireEvent.click(screen.getByRole('button',{name:'Close preview'}));
- fireEvent.click(document.querySelector('[data-job-id="edit-job"] .wb-queue-select')!);
- expect(document.querySelector('[data-pipeline]')).toHaveProperty('value','i2i');expect(screen.getByLabelText('Prompt')).toHaveProperty('value','remembered i2i');
+ const row=document.querySelector('[data-job-id="edit-job"] .wb-queue-select')!;
+ fireEvent.click(row);
+ expect(document.querySelector('[data-pipeline]')).toHaveProperty('value','t2i');expect(screen.getByLabelText('Prompt')).toHaveProperty('value','outgoing t2i');
+ expect(screen.getByLabelText('Steps')).toHaveProperty('value','49');
+ fireEvent.contextMenu(row);
+ expect(document.querySelector('[data-pipeline]')).toHaveProperty('value','t2i');
+ fireEvent.click(screen.getByRole('menuitem',{name:'Use these settings'}));
+ await waitFor(()=>expect(document.querySelector('[data-pipeline]')).toHaveProperty('value','i2i'));
+ await waitFor(()=>expect(screen.getByLabelText('Prompt')).toHaveProperty('value','remembered i2i'));
  expect(screen.getByLabelText('Steps')).toHaveProperty('value','36');
- const back=await screen.findByRole('img',{name:'source.png'});Object.defineProperties(back,{naturalWidth:{value:1024},naturalHeight:{value:640}});fireEvent.load(back);
- expect(document.querySelector('[data-layer="base"] img')?.getAttribute('src')).toContain('/out/source.png');
- choosePipe('Text → Image');expect(screen.getByLabelText('Prompt')).toHaveProperty('value','outgoing t2i');expect(screen.getByLabelText('Steps')).toHaveProperty('value','49');
  expect(runWorkbenchJob).toHaveBeenCalledTimes(1);
+});
+test('changing only the checkpoint keeps the prompts exactly, empty ones included',async()=>{
+ vi.mocked(scanModels).mockResolvedValue(sessionModels);vi.mocked(checkRecipePrerequisites).mockResolvedValue(evidence);
+ render(<I18nProvider><Workbench endpoint={evidence.baseUrl} roots={{models:'/m'}}/></I18nProvider>);
+ await waitFor(()=>expect(document.querySelector('[data-model-picker]')?.textContent).toContain('folder/a.safetensors'));
+ sessionModel('folder/a.safetensors');sessionSettings({positive:'old A',negative:'old A negative',steps:31});
+ sessionModel('other/a.safetensors');sessionSettings({positive:'  edited, with spaces  ',negative:'',steps:32});
+ sessionModel('folder/a.safetensors');
+ expect(screen.getByLabelText('Prompt')).toHaveProperty('value','  edited, with spaces  ');
+ expect(document.querySelector('#run-negative')).toHaveProperty('value','');
+ expect(screen.getByLabelText('Steps')).toHaveProperty('value','31');
+ expect(runWorkbenchJob).not.toHaveBeenCalled();
 });
 
 test.each(['click','Enter',' '] as const)('retained original opens and stars source A, not edited draft B (%s)',async activation=>{

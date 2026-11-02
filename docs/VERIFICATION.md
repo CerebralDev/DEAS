@@ -18,6 +18,9 @@ Vitest covers the slot and sound-only rule in `firstVisualRef`. Workbench fixtur
 ## Prompt undo (0.2.10)
 
 Vitest covers the editing command and the fallback. Windows WebView2 result: see the pull request.
+## Studio authoring (0.2.10)
+
+`Workbench.test.tsx` covers prompts kept across A→B→A with empty and spaced values, queue clicks changing no authoring state, explicit Use these settings from the queue menu, and the video More menu from the job's own intent. Native acceptance is listed in PLAN.
 
 ## Compact native checkpoint selector (0.2.10 unreleased)
 

@@ -8,6 +8,11 @@
 - **H3 input scaling starts on Auto, like the Director.** It started on Fill and crop. A saved choice stays as it was, and jobs saved before this keep restoring as Fill and crop. New jobs always send the value, because a missing value means Fill and crop on those older jobs.
 - **Multi-reference → Video: Auto aspect follows the first picture or video.** It looked at the previewed file, or fell back to the model's shape, instead of the references. It now uses the first picture or video by slot, as the Director does, and sound-only uses don't count. Run waits until that file's size has been read.
 - **Undo survives tag and spelling picks.** Picking a suggestion assigned the field's whole value, which wipes the browser's undo history, so Ctrl+Z stopped working after any pick. Picks now go through the browser's editing command and can be undone and redone like typing.
+- **Videos get the More menu.** A generated video shows **Use these settings** and **Reuse prompt**, taken from the job that made it. A video with no job in the queue shows them disabled with the reason. Settings embedded in video files are not read yet.
+
+- **Clicking the queue only previews.** It used to switch to Image → Image, replace the source and overwrite the prompts on edit jobs. Right-click a job for **Use these settings**, which works for images and videos and also offers Stop on active jobs.
+
+- **Changing the checkpoint keeps your prompts.** Each model's remembered draft used to overwrite the prompts on screen. Its other settings still come back, but the positive and negative prompts stay exactly as they are. Changing pipeline still restores that pipeline's draft.
 
 - **GitHub issue forms.** Bug, enhancement, question and documentation forms apply the corresponding existing label and ask for the DEAS version and update status. Bug reports collect reproduction steps, system/GPU details, effective model settings and a reviewed `.txt` log export (or an explanation if unavailable). The Logs guide documents export, attachment and privacy steps; no automatic uploads or app changes.
 
