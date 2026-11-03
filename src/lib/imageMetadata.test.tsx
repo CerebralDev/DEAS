@@ -24,6 +24,11 @@ test('reusable settings come from A1111 text (LoRA tags lifted), Swarm params or
  expect(generationSettings([['Comment','{broken'],['Description','ordinary picture'],['parameters','no details line']])).toBeNull();
  expect(generationSettings([['prompt','{"1":{"class_type":"SaveImage","inputs":{}}}']])).toBeNull();
 });
+test('DaSiWa saver `*_not_found` sentinels stay absent: an empty negative prompt does not fill the field',()=>{
+ const meta='a cat\nNegative prompt: negative_prompt_not_found\nSteps: 20, Sampler: euler karras, CFG scale: 7.0, Seed: 123, Size: 512x768, Model: model_not_found.safetensors';
+ expect(generationSettings([['parameters',meta]])).toEqual({positive:'a cat',seed:123,steps:20,cfg:7,sampler:'euler',scheduler:'karras',width:512,height:768});
+ expect(generationSettings([['parameters','a cat\nNegative prompt: real_not_found words\nSteps: 20, Seed: 123']])).toEqual({positive:'a cat',negative:'real_not_found words',seed:123,steps:20});
+});
 test('A1111 sampler names map to ComfyUI sampler + scheduler; unknown ones are reported, not guessed',()=>{
  expect(comfySampler('Euler a')).toEqual({sampler:'euler_ancestral'});
  expect(comfySampler('DPM++ 2M Karras')).toEqual({sampler:'dpmpp_2m',scheduler:'karras'});

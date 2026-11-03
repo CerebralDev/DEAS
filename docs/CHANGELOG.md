@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.14 BETA (unreleased)
+
+- **Reuse prompt ignores `*_not_found` placeholders.** Images saved by the DaSiWa metadata saver embed sentinels like `negative_prompt_not_found` when a field was empty or undetectable. **Reuse prompt** and **Use these settings** now treat them as absent: a negative prompt that was empty stays empty, and no placeholder lands in the prompt, checkpoint, sampler or scheduler fields.
+
 ## 0.2.13 BETA
 
 - **SD3 / SD3.5 works.** Two-encoder family: `clip_l`/`clip_g` + `t5xxl`, type `sd3`, `EmptySD3LatentImage`, `ModelSamplingSD3` shift 3, encoded negative. Starting values 28 steps at CFG 4.5 `dpmpp_2m`/`karras`.

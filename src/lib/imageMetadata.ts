@@ -112,6 +112,7 @@ export function generationSettings(entries:ImageMetadata):GenerationSettings|nul
  const prompt=byKey('prompt');
  if(!found&&prompt){try{const parsed:unknown=JSON.parse(prompt);if(object(parsed))found=comfy(parsed);}catch{found=null;}}
  if(!found)return null;
- const clean=Object.fromEntries(Object.entries(found).filter(([,v])=>v!==undefined&&v!=='')) as GenerationSettings;
+ // The DaSiWa metadata saver embeds `*_not_found` sentinels for empty/undetected fields: they mean absent, not a value.
+ const clean=Object.fromEntries(Object.entries(found).filter(([,v])=>v!==undefined&&v!==''&&!(typeof v==='string'&&/^[a-z_]+_not_found(?:\.safetensors)?$/.test(v)))) as GenerationSettings;
  return clean.positive!==undefined||clean.seed!==undefined||clean.steps!==undefined?clean:null;
 }
