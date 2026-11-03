@@ -64,8 +64,8 @@ fn tidy_body(body: &str) -> String {
 }
 
 /// Labels chat-tuned models give their explaining notes when they rename the
-/// segment themselves ("Notes" is a Hermes-family habit). Notes are never
-/// prompt text, so such a segment is dropped, exactly like a switched-off
+/// segment themselves (Qwen3.x, Hermes-family and similar habits). Notes are
+/// never prompt text, so such a segment is dropped, exactly like a switched-off
 /// `discard` label. Expected labels are matched first — a dialect that names
 /// `Summary` itself keeps it.
 fn is_meta_notes(label: &str) -> bool {
