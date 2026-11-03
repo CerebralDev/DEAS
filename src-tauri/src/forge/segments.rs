@@ -63,6 +63,20 @@ fn tidy_body(body: &str) -> String {
         .to_string()
 }
 
+/// Labels chat-tuned models give their explaining notes when they rename the
+/// segment themselves ("Notes" is a Hermes-family habit). Notes are never
+/// prompt text, so such a segment is dropped, exactly like a switched-off
+/// `discard` label. Expected labels are matched first — a dialect that names
+/// `Summary` itself keeps it.
+fn is_meta_notes(label: &str) -> bool {
+    matches!(
+        label.trim().to_lowercase().as_str(),
+        "notes" | "note" | "notes about the prompt" | "explanation" | "explanations"
+            | "reasoning notes" | "thinking" | "thoughts" | "analysis" | "commentary"
+            | "comment" | "comments" | "meta" | "summary" | "feedback"
+    )
+}
+
 /// Segments in contract order. `discard` labels are allowed but dropped (the
 /// model's file may still list them); a `Refused` segment satisfies the
 /// contract on its own and comes back alone with `refused = true`.
@@ -100,13 +114,20 @@ pub fn parse(
     }
     let unknown: Vec<String> = segments
         .iter()
-        .filter(|s| !expected.contains(&s.label.as_str()) && !discard.contains(&s.label.as_str()))
+        .filter(|s| {
+            !expected.contains(&s.label.as_str())
+                && !discard.contains(&s.label.as_str())
+                && !is_meta_notes(&s.label)
+        })
         .map(|s| s.label.clone())
         .collect();
     if !unknown.is_empty() {
         return Err(ParseError::Unknown(unknown));
     }
-    segments.retain(|s| !discard.contains(&s.label.as_str()));
+    segments.retain(|s| {
+        !discard.contains(&s.label.as_str())
+            && !(is_meta_notes(&s.label) && !expected.contains(&s.label.as_str()))
+    });
     let missing: Vec<String> = expected
         .iter()
         .filter(|l| !segments.iter().any(|s| s.label == **l))
@@ -186,5 +207,16 @@ mod tests {
         let text = "===SEGMENT: Positive prompt===\na\n===SEGMENT: Negative prompt===\nb\n===SEGMENT: Reasoning===\nc\n";
         let (segs, _) = parse(text, &EXPECTED[..2], &["Reasoning"]).unwrap();
         assert_eq!(segs.len(), 2);
+    }
+
+    #[test]
+    fn model_renamed_explaining_notes_are_dropped_not_an_error() {
+        let text = "===SEGMENT: Positive prompt===\na\n===SEGMENT: Negative prompt===\nb\n===SEGMENT: Notes===\nmodel habits noted\n===SEGMENT: Explanation===\nmore\n";
+        let (segs, _) = parse(text, &EXPECTED[..2], &[]).unwrap();
+        assert_eq!(segs.len(), 2);
+        let text = "===SEGMENT: Positive prompt===\na\n===SEGMENT: Negative prompt===\nb\n===SEGMENT: Summary===\nkeep me\n";
+        let expected = ["Positive prompt", "Negative prompt", "Summary"];
+        let (segs, _) = parse(text, &expected, &[]).unwrap();
+        assert_eq!(segs.iter().find(|s| s.label == "Summary").unwrap().body, "keep me");
     }
 }

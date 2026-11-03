@@ -3,6 +3,7 @@
 ## 0.2.14 BETA (unreleased)
 
 - **Reuse prompt ignores `*_not_found` placeholders.** Images saved by the DaSiWa metadata saver embed sentinels like `negative_prompt_not_found` when a field was empty or undetectable. **Reuse prompt** and **Use these settings** now treat them as absent: a negative prompt that was empty stays empty, and no placeholder lands in the prompt, checkpoint, sampler or scheduler fields.
+- **Forge: a model's renamed notes segment no longer fails the write.** Chat-tuned models (the Hermes family especially) habitually append their explaining notes under a self-chosen label — `===SEGMENT: Notes===` — which the strict segment contract rejected with *"The model wrote a segment not in its format: "Notes"."* Those notes are never prompt text, so labels like `Notes`, `Explanation`, `Thinking` or `Summary` are now dropped like a switched-off Reasoning segment; a dialect that names such a segment itself keeps it, and a genuinely foreign label (e.g. `Tags`) is still an error.
 
 ## 0.2.13 BETA
 
