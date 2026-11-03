@@ -30,8 +30,8 @@
     "latent": "EmptyFlux2LatentImage",
     "architectures": [], "bases": [],
     "model": [["shared.block.modulation.weight", "layers.0.proj.ffn.up.gate.weight"]], "lora": [],
-    "defaults": { "width": 1024, "height": 1024, "steps": 25, "cfg": 2.5, "sampler": "er_sde", "scheduler": "simple" },
-    "defaultsNote": "Comfy-Org image_moss_image_t2i template sampling values; bounded adapter omits template SLG and prompt upsampling. Reference-image t2i verified at 512 pixels; other resolutions and variants remain unverified."
+    "defaults": { "width": 1024, "height": 1024, "steps": 50, "cfg": 3.0, "sampler": "euler", "scheduler": "sgm_uniform" },
+    "defaultsNote": "Defaults follow the official MOSS-Image USERGUIDE (50 steps, CFG 3.0 range 3.0-6.0, euler with sgm_uniform, shift 5.0 baked in the recipe; SLG uncond_skip_layers=[22] and the card negative prompt are recommended in docs/MODEL_DEFAULTS.md; 8-step DMD turbo LoRA runs CFG 1). Bounded adapter omits SLG and prompt upsampling. Reference-image t2i verified at 512 pixels; other resolutions and variants remain unverified."
   },
   {
     "id": "ideogram4", "multiple": 16, "name": "Ideogram 4", "forge": "Ideogram", "loader": "diffusion", "pipelines": ["t2i", "i2i"],
@@ -41,8 +41,8 @@
     "architectures": ["ideogram4"], "bases": ["Ideogram 4"],
     "model": [["embed_image_indicator.weight", "input_proj.weight"]],
     "lora": [],
-    "defaults": { "width": 1024, "height": 1024, "steps": 20, "cfg": 4, "sampler": "euler", "scheduler": "simple" },
-    "defaultsNote": "ComfyUI core declares Ideogram 4 with the Flux2 latent format, a Qwen3-8B llama-style encoder (type ideogram4) and an internal shift of 1.0, so no patch node is added. Steps/CFG are starting values, not verified against a blueprint."
+    "defaults": { "width": 1024, "height": 1024, "steps": 20, "cfg": 7, "sampler": "euler", "scheduler": "simple" },
+    "defaultsNote": "ComfyUI core declares Ideogram 4 with the Flux2 latent format, a Qwen3-8B llama-style encoder (type ideogram4) and an internal shift of 1.0, so no patch node is added. 20 steps at CFG 7 follows the official Ideogram 4 Default preset (docs/MODEL_DEFAULTS.md); the dedicated Ideogram4Scheduler is not modeled by the plain KSampler path."
   },
   {
     "id": "fibo2", "multiple": 16, "name": "Fibo 2.0", "forge": "Fibo2", "loader": "diffusion", "pipelines": ["t2i", "i2i"],
@@ -52,8 +52,8 @@
     "architectures": ["fibo2"], "bases": ["Fibo 2.0"],
     "model": [["perceiver.latent_queries", "layers.0.attention.qkv.weight"]],
     "lora": [],
-    "defaults": { "width": 1024, "height": 1024, "steps": 20, "cfg": 4, "sampler": "euler", "scheduler": "simple" },
-    "defaultsNote": "ComfyUI core declares Fibo 2.0 with the Flux2 latent and a full Qwen3-VL-4B encoder (type fibo2); shift 1.15 is internal, so no patch node is added. Steps/CFG are starting values."
+    "defaults": { "width": 1024, "height": 1024, "steps": 50, "cfg": 5, "sampler": "euler", "scheduler": "simple" },
+    "defaultsNote": "ComfyUI core declares Fibo 2.0 with the Flux2 latent and a full Qwen3-VL-4B encoder (type fibo2); shift 1.15 is internal, so no patch node is added. 50 steps at CFG 5 follows the official Fibo 2.0 dev workflow."
   },
   {
     "id": "ernie", "multiple": 16, "name": "Ernie Image", "forge": "Ernie", "loader": "diffusion", "pipelines": ["t2i", "i2i"],
@@ -74,8 +74,8 @@
     "architectures": ["omnigen2"], "bases": ["OmniGen2"],
     "model": [["time_caption_embed.timestep_embedder.linear_1.bias"]],
     "lora": [],
-    "defaults": { "width": 1024, "height": 1024, "steps": 20, "cfg": 4, "sampler": "euler", "scheduler": "simple" },
-    "defaultsNote": "ComfyUI core declares OmniGen2 with the Flux latent and a Qwen2.5-VL-3B encoder (type omnigen2); shift 2.6 is internal, so no patch node is added. Steps/CFG are starting values."
+    "defaults": { "width": 1024, "height": 1024, "steps": 50, "cfg": 4, "sampler": "euler", "scheduler": "simple" },
+    "defaultsNote": "ComfyUI core declares OmniGen2 with the Flux latent and a Qwen2.5-VL-3B encoder (type omnigen2); shift 2.6 is internal, so no patch node is added. 50 steps at CFG 4 follows the official OmniGen2 usage tips (euler; negative prompt 'blurry, low quality, text, watermark' recommended)."
   },
   {
     "id": "boogu", "multiple": 16, "name": "Boogu Image", "forge": "Boogu", "loader": "diffusion", "pipelines": ["t2i", "i2i"],
@@ -85,8 +85,8 @@
     "architectures": ["boogu"], "bases": ["Boogu Image"],
     "model": [["double_stream_layers.0.img_instruct_attn.processor.img_to_q.weight", "x_embedder.weight"]],
     "lora": [],
-    "defaults": { "width": 1024, "height": 1024, "steps": 20, "cfg": 4, "sampler": "euler", "scheduler": "simple" },
-    "defaultsNote": "ComfyUI core declares Boogu-Image as an OmniGen2 derivative with the Flux latent and a full Qwen3-VL-8B encoder (type boogu); shift 3.16 is internal, so no patch node is added. Steps/CFG are starting values."
+    "defaults": { "width": 1024, "height": 1024, "steps": 4, "cfg": 1, "sampler": "lcm", "scheduler": "sgm_uniform" },
+    "defaultsNote": "ComfyUI core declares Boogu-Image as an OmniGen2 derivative with the Flux latent and a full Qwen3-VL-8B encoder (type boogu); shift 3.16 is internal, so no patch node is added. Turbo defaults 4 steps at CFG 1 with lcm/sgm_uniform follow the official Boogu turbo template."
   },
   {
     "id": "kandinsky5-image", "multiple": 16, "name": "Kandinsky 5 Image", "forge": "Kandinsky5", "loader": "diffusion", "pipelines": ["t2i", "i2i"],
@@ -96,8 +96,8 @@
     "architectures": ["kandinsky5-image", "kandinsky5"], "bases": ["Kandinsky 5.0 Image Lite", "Kandinsky 5.0 Image Pro"],
     "model": [["visual_embeddings.in_layer.bias", "text_transformer_blocks.0."]],
     "lora": [],
-    "defaults": { "width": 1024, "height": 1024, "steps": 20, "cfg": 4, "sampler": "euler", "scheduler": "simple" },
-    "defaultsNote": "ComfyUI core declares Kandinsky5-Image with the Flux latent format and a Qwen2.5-VL-7B encoder (type kandinsky5_image); the sampling shift is internal, so no patch node is added. Steps/CFG are starting values, not verified against a blueprint."
+    "defaults": { "width": 1024, "height": 1024, "steps": 50, "cfg": 3.5, "sampler": "euler", "scheduler": "simple" },
+    "defaultsNote": "ComfyUI core declares Kandinsky5-Image with the Flux latent format and a Qwen2.5-VL-7B encoder (type kandinsky5_image); the sampling shift is internal, so no patch node is added. 50 steps at CFG 3.5 with euler/simple follows the official Kandinsky5 template (docs/MODEL_DEFAULTS.md)."
   },
   {
     "id": "pixart", "multiple": 8, "name": "PixArt", "forge": "PixArt", "loader": "diffusion", "pipelines": ["t2i", "i2i"],
@@ -129,8 +129,8 @@
     "architectures": ["hidream"], "bases": ["HiDream-I1 Full", "HiDream-I1 Dev", "HiDream-I1 Fast"],
     "model": [["caption_projection.0.linear.weight"]],
     "lora": [],
-    "defaults": { "width": 1024, "height": 1024, "steps": 50, "cfg": 5, "sampler": "euler", "scheduler": "normal" },
-    "defaultsNote": "ComfyUI core declares HiDream with empty sampling settings and the Flux latent format, so no sampling patch is added. Full/Dev want 50 steps at CFG 5, Fast 16 steps at CFG 1 — starting values, not a core blueprint. HiDream-O1 is a separate architecture (its own latent) and not covered."
+    "defaults": { "width": 1024, "height": 1024, "steps": 50, "cfg": 5, "sampler": "uni_pc", "scheduler": "simple" },
+    "defaultsNote": "ComfyUI core declares HiDream with empty sampling settings and the Flux latent format, so no sampling patch is added. Full runs 50 steps at CFG 5 with uni_pc/simple and shift 3.0 per the official HiDream guide; Dev wants CFG 1 at shift 6, Fast 16 steps at CFG 1. HiDream-O1 is a separate architecture (its own latent) and not covered."
   },
   {
     "id": "pixeldit", "multiple": 16, "name": "PixelDiT", "forge": "PixelDiT", "loader": "diffusion", "pipelines": ["t2i", "i2i"],
@@ -140,8 +140,8 @@
     "architectures": ["pixeldit", "pixeldit_t2i"], "bases": ["PixelDiT T2I"],
     "model": [["core.pixel_embedder.proj.weight"]],
     "lora": [],
-    "defaults": { "width": 1024, "height": 1024, "steps": 20, "cfg": 4, "sampler": "euler", "scheduler": "simple" },
-    "defaultsNote": "ComfyUI core declares PixelDiT T2I with the PixelDiTPixel latent (the Chroma-Radiance pixel latent, so EmptyChromaRadianceLatentImage is the matching node), a Gemma-2 encoder (type pixeldit) and an internal shift of 4.0. The VAE file name and the 20/4 starting values are unverified."
+    "defaults": { "width": 1024, "height": 1024, "steps": 30, "cfg": 4, "sampler": "er_sde", "scheduler": "simple" },
+    "defaultsNote": "ComfyUI core declares PixelDiT T2I with the PixelDiTPixel latent (the Chroma-Radiance pixel latent, so EmptyChromaRadianceLatentImage is the matching node), a Gemma-2 encoder (type pixeldit) and an internal shift of 4.0. 30 steps at CFG 4 with er_sde/simple follows the official Comfy-Org PixelDiT template; the VAE file name remains unverified."
   },
   {
     "id": "mage", "multiple": 16, "name": "Mage-Flow", "forge": "MageFlow", "loader": "diffusion", "pipelines": ["t2i"],
@@ -173,8 +173,8 @@
     "architectures": ["flux3", "flux-3"], "bases": ["Flux.3"],
     "model": [["content_mode_blocks.image.0.attn_out.weight", "single_stream_modulations.txt.lin.weight"]],
     "lora": [],
-    "defaults": { "width": 1024, "height": 1024, "steps": 20, "cfg": 1, "sampler": "euler", "scheduler": "simple" },
-    "defaultsNote": "ComfyUI core declares Flux.3 with the Flux2 latent, a Qwen3-VL-4B text encoder (type flux3) and an internal shift of 1.93586. No core blueprint exists, so the Flux2Scheduler path and the 20/1 starting values are unverified."
+    "defaults": { "width": 1024, "height": 1024, "steps": 15, "cfg": 1, "sampler": "er_sde", "scheduler": "simple" },
+    "defaultsNote": "ComfyUI core declares Flux.3 with the Flux2 latent, a Qwen3-VL-4B text encoder (type flux3) and an internal shift of 1.93586. No core blueprint exists, so the Flux2Scheduler path with the official template's 15 steps at CFG 1 (er_sde) is applied; the graph path itself remains unverified."
   },
   {
     "id": "sd3", "multiple": 16, "name": "SD3", "forge": "SD3", "loader": "diffusion", "pipelines": ["t2i", "i2i"],
@@ -196,8 +196,8 @@
     "architectures": ["chroma"], "bases": ["Chroma", "Chroma1-HD", "Chroma1-Flash"],
     "model": [["distilled_guidance_layer.0.norms.0.weight", "double_blocks.0.img_attn.qkv.weight"]],
     "lora": [],
-    "defaults": { "width": 1024, "height": 1024, "steps": 26, "cfg": 4, "sampler": "euler", "scheduler": "simple" },
-    "defaultsNote": "ComfyUI core declares Chroma with sampling multiplier 1.0 (no shift) and the Flux latent format, so the recipe adds no sampling patch. Steps/CFG are starting values, not verified against a blueprint; Chroma Radiance is a separate family."
+    "defaults": { "width": 1024, "height": 1024, "steps": 26, "cfg": 3.5, "sampler": "euler", "scheduler": "beta" },
+    "defaultsNote": "ComfyUI core declares Chroma with sampling multiplier 1.0 (no shift) and the Flux latent format, so the recipe adds no sampling patch. 26 steps at CFG 3.5 with euler/beta follows the official Chroma Comfy-Org template (sampling multiplier 1.0); Chroma Radiance is a separate family."
   },
   {
     "id": "chroma-radiance", "multiple": 16, "name": "Chroma Radiance", "forge": "ChromaRadiance", "loader": "diffusion", "pipelines": ["t2i", "i2i"],
@@ -207,7 +207,7 @@
     "architectures": ["chroma-radiance", "chroma_radiance"], "bases": ["Chroma Radiance"],
     "model": [["distilled_guidance_layer.0.norms.0.weight", "nerf_blocks.0.norm.weight"]],
     "lora": [],
-    "defaults": { "width": 1024, "height": 1024, "steps": 26, "cfg": 4, "sampler": "euler", "scheduler": "simple" },
+    "defaults": { "width": 1024, "height": 1024, "steps": 26, "cfg": 3.5, "sampler": "euler", "scheduler": "beta" },
     "defaultsNote": "Pixel-space model (ChromaRadiance latent format, no spatial compression) with sampling multiplier 1.0. Steps/CFG are starting values, not verified against a blueprint."
   },
   {
@@ -270,12 +270,13 @@
     "architectures": ["qwen-image-2.1"], "bases": ["Qwen Image 2.1"],
     "model": [["txt.in.text.norm", "transformer.blocks.0.attn.norm.q"]],
     "lora": [["transformer.blocks.0.attn.to.k", "transformer.blocks.0.img.mlp.gate.layer"], ["transformer.blocks.0.attn.to.k", "transformer.blocks.0.img.mlp.proj"]],
-    "defaults": { "width": 2048, "height": 2048, "steps": 20, "cfg": 4, "sampler": "euler", "scheduler": "simple" }
+    "defaults": { "width": 2048, "height": 2048, "steps": 25, "cfg": 1, "sampler": "euler", "scheduler": "simple" }
   },
   {
     "id": "minimax-h3", "temporalLatent": true, "multiple": 32, "name": "MiniMax H3", "forge": "MiniMax H3", "loader": "diffusion", "pipelines": ["i2i", "t2v", "i2v", "v2v", "ref2v"],
     "clipType": "minimax", "textEncoders": ["minimax_h3"], "vaes": ["h3_video_vae", "h3_sol_vae"], "audioVaes": ["h3_audio_vae"],
-    "defaults": {"width": 1024, "height": 768, "steps": 4, "cfg": 1, "sampler": "euler", "scheduler": "simple"},
+    "defaults": { "width": 1024, "height": 768, "steps": 30, "cfg": 3, "sampler": "res_multistep", "scheduler": "simple" },
+    "defaultsNote": "Base defaults follow the official Comfy-Org MiniMax H3 text-to-image template: 30 steps with res_multistep/simple (CFG via the guider path). 4 steps at CFG 1 is only correct with a 4-step turbo/lightning LoRA loaded; the official 8-step turbo LoRA runs 8 steps at CFG 1 (docs/MODEL_DEFAULTS.md).",
     "video": {"fps": 24, "seconds": 5, "fixedFps": true},
     "architectures": ["minimax-h3"], "bases": ["MiniMax H3"],
     "model": [["video.patch.proj", "audio.patch.proj"]],
@@ -295,7 +296,7 @@
     "id": "wan", "multiple": 16, "name": "Wan 2.1 / 2.2", "forge": "Wan 2.2", "loader": "diffusion", "pipelines": ["i2v"],
     "components": {"textEncoders": ["umt5-xxl"], "vaes": ["wan-2.1-vae"]},
     "clipType": "wan", "textEncoders": ["umt5"], "vaes": ["wan_2.1_vae", "wan2.1_vae"],
-    "defaults": {"width": 720, "height": 1280, "steps": 4, "cfg": 1, "sampler": "euler", "scheduler": "linear_quadratic"},
+    "defaults": { "width": 720, "height": 1280, "steps": 4, "cfg": 1, "sampler": "euler", "scheduler": "simple" },
     "video": {"fps": 16, "seconds": 5, "lowModel": ["high", "low"]},
     "architectures": ["wan-2"], "bases": ["Wan 2.1", "Wan 2.2"],
     "model": [["blocks.0.cross.attn.k", "patch.embedding"]],
