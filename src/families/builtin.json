@@ -4,7 +4,7 @@
     "architectures": ["stable-diffusion-xl"], "bases": ["SDXL 1.0", "SDXL Turbo", "SDXL Lightning", "Illustrious", "Pony", "NoobAI"],
     "model": [["conditioner.embedders.1"]],
     "lora": [["lora.te2."], ["output.blocks.5.1.transformer.blocks.1"], ["down.blocks.2.attentions.1.transformer.blocks.9"]],
-    "defaults": { "width": 1024, "height": 1024, "steps": 28, "cfg": 5.5, "sampler": "euler_ancestral", "scheduler": "normal" }
+    "defaults": { "width": 1024, "height": 1024, "steps": 28, "cfg": 3.5, "sampler": "euler", "scheduler": "normal" }
   },
   {
     "id": "sd15", "multiple": 8, "name": "SD1.5 · SD2", "forge": "SD15", "loader": "checkpoint", "pipelines": ["t2i", "i2i"],
