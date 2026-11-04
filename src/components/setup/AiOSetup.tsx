@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 're
 import { startupPhase, startupReady } from '../../lib/startup';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { useI18n } from '../../i18n/I18nProvider';
-import { initialSetupState, setupPresentation, storageTarget, setupPlan, transitionSetup, validateBackend, type FeatureId, type InstallOptions, type NativeInstallPlan, type NativeInstallStatus, type NativeInstallDefaults, type NativeBackendStatus } from '../../lib/setup';
+import { initialSetupState, storageTarget, setupPlan, transitionSetup, validateBackend, type FeatureId, type InstallOptions, type NativeInstallPlan, type NativeInstallStatus, type NativeInstallDefaults, type NativeBackendStatus } from '../../lib/setup';
 import './setup.css';
 import { OpenComfyWorkflow, sendComfyWorkflow, type ComfyWorkflow } from '../../lib/comfyWorkflow';
 import { OwnedBackendPanel } from './OwnedBackendPanel';

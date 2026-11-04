@@ -8,7 +8,7 @@ vi.mock('@tauri-apps/api/core',()=>({invoke:vi.fn(),isTauri:vi.fn(()=>false),con
 const {nativeDrop}=vi.hoisted(()=>({nativeDrop:vi.fn(async(_callback:unknown)=>()=>{})}));
 vi.mock('@tauri-apps/api/webview',()=>({getCurrentWebview:()=>({onDragDropEvent:nativeDrop})}));
 beforeEach(()=>{localStorage.clear();localStorage.setItem('deas.locale.v1','en');});
-afterEach(()=>{cleanup();vi.resetAllMocks();});
+afterEach(()=>{cleanup();vi.restoreAllMocks();vi.resetAllMocks();vi.unstubAllGlobals();});
 const entry=(name:string,kind:MediaEntry['kind'],media:MediaEntry['media']=null,symlink=false,modified=1):MediaEntry=>({name,path:`/home/u/${name}`,kind,symlink,media,size:1,modified});
 const home={path:'/home/u',parent:'/home',entries:[entry('shots','directory',null,true),entry('a.png','file','image'),entry('notes.txt','file')],truncated:false};
 const shots={path:'/home/u/shots',parent:'/home/u',entries:[entry('clip.mp4','file','video')],truncated:true};
@@ -18,6 +18,35 @@ const mockMediaInvoke=(implementation:(command:string,args?:unknown)=>Promise<un
 const rootButton=(name:string)=>within(screen.getByRole('group',{name:'Environment folders'})).getByRole('button',{name});
 const rootListing=(path:string)=>({path,parent:path.replace(/[\\/][^\\/]+$/,''),entries:['raw','starred'].map(name=>({...entry(name,'directory'),path:path+'/'+name})),truncated:false});
 const lists=()=>vi.mocked(invoke).mock.calls.filter(([c])=>c==='native_media_list').map(([,a])=>a);
+const visibleDropBox=(box:Element)=>vi.spyOn(box,'getBoundingClientRect').mockReturnValue({left:10,top:10,right:110,bottom:110,width:100,height:100,x:10,y:10,toJSON:()=>({})});
+it('native drops respect visible library bounds and scale hover/drop coordinates',async()=>{
+ vi.mocked(isTauri).mockReturnValue(true);nativeDrop.mockImplementation(async()=>()=>{});
+ vi.stubGlobal('devicePixelRatio',2);
+ mockMediaInvoke(async(command,args)=>command==='native_media_describe'?[entry('c.mp4','file','video')]:{path:(args as {path:string})?.path??'/home/u',parent:null,entries:[],truncated:false});
+ const onSelect=vi.fn();
+ const {container}=render(<I18nProvider><div><MediaLibrary selected={null} onSelect={onSelect}/></div></I18nProvider>);
+ await waitFor(()=>expect(nativeDrop).toHaveBeenCalledTimes(1));
+ const box=container.querySelector('.media-library')!,bounds=visibleDropBox(box);
+ const drop=nativeDrop.mock.calls[0][0] as (e:unknown)=>void;
+ const send=async(type:string,x=40,y=40)=>act(async()=>drop({payload:type==='leave'?{type}:{type,paths:['/home/u/c.mp4'],position:{x,y}}}));
+ const hovering=()=>box.classList.contains('is-dragging');
+ await send('enter');expect(hovering()).toBe(true);
+ await send('over',240);expect(hovering()).toBe(false);
+ await send('drop',240);await send('drop',0);await send('drop',40,240);await send('drop',40,0);
+ expect(onSelect).not.toHaveBeenCalled();
+ expect(vi.mocked(invoke).mock.calls.some(([c])=>c==='native_media_describe')).toBe(false);
+ await send('over');expect(hovering()).toBe(true);
+ await send('leave');expect(hovering()).toBe(false);
+ box.parentElement!.hidden=true;
+ await send('enter');await send('drop');expect(hovering()).toBe(false);expect(onSelect).not.toHaveBeenCalled();
+ box.parentElement!.hidden=false;
+ bounds.mockReturnValue({left:0,top:0,right:0,bottom:0,width:0,height:0,x:0,y:0,toJSON:()=>({})});
+ await send('drop',0,0);expect(onSelect).not.toHaveBeenCalled();
+ bounds.mockRestore();visibleDropBox(box);
+ await send('enter');await send('drop');expect(hovering()).toBe(false);
+ expect(onSelect).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({name:'c.mp4',path:'/home/u/c.mp4'}));
+ expect(vi.mocked(invoke).mock.calls.filter(([c])=>c==='native_media_describe')).toEqual([['native_media_describe',{paths:['/home/u/c.mp4']}]]);
+});
 it('native drops use the latest selection callback after reference additions/trim edits',async()=>{
  vi.mocked(isTauri).mockReturnValue(true);
  nativeDrop.mockImplementation(async()=>()=>{});
@@ -27,6 +56,7 @@ it('native drops use the latest selection callback after reference additions/tri
  await waitFor(()=>expect(nativeDrop).toHaveBeenCalledTimes(1));
  rerender(<I18nProvider><MediaLibrary selected={null} onSelect={latest}/></I18nProvider>);
  const drop=nativeDrop.mock.calls[0][0] as (e:unknown)=>void;
+ visibleDropBox(screen.getByRole('complementary',{name:'Media'}));
  await act(async()=>drop({payload:{type:'drop',paths:['/home/u/c.mp4'],position:{x:20,y:20}}}));
  expect(latest).toHaveBeenCalledWith(expect.objectContaining({name:'c.mp4'}));
  expect(old).not.toHaveBeenCalled();
@@ -38,8 +68,7 @@ it('modal native drops go only to the picker, not retained background browsers o
  const background=vi.fn(),picker=vi.fn();
  const {container}=render(<I18nProvider><MediaLibrary selected={null} onSelect={background}/><div role="dialog" aria-modal="true"><MediaLibrary selected={null} onSelect={picker}/></div></I18nProvider>);
  await waitFor(()=>expect(nativeDrop).toHaveBeenCalledTimes(2));
- const box=container.querySelector('[aria-modal] .media-library')!;
- vi.spyOn(box,'getBoundingClientRect').mockReturnValue({left:0,top:0,right:100,bottom:100,width:100,height:100,x:0,y:0,toJSON:()=>({})});
+ container.querySelectorAll('.media-library').forEach(visibleDropBox);
  const event=(x:number)=>({payload:{type:'drop',paths:['/home/u/c.mp4'],position:{x,y:20}}});
  await act(async()=>{for(const [handler] of nativeDrop.mock.calls)(handler as (e:unknown)=>void)(event(20));});
  expect(picker).toHaveBeenCalledTimes(1);expect(background).not.toHaveBeenCalled();
@@ -52,6 +81,7 @@ it('a file description completing after unmount never mutates the authoring sele
  mockMediaInvoke(async(command,args)=>command==='native_media_describe'?new Promise<MediaEntry[]>(r=>{finish=r;}):{path:(args as {path:string})?.path??'/home/u',parent:null,entries:[],truncated:false});
  const onSelect=vi.fn();const ui=render(<I18nProvider><MediaLibrary selected={null} onSelect={onSelect}/></I18nProvider>);
  await waitFor(()=>expect(nativeDrop).toHaveBeenCalledTimes(1));
+ visibleDropBox(screen.getByRole('complementary',{name:'Media'}));
  act(()=>(nativeDrop.mock.calls[0][0] as (e:unknown)=>void)({payload:{type:'drop',paths:['/home/u/c.mp4'],position:{x:20,y:20}}}));
  ui.unmount();await act(async()=>finish([entry('c.mp4','file','video')]));expect(onSelect).not.toHaveBeenCalled();
 });

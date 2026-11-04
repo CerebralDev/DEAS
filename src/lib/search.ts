@@ -43,6 +43,8 @@ export const searchIndex: readonly SearchEntry[] = [
   { view: studio, studioTab: 'generate', tab: 'setup.tab.studio', section: 'search.section.prompts', label: 'studio.run.negative', target: '#run-negative', aliases: ['prompt', 'exclude'] },
   { view: studio, studioTab: 'generate', tab: 'setup.tab.studio', section: 'search.section.run', label: 'studio.run.run', target: '[data-run]', aliases: ['generate', 'submit'], reason: 'search.reason.backend' },
   { view: studio, studioTab: 'generate', tab: 'setup.tab.studio', section: 'studio.run.queue', label: 'studio.run.queue', target: '#studio-queue' },
+  { view: studio, studioTab: 'generate', tab: 'setup.tab.studio', section: 'studio.run.metadata', label: 'studio.run.metadata.apply', target: '[data-media-settings]', aliases: ['reuse', 'restore', 'media settings', 'metadata'], reason: 'studio.run.metadata.empty' },
+  { view: studio, studioTab: 'generate', tab: 'setup.tab.studio', section: 'studio.run.queue', label: 'studio.run.metadata.reuse', target: '[data-job-reuse-prompt]', aliases: ['reuse prompt', 'queue prompt'], reason: 'studio.run.metadata.empty' },
   // Studio · bottom dock
   { view: studio, studioTab: 'generate', tab: 'setup.tab.studio', section: 'studio.run.dock', label: 'studio.run.dock.options', target: '[data-dock-tab="options"]', aliases: ['settings'] },
   { view: studio, studioTab: 'generate', tab: 'setup.tab.studio', section: 'studio.run.dock', label: 'studio.run.dock.post', target: '[data-dock-tab="post"]', aliases: ['refine', 'upscale'] },

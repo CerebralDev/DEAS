@@ -5,7 +5,7 @@ import {sourcePoint,zoomAt,stampStroke,maskBounds,floodRegion,flattenImages,hasP
 import {MEDIA_DRAG,draggedItem,type MediaItem} from '../../lib/media';
 import './imageEditor.css';
 export interface EditorSnapshot{source:Props['source'];masks:Mask[];base:ImageLayer;baseIndex:number;nextMask:number;active:string}
-export interface EditorHandle{capture:()=>EditorSnapshot;imagePng:()=>Promise<Uint8Array|null>;imageEdited:()=>boolean;maskPng:()=>Promise<Uint8Array>;maskBounds:(padding:number)=>{x:number;y:number;width:number;height:number}}
+export interface EditorHandle{contentRevision:()=>number;capture:()=>EditorSnapshot;imagePng:()=>Promise<Uint8Array|null>;imageEdited:()=>boolean;maskPng:()=>Promise<Uint8Array>;maskBounds:(padding:number)=>{x:number;y:number;width:number;height:number}}
 type Mask={id:string;n:number;visible:boolean;canvas:HTMLCanvasElement;content:boolean};
 export type Props={ref?:Ref<EditorHandle>;source:{src:string;name:string;width:number;height:number};layers:ImageLayer[];onLayers:(layers:ImageLayer[])=>void;maskMode:boolean;onMask:(present:boolean)=>void;/** A dock tile dropped onto the picture, with the drop point in source pixels. */onInsert:(item:MediaItem,at:Point)=>void;/** A change (e.g. entering side by side) refits the picture even after zooming. */layout?:string;/** In-memory authoring state, only accepted for this exact source. */snapshot?:EditorSnapshot;draftGeneration?:string|number};
 const diameterOK=(v:unknown):v is number=>typeof v==='number'&&Number.isInteger(v)&&v>=1&&v<=1024;
@@ -37,7 +37,7 @@ export function StudioImageEditor({ref,source,layers,onLayers,maskMode,onMask,on
   const {t}=useI18n(),label=(key:string)=>t(`studio.editor.${key}`);
   const viewport=useRef<HTMLDivElement>(null),world=useRef<HTMLDivElement>(null),overlay=useRef<HTMLCanvasElement>(null);
   const cursor=useRef<HTMLDivElement>(null);
-  const operation=useRef(0);
+  const operation=useRef(0),contentRevision=useRef(0);
   useLayoutEffect(()=>{operation.current++;return()=>{operation.current++;};},[draftGeneration,source.src,source.width,source.height]);
   const [view,setView]=useState<View>({scale:1,x:0,y:0});
   const [tool,setTool]=useState<'select'|'brush'|'erase'|'wand'|'pan'>(maskMode?'brush':'select');
@@ -59,7 +59,7 @@ export function StudioImageEditor({ref,source,layers,onLayers,maskMode,onMask,on
   useEffect(()=>{setBase(value=>value.src===source.src&&value.name===source.name?value:{...value,src:source.src,name:source.name});},[source.src,source.name]);
   const [baseIndex,setBaseIndex]=useState(saved?.baseIndex??0);
   const images=[...layers];images.splice(Math.min(baseIndex,images.length),0,base);
-  const updateImages=(next:ImageLayer[])=>{const i=next.findIndex(l=>l.id==='base');setBase(next[i]??{...base,visible:false});setBaseIndex(Math.max(0,i));onLayers(next.filter(l=>l.id!=='base'));};
+  const updateImages=(next:ImageLayer[])=>{contentRevision.current++;const i=next.findIndex(l=>l.id==='base');setBase(next[i]??{...base,visible:false});setBaseIndex(Math.max(0,i));onLayers(next.filter(l=>l.id!=='base'));};
   const imageEdited=()=>!base.visible||base.x!==0||base.y!==0||base.width!==source.width||base.height!==source.height||baseIndex>0||hasPaint(base.paint)||layers.some(l=>l.x<0||l.y<0);
   // Inpaint: frame (source size) areas no visible picture covers are outpainted.
   const outpaint=maskMode?uncoveredCells(images.filter(l=>l.visible),source.width,source.height):[];
@@ -75,6 +75,7 @@ export function StudioImageEditor({ref,source,layers,onLayers,maskMode,onMask,on
   function track(e:React.PointerEvent){const c=cursor.current,r=viewport.current?.getBoundingClientRect();if(c&&r){c.style.left=`${e.clientX-r.left}px`;c.style.top=`${e.clientY-r.top}px`;c.hidden=false;}}
   function fail(){setError(label('canvasError'));onMask(false);}
   function redraw(){
+    contentRevision.current++;
     const c=overlay.current,ctx=c?.getContext('2d');if(!c||!ctx){fail();return;}
     ctx.clearRect(0,0,c.width,c.height);
     for(const m of masksRef.current)if(m.visible)ctx.drawImage(m.canvas,0,0);
@@ -146,7 +147,7 @@ export function StudioImageEditor({ref,source,layers,onLayers,maskMode,onMask,on
     for(const m of masksRef.current)if(m.visible)ctx.drawImage(m.canvas,0,0);
     return c;
   }
-  useImperativeHandle(ref,()=>({capture:()=>{finish();return {source:{...source},masks:masks.map(m=>({...m,canvas:copyCanvas(m.canvas)})),base:copyImageLayer(base),baseIndex,nextMask:nextMask.current,active};},imageEdited,imagePng:()=>{finish();// Outpaint area starts neutral grey (like ImagePadForOutpaint) so denoise below 1 does not pull it to black.
+  useImperativeHandle(ref,()=>({contentRevision:()=>contentRevision.current,capture:()=>{finish();return {source:{...source},masks:masks.map(m=>({...m,canvas:copyCanvas(m.canvas)})),base:copyImageLayer(base),baseIndex,nextMask:nextMask.current,active};},imageEdited,imagePng:()=>{finish();// Outpaint area starts neutral grey (like ImagePadForOutpaint) so denoise below 1 does not pull it to black.
     return imageEdited()?flattenImages(images,source.width,source.height,outpaint.length?'#808080':undefined):Promise.resolve(null);},maskBounds:(padding)=>{
     const c=maskCanvas(),bounds=maskBounds(c.getContext('2d')!.getImageData(0,0,c.width,c.height).data,c.width,c.height,padding);
     if(!bounds)throw new Error(label('emptyMask'));
@@ -175,7 +176,7 @@ export function StudioImageEditor({ref,source,layers,onLayers,maskMode,onMask,on
       if(!l.paint)updateImages(images.map(v=>v.id===l.id?{...v,paint:c}:v));
       const k=c.width/l.width,map=(q:Point)=>({x:(q.x-l.x)*k,y:(q.y-l.y)*c.height/l.height});
       gesture.current={pointer:e.pointerId,kind:'paint',ctx,map,k,last:p,erase:tool==='erase',diameter,shape,color};
-      stampStroke(ctx,map(p),map(p),diameter*k,shape,tool==='erase',color);
+      stampStroke(ctx,map(p),map(p),diameter*k,shape,tool==='erase',color);contentRevision.current++;
     }
     else if(activeMask){
       const p=point(e);if(p.x<0||p.y<0||p.x>=source.width||p.y>=source.height)return;
@@ -190,7 +191,7 @@ export function StudioImageEditor({ref,source,layers,onLayers,maskMode,onMask,on
     const g=gesture.current;if(!g||g.pointer!==e.pointerId)return;
     if(g.kind==='pan'){setView({...g.view,x:g.view.x+e.clientX-g.start.x,y:g.view.y+e.clientY-g.start.y});return;}
     const p=point(e);
-    if(g.kind==='paint'){stampStroke(g.ctx,g.map(g.last),g.map(p),g.diameter*g.k,g.shape,g.erase,g.color);g.last=p;if(g.mask)redraw();return;}
+    if(g.kind==='paint'){stampStroke(g.ctx,g.map(g.last),g.map(p),g.diameter*g.k,g.shape,g.erase,g.color);contentRevision.current++;g.last=p;if(g.mask)redraw();return;}
     const dx=Math.round(p.x-g.start.x),dy=Math.round(p.y-g.start.y),l=g.layer;
     const width=Math.max(8,Math.min(8192,l.width+dx));
     updateImages(images.map(v=>v.id!==l.id?v:g.kind==='move'?{...v,x:Math.max(1-l.width,Math.min(source.width-1,l.x+dx)),y:Math.max(1-l.height,Math.min(source.height-1,l.y+dy))}:{...v,width,height:Math.max(8,Math.min(8192,Math.round(width*l.height/l.width)))}));
@@ -240,7 +241,7 @@ export function StudioImageEditor({ref,source,layers,onLayers,maskMode,onMask,on
        {palette.map(c=><button key={c} type="button" className="sie-swatch" aria-label={c} aria-pressed={color===c} style={{background:c}} onClick={()=>setColor(c)}/>)}
       </span>}
       {maskMode&&activeMask&&<label>{label('maskValue')}<input type="range" className="sie-gray" min={0} max={255} value={gray} style={{'--gray':`rgb(${gray},${gray},${gray})`} as React.CSSProperties} onChange={e=>setGray(Number(e.target.value))}/></label>}
-      <button type="button" className="sie-tool" disabled={!brushEnabled} onClick={()=>{finish();const m=activeMask,l=activeImage;try{if(l?.paint){const ctx=l.paint.getContext('2d');if(!ctx)throw Error();ctx.clearRect(0,0,l.paint.width,l.paint.height);return;}if(!m)return;const ctx=m.canvas.getContext('2d');if(!ctx)throw Error();ctx.clearRect(0,0,source.width,source.height);m.content=false;report(masks.some(v=>v.visible&&v.content));redraw();}catch{fail();}}}>{t('studio.run.edit.clear')}</button>
+      <button type="button" className="sie-tool" disabled={!brushEnabled} onClick={()=>{finish();const m=activeMask,l=activeImage;try{if(l?.paint){const ctx=l.paint.getContext('2d');if(!ctx)throw Error();ctx.clearRect(0,0,l.paint.width,l.paint.height);contentRevision.current++;return;}if(!m)return;const ctx=m.canvas.getContext('2d');if(!ctx)throw Error();ctx.clearRect(0,0,source.width,source.height);m.content=false;report(masks.some(v=>v.visible&&v.content));redraw();}catch{fail();}}}>{t('studio.run.edit.clear')}</button>
       </>
       <span className="sie-view">
       <button type="button" data-image-restore disabled={!activeImage} onClick={restoreFrame}>{label('restoreFrame')}</button>

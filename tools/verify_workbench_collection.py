@@ -128,7 +128,11 @@ def open_studio(browser, url, mixed, width=1440, rooted=False):
         script += "\n__collection.jobs.find(j=>j.id==='success4-held').outputRoot='/captured/old/output';"
     page.add_init_script(script)
     page.goto(url, wait_until='networkidle', timeout=30000)
-    set_locale(page, 'en', '[data-node="studio"]')
+    try:
+        set_locale(page, 'en', '[data-node="studio"]')
+    except Exception:
+        print('STARTUP_DIAGNOSTICS', {'errors': errors, 'page': page.evaluate('({text:document.body.innerText,calls:window.__collection?.calls,unexpected:window.__collection?.unexpected})')}, flush=True)
+        raise
     expect(page.locator('[data-workbench]')).to_be_visible()
     page.wait_for_function('__collection.calls.some(c=>c.command==="native_workbench_current")')
     return context, page, errors

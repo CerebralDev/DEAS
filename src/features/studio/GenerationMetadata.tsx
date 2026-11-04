@@ -10,15 +10,6 @@ import { isImageIntent, type JobStatus } from '../../lib/jobs';
 import { useI18n } from '../../i18n/I18nProvider';
 import { generationDuration } from './generationDuration';
 
-/** The explicit apply button plus what could not be carried over (unknown sampler, model not in the folder). */
-function Apply({settings,onApply}:{settings:GenerationSettings;onApply:(s:GenerationSettings)=>string[]}) {
- const {t}=useI18n();const [skipped,setSkipped]=useState<string[]|null>(null);
- return <>
-  <button type="button" className="wb-dock-action" data-metadata-apply onClick={()=>setSkipped(onApply(settings))}>{t('studio.run.metadata.apply')}</button>
-  {skipped&&<p className="media-help" role="status">{skipped.length?t('studio.run.metadata.skipped',{items:skipped.join(' · ')}):t('studio.run.metadata.applied')}</p>}
- </>;
-}
-
 function FileMetadata({media}:{media:MediaItem}) {
  const {t}=useI18n();const path=media.path;
  const openWorkflow=useContext(OpenComfyWorkflow);
@@ -40,7 +31,7 @@ function FileMetadata({media}:{media:MediaItem}) {
 }
 
 /** Read the selected job's native snapshot or the selected image; controls change only through the explicit apply button. */
-export function GenerationMetadata({job,media=null,onApply}:{job:JobStatus|null;media?:MediaItem|null;onApply?:(s:GenerationSettings)=>string[]}) {
+export function GenerationMetadata({job,media=null,onRestore}:{job:JobStatus|null;media?:MediaItem|null;onRestore?:(job:JobStatus)=>void}) {
  const {t,locale}=useI18n();
  const duration=generationDuration(job,locale);
  // Image intents list every field; video intents share the sampling rows plus frames/fps and the family block.
@@ -58,7 +49,7 @@ export function GenerationMetadata({job,media=null,onApply}:{job:JobStatus|null;
    {row('studio.run.seed',m.seed)}{row('studio.run.steps',m.steps)}{row('studio.run.cfg',m.cfg)}{row('studio.recipe.sampler',m.sampler)}{row('studio.recipe.scheduler',m.scheduler)}
    {row('studio.music.generationSettings',JSON.stringify(m.generation))}{m.mode==='t2m'&&m.abc&&row('studio.music.abcSettings',JSON.stringify(m.abc))}
    {timing}{job?.appVersion&&row('studio.run.metadata.version',job?.appVersion)}
-  </dl>:v?<>{onApply&&<Apply key={job?.id} settings={{positive:v.positivePrompt,negative:v.negativePrompt,checkpoint:v.model,seed:v.seed,steps:v.steps,cfg:v.cfg,sampler:v.sampler,scheduler:v.scheduler,width:v.width,height:v.height,loras:v.loras?.map(l=>({...l}))}} onApply={onApply}/>}<dl>
+  </dl>:v?<>{onRestore&&job&&<button type="button" className="wb-dock-action" data-metadata-apply onClick={()=>onRestore(job)}>{t('studio.run.metadata.apply')}</button>}<dl>
    {row('studio.run.positive',v.positivePrompt)}{v.negativePrompt&&row('studio.run.negative',v.negativePrompt)}{row('studio.run.checkpoint',v.model)}{row('studio.run.resolution.title',`${v.width} × ${v.height} · ${extensionSeconds===undefined?`${v.frames} ${t('studio.run.video.frames')} · `:''}${v.frameRate} fps`)}
    {extensionSeconds!==undefined&&row('studio.run.cont.seconds',extensionSeconds)}{row('studio.run.seed',v.seed)}{row('studio.run.steps',v.steps)}{row('studio.run.cfg',v.cfg)}{row('studio.recipe.sampler',v.sampler)}{row('studio.recipe.scheduler',v.scheduler)}{row('studio.run.textEncoder',v.textEncoder)}{row('studio.run.vae',v.vae)}
    {!!v.loras?.length&&row('studio.run.loras',v.loras.map(l=>`${l.name} (${l.strength})`).join(', '))}{(v.firstFrame||v.lastFrame)&&row('studio.run.pipe.input',[v.firstFrame,v.lastFrame].filter(Boolean).join(' → '))}
@@ -66,7 +57,7 @@ export function GenerationMetadata({job,media=null,onApply}:{job:JobStatus|null;
    {v.latentUpscale&&<>{row('studio.run.latent.model',v.latentUpscale.model)}{row('studio.run.dock.post',JSON.stringify(v.latentUpscale))}{row('studio.run.latent.enabled',`${latentUpscaleSize(v.family,v,v.latentUpscale.scale).width} × ${latentUpscaleSize(v.family,v,v.latentUpscale.scale).height}`)}</>}
    {v.videoPost&&row('studio.tve.post.title',`${describeVideoPost(v.videoPost)} · ${videoPostFrameRate(v.frameRate,v.videoPost)} fps`)}
    {timing}{job?.appVersion&&row('studio.run.metadata.version',job?.appVersion)}
-  </dl></>:i?<>{onApply&&<Apply key={job?.id} settings={{positive:i.positivePrompt,negative:i.negativePrompt,checkpoint:i.checkpoint,seed:i.seed,steps:i.steps,cfg:i.cfg,sampler:i.sampler,scheduler:i.scheduler,width:i.width,height:i.height,...(i.wildcard?{wildcard:i.wildcard}:{}),loras:i.loras?.map(l=>({...l}))}} onApply={onApply}/>}<dl>
+  </dl></>:i?<>{onRestore&&job&&<button type="button" className="wb-dock-action" data-metadata-apply onClick={()=>onRestore(job)}>{t('studio.run.metadata.apply')}</button>}<dl>
    {row('studio.run.positive',i.positivePrompt)}
    {i.negativePrompt&&row('studio.run.negative',i.negativePrompt)}
    {i.wildcard&&<>{row('wildcards.title',<><strong>{t(i.wildcard.auto_reroll?'wildcards.activeAuto':'wildcards.active')}</strong><p>{t('wildcards.baseNotice')}</p>{Object.entries(i.wildcard.selection_state).filter(([,s])=>s.enabled).map(([key,s])=><div key={key}>{key} ({s.weight})</div>)}</>)}{row('wildcards.style',i.wildcard.style)}{row('wildcards.seed',i.wildcard.seed)}{row('wildcards.budget',i.wildcard.token_budget)}</>}

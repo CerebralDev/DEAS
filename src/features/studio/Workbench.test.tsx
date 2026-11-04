@@ -14,7 +14,9 @@ import { stopWorkbench, stopWorkbenchJob, runWorkbenchJob, readCurrentWorkbench,
 import { readImageMetadata } from '../../lib/imageMetadata';
 vi.mock('@tauri-apps/api/core',()=>({isTauri:vi.fn(()=>true),convertFileSrc:(p:string)=>`asset://localhost/${p}`,invoke:vi.fn(async()=>({path:'/env/ComfyUI/output',parent:'/env/ComfyUI',entries:[],truncated:false}))}));
 vi.mock('@tauri-apps/api/window',()=>({getCurrentWindow:()=>({onCloseRequested:async()=>()=>{}})}));
-vi.mock('@tauri-apps/api/webview',()=>({getCurrentWebview:()=>({onDragDropEvent:async()=>()=>{}})}));
+const nativeDrops=vi.hoisted(()=>new Set<(event:{payload:{type:'drop';paths:string[];position:{x:number;y:number}}})=>void>());
+const nativeDropFailure=vi.hoisted(()=>({sync:false,async:false}));
+vi.mock('@tauri-apps/api/webview',()=>({getCurrentWebview:()=>{if(nativeDropFailure.sync)throw Error('missing webview');return {onDragDropEvent:async(handler:(event:{payload:{type:'drop';paths:string[];position:{x:number;y:number}}})=>void)=>{if(nativeDropFailure.async)throw Error('unavailable listener');nativeDrops.add(handler);return()=>nativeDrops.delete(handler);}};}}));
 vi.mock('../../lib/recipePrerequisites',()=>({checkRecipePrerequisites:vi.fn(async()=>{throw new Error('offline');})}));
 vi.mock('../../lib/models',()=>({scanModels:vi.fn(),writeModelFamily:vi.fn()}));
 vi.mock('../../lib/imageMetadata',async importOriginal=>({...await importOriginal<typeof import('../../lib/imageMetadata')>(),readImageMetadata:vi.fn(async()=>[] as [string,string][])}));
@@ -23,6 +25,7 @@ const collection=(jobs:JobStatus[]=[],preparing=0)=>({jobs,preparing,capacity:20
 const evidence={baseUrl:'http://127.0.0.1:7801/',recipeId:'checkpoint-text-to-image-diagnostic' as const,version:1 as const,missingNodes:[],generationReady:false as const,
  allowlist:{nodes:['CheckpointLoaderSimple','CLIPTextEncode','EmptyLatentImage','KSampler','VAEDecode','SaveImage'],checkpoints:['a.safetensors','b.safetensors'],loras:['style.safetensors'],samplers:['euler','euler_ancestral','euler_cfg_pp','er_sde','dpmpp_2m','dpm_2','res_multistep','uni_pc','lcm'],schedulers:['normal','simple','linear_quadratic','karras','sgm_uniform','beta']}};
 beforeEach(()=>{
+ nativeDrops.clear();nativeDropFailure.sync=false;nativeDropFailure.async=false;
  vi.mocked(stopWorkbench).mockResolvedValue({...collection(),admissionEpoch:1,outcome:'empty',discarded:0,issues:[]});
  vi.mocked(readCurrentWorkbench).mockImplementation(async()=>{
   const submitted=await Promise.all(vi.mocked(runWorkbenchJob).mock.results.filter(result=>result.type==='return').map(async result=>{try{return await result.value as JobStatus;}catch{return null;}}));
@@ -606,12 +609,135 @@ test('More offers Refine and Upscale; Upscale runs the pass alone (denoise 0, no
  expect(sent).toMatchObject({denoise:0,inputImage:'deas-inputs/result.png',width:2048,height:2048});
  expect(sent.sigmas).toEqual([]); // upscale-only: explicit empty sigma list = no diffusion tail
 });
+const settingsDrop=(path:string)=>fireEvent.drop(screen.getByRole('region',{name:'Preview'}),{dataTransfer:{types:['application/x-deas-media'],getData:()=>JSON.stringify({name:path.split('/').at(-1),path,src:'asset://localhost/'+path,media:path.endsWith('.mp4')?'video':'image'})}});
+test('preview settings drop reads the dropped file without submitting or replacing the editor source',async()=>{
+ vi.mocked(scanModels).mockResolvedValue([{category:'checkpoints',name:'a.safetensors',family:'sdxl',path:'/m/a',size:1,info:null}]);
+ vi.mocked(checkRecipePrerequisites).mockResolvedValue(evidence);
+ vi.mocked(readImageMetadata).mockResolvedValue([['parameters','dropped prompt\nNegative prompt: dropped negative\nSteps: 7, Sampler: Euler, CFG scale: 3, Seed: 11, Size: 512x512, Model: a.safetensors']]);
+ render(<I18nProvider><Workbench endpoint={evidence.baseUrl} roots={{models:'/m'}}/></I18nProvider>);
+ await waitFor(()=>expect(document.querySelector<HTMLButtonElement>('[data-run]')!.disabled).toBe(false));
+ settingsDrop('/outside/dropped.png');
+ await waitFor(()=>expect(screen.getByLabelText('Prompt')).toHaveProperty('value','dropped prompt'));
+ expect(screen.getByLabelText('Steps')).toHaveProperty('value','7');
+ expect(document.querySelector('[data-browsed-preview]')).not.toBeNull();
+ expect(readImageMetadata).toHaveBeenCalledWith('/outside/dropped.png');
+ expect(runWorkbenchJob).not.toHaveBeenCalled();expect(uploadInput).not.toHaveBeenCalled();
+});
+test.each(['layer','base'] as const)('queued settings ask before discarding editor %s edits and cancellation preserves the draft',async edited=>{
+ vi.mocked(scanModels).mockResolvedValue([{category:'checkpoints',name:'a.safetensors',family:'sdxl',path:'/m/a',size:1,info:null}]);
+ vi.mocked(checkRecipePrerequisites).mockResolvedValue(evidence);
+ const intent={recipeId:'checkpoint-text-to-image-diagnostic',version:1,positivePrompt:'queued prompt',negativePrompt:'',checkpoint:'a.safetensors',seed:42,cfg:6,sampler:'euler',scheduler:'normal',outputPrefix:'raw/old',width:1024,height:1024,steps:20} as const;
+ const job={...heldJob('layer-reuse','succeeded'),baseUrl:evidence.baseUrl,outputRoot:'/out',intent,outputs:[{filename:'result.png',subfolder:'',type:'output' as const}]};
+ vi.mocked(readCurrentWorkbench).mockResolvedValue(collection([job]));
+ vi.mocked(invoke).mockImplementation(async(command,args)=>command==='native_media_star_status'?{starred:false,unavailable:null}:{path:(args as {path?:string})?.path??'/out',parent:'/',entries:['source.png','insert.png'].map(name=>({name,path:'/out/'+name,kind:'file',media:'image',symlink:false,size:1,modified:1})),truncated:false});
+ vi.stubGlobal('Image',class{naturalWidth=200;naturalHeight=100;onload=()=>{};set src(_:string){queueMicrotask(()=>this.onload());}});
+ const confirm=vi.spyOn(window,'confirm').mockReturnValue(false);
+ try{
+  render(<I18nProvider><Workbench endpoint={evidence.baseUrl} roots={{models:'/m',output:'/out'}}/></I18nProvider>);
+  fireEvent.click(await screen.findByRole('button',{name:'source.png'}));adopt();
+  const img=screen.getByRole('img',{name:'source.png'});Object.defineProperties(img,{naturalWidth:{value:1024},naturalHeight:{value:640}});fireEvent.load(img);
+  fireEvent.click(screen.getByRole('button',{name:'Image to Image'}));
+  let layer:HTMLElement;
+  if(edited==='base'){layer=screen.getByRole('group',{name:'Base image'});fireEvent.keyDown(layer,{key:'ArrowRight'});expect(layer.style.left).toBe('8px');}
+  else{dropTile('insert.png');layer=await screen.findByRole('group',{name:'Inserted image insert.png [output]'});}
+  const row=document.querySelector('[data-job-id="layer-reuse"] .wb-queue-select')!;
+  (row as HTMLElement).focus();fireEvent.keyDown(row,{key:'F10',shiftKey:true});
+  const menuItem=screen.getByRole('menuitem',{name:'Use these settings'});expect(document.activeElement).toBe(menuItem);
+  fireEvent.keyDown(menuItem,{key:'Escape'});expect(screen.queryByRole('menu')).toBeNull();expect(document.activeElement).toBe(row);
+  fireEvent.keyDown(row,{key:'F10',shiftKey:true});fireEvent.click(screen.getByRole('menuitem',{name:'Use these settings'}));
+  expect(confirm).toHaveBeenCalledTimes(1);expect(document.querySelector('[data-editor-viewport]')).not.toBeNull();expect(layer.isConnected).toBe(true);
+  expect(screen.getByLabelText('Prompt')).not.toHaveProperty('value','queued prompt');
+  confirm.mockReturnValue(true);fireEvent.keyDown(row,{key:'ContextMenu'});fireEvent.click(screen.getByRole('menuitem',{name:'Use these settings'}));
+  expect(screen.getByLabelText('Prompt')).toHaveProperty('value','queued prompt');expect(layer.isConnected).toBe(false);
+  expect(job.intent).toEqual(intent);expect(runWorkbenchJob).not.toHaveBeenCalled();expect(uploadInput).not.toHaveBeenCalled();
+ }finally{confirm.mockRestore();}
+});
+test('file named schedules and explicit empty LoRAs replace stale same-family settings',async()=>{
+ vi.mocked(scanModels).mockResolvedValue([{category:'checkpoints',name:'a.safetensors',family:'sdxl',path:'/m/a',size:1,info:null},{category:'loras',name:'style.safetensors',family:'sdxl',path:'/m/style',size:1,info:null}]);
+ vi.mocked(checkRecipePrerequisites).mockResolvedValue(evidence);
+ localStorage.setItem('deas.pref.studio.run.options',JSON.stringify({...defaultOptions,sigmas:'2, 1, 0'}));
+ localStorage.setItem('deas.pref.studio.run.loras',JSON.stringify([{name:'style.safetensors',strength:1}]));
+ vi.mocked(readImageMetadata).mockResolvedValue([['prompt',JSON.stringify({'1':{class_type:'CheckpointLoaderSimple',inputs:{ckpt_name:'a.safetensors'}},'5':{class_type:'KSampler',inputs:{model:['1',0],seed:42,steps:20,cfg:4,sampler_name:'euler',scheduler:'normal'}}})]]);
+ render(<I18nProvider><Workbench endpoint={evidence.baseUrl} roots={{models:'/m'}}/></I18nProvider>);
+ await waitFor(()=>expect(document.querySelector('[data-model-picker]')).toHaveProperty('value','a.safetensors'));
+ settingsDrop('/outside/named.png');
+ await waitFor(()=>expect(captureStudioSettings()['studio.run.options']).toMatchObject({sigmas:''}));
+ expect(captureStudioSettings()['studio.run.loras']).toEqual([]);expect(screen.getByLabelText('Steps')).toHaveProperty('value','20');
+ expect(runWorkbenchJob).not.toHaveBeenCalled();
+});
+test('file settings resolve LoRAs against the restored model family, not the previous draft',async()=>{
+ vi.mocked(scanModels).mockResolvedValue([{category:'diffusion_models',name:'qwen.safetensors',family:'qwen-image-2.1',path:'/m/qwen',size:1,info:null},{category:'checkpoints',name:'a.safetensors',family:'sdxl',path:'/m/a',size:1,info:null},{category:'loras',name:'style.safetensors',family:'sdxl',path:'/m/style',size:1,info:null}]);
+ vi.mocked(checkRecipePrerequisites).mockResolvedValue(evidence);
+ localStorage.setItem('deas.pref.studio.run.checkpoint','"qwen.safetensors"');
+ vi.mocked(readImageMetadata).mockResolvedValue([['parameters','restored <lora:style.safetensors:0.75>\nSteps: 7, Sampler: Euler, CFG scale: 3, Seed: 11, Size: 512x512, Model: a.safetensors']]);
+ render(<I18nProvider><Workbench endpoint={evidence.baseUrl} roots={{models:'/m'}}/></I18nProvider>);
+ await waitFor(()=>expect(document.querySelector('[data-model-picker]')).toHaveProperty('value','qwen.safetensors'));
+ settingsDrop('/outside/restored.png');
+ await waitFor(()=>expect(document.querySelector('[data-model-picker]')).toHaveProperty('value','a.safetensors'));
+ expect(captureStudioSettings()['studio.run.loras']).toEqual([{name:'style.safetensors',strength:0.75}]);
+ expect(screen.queryByText(/Not carried over:/)).toBeNull();expect(runWorkbenchJob).not.toHaveBeenCalled();
+});
+test.each(['missing.safetensors','same.safetensors','exact.safetensors'])('file settings keep a missing or ambiguous model blocked (%s)',async name=>{
+ vi.mocked(scanModels).mockResolvedValue(['a.safetensors','one/same.safetensors','two/same.safetensors','exact.safetensors','exact.safetensors'].map((name,index)=>({category:'checkpoints',name,family:'sdxl',path:'/m/'+index+'/'+name,size:1,info:null})));
+ vi.mocked(checkRecipePrerequisites).mockResolvedValue(evidence);
+ vi.mocked(readImageMetadata).mockResolvedValue([['parameters',`restore\nSteps: 7, Sampler: Euler, CFG scale: 3, Seed: 11, Size: 512x512, Model: ${name}`]]);
+ render(<I18nProvider><Workbench endpoint={evidence.baseUrl} roots={{models:'/m'}}/></I18nProvider>);
+ await waitFor(()=>expect(document.querySelector<HTMLButtonElement>('[data-run]')!.disabled).toBe(false));
+ settingsDrop('/outside/missing.png');
+ await waitFor(()=>expect(captureStudioSettings()['studio.run.checkpoint']).toBe(name));
+ expect(document.querySelector('[data-run]')).toHaveProperty('disabled',true);
+ expect(screen.getByText(new RegExp('Not carried over:.*'+name.replaceAll('.','\\.')))).toBeTruthy();
+ expect(runWorkbenchJob).not.toHaveBeenCalled();
+});
+test.each(['sync','async'] as const)('unavailable native drop API does not crash Studio (%s)',async failure=>{
+ nativeDropFailure[failure]=true;
+ vi.mocked(scanModels).mockResolvedValue([]);
+ render(<I18nProvider><Workbench endpoint={evidence.baseUrl} roots={{models:'/m'}}/></I18nProvider>);
+ expect(await screen.findByText('Native file drops are unavailable in this view. Use the media library instead.')).toBeTruthy();
+ expect(document.querySelector('[data-workbench]')).not.toBeNull();expect(runWorkbenchJob).not.toHaveBeenCalled();
+});
+test('native preview drop is bounded to the visible stage and resolves a local video without uploading',async()=>{
+ vi.mocked(scanModels).mockResolvedValue([{category:'checkpoints',name:'a.safetensors',family:'sdxl',path:'/m/a',size:1,info:null}]);
+ vi.mocked(checkRecipePrerequisites).mockResolvedValue(evidence);
+ const previous=vi.mocked(invoke).getMockImplementation()!;
+ vi.mocked(invoke).mockImplementation(async(command,args)=>command==='native_media_describe'?[{name:'clip.mp4',path:'/outside/clip.mp4',kind:'file',media:'video',size:1,modified:1,symlink:false}]:previous(command,args));
+ vi.mocked(readImageMetadata).mockResolvedValue([['parameters','native clip prompt\nSteps: 7, Sampler: Euler, CFG scale: 3, Seed: 11, Size: 512x512']]);
+ render(<I18nProvider><Workbench endpoint={evidence.baseUrl} roots={{models:'/m'}}/></I18nProvider>);
+ await waitFor(()=>expect(document.querySelector<HTMLButtonElement>('[data-run]')!.disabled).toBe(false));
+ const stage=screen.getByRole('region',{name:'Preview'});
+ vi.spyOn(stage,'getBoundingClientRect').mockReturnValue({left:100,top:100,right:500,bottom:500,width:400,height:400,x:100,y:100,toJSON:()=>({})});
+ const drop=(x:number,y:number)=>act(()=>{for(const handler of nativeDrops)handler({payload:{type:'drop',paths:['/outside/clip.mp4'],position:{x,y}}});});
+ drop(20,20);expect(readImageMetadata).not.toHaveBeenCalled();
+ drop(150*window.devicePixelRatio,150*window.devicePixelRatio);
+ await waitFor(()=>expect(screen.getByLabelText('Prompt')).toHaveProperty('value','native clip prompt'));
+ expect(readImageMetadata).toHaveBeenCalledWith('/outside/clip.mp4');
+ expect(runWorkbenchJob).not.toHaveBeenCalled();expect(uploadInput).not.toHaveBeenCalled();
+ vi.mocked(invoke).mockImplementation(previous);
+});
+test.each(['edit','edit back','selection','base','base revert','new drop','unmount'] as const)('late metadata cannot overwrite a newer %s',async change=>{
+ vi.mocked(scanModels).mockResolvedValue(['a','b'].map(n=>({category:'checkpoints',name:n+'.safetensors',family:'sdxl',path:'/m/'+n,size:1,info:null})));
+ vi.mocked(checkRecipePrerequisites).mockResolvedValue(evidence);
+ let finish!:(entries:[string,string][])=>void;
+ vi.mocked(readImageMetadata).mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;})).mockResolvedValue([]);
+ if(change.startsWith('base'))vi.mocked(invoke).mockImplementation(async command=>command==='native_media_star_status'?{starred:false,unavailable:null}:{path:'/out',parent:'/',entries:[{name:'source.png',path:'/out/source.png',kind:'file',media:'image',symlink:false,size:1,modified:1}],truncated:false});
+ const mounted=render(<I18nProvider><Workbench endpoint={evidence.baseUrl} roots={{models:'/m',output:'/out'}}/></I18nProvider>);
+ await waitFor(()=>expect(document.querySelector<HTMLButtonElement>('[data-run]')!.disabled).toBe(false));
+ if(change.startsWith('base')){fireEvent.click(await screen.findByRole('button',{name:'source.png'}));adopt();const img=screen.getByRole('img',{name:'source.png'});Object.defineProperties(img,{naturalWidth:{value:1024},naturalHeight:{value:640}});fireEvent.load(img);fireEvent.click(screen.getByRole('button',{name:'Image to Image'}));}
+ settingsDrop('/outside/old.png');await waitFor(()=>expect(finish).toBeTypeOf('function'));
+ if(change==='edit'||change==='edit back'){const prompt=screen.getByLabelText('Prompt');const previous=(prompt as HTMLTextAreaElement).value;fireEvent.change(prompt,{target:{value:'newer edit'}});if(change==='edit back')fireEvent.change(prompt,{target:{value:previous}});}
+ else if(change==='base'||change==='base revert'){const base=screen.getByRole('group',{name:'Base image'});fireEvent.keyDown(base,{key:'ArrowRight'});if(change==='base revert')fireEvent.keyDown(base,{key:'ArrowLeft'});}
+ else if(change==='selection')fireEvent.change(document.querySelector('[data-model-picker]')!,{target:{value:'b.safetensors'}});
+ else if(change==='new drop'){settingsDrop('/outside/new.png');await screen.findByText('The shown file carries no reusable settings or prompt.');}
+ else mounted.unmount();
+ await act(async()=>finish([['parameters','stale prompt\nSteps: 7, Sampler: Euler, CFG scale: 3, Seed: 11, Size: 512x512']]));
+ if(change!=='unmount')expect(screen.getByLabelText('Prompt')).not.toHaveProperty('value','stale prompt');
+ expect(runWorkbenchJob).not.toHaveBeenCalled();
+});
 test('More closes on its own summary and outside clicks; metadata actions apply settings and reuse only the prompt',async()=>{
  vi.mocked(scanModels).mockResolvedValue([{category:'checkpoints',name:'a.safetensors',family:'sdxl',path:'/m/a',size:1,info:null}]);
  vi.mocked(checkRecipePrerequisites).mockResolvedValue(evidence);
  localStorage.setItem('deas.pref.studio.run.pipeline','"i2i"');
- const intent={recipeId:'checkpoint-text-to-image-diagnostic',version:1,positivePrompt:'old',negativePrompt:'',checkpoint:'a.safetensors',seed:42,cfg:6,sampler:'euler',scheduler:'normal',outputPrefix:'raw/old',width:1024,height:1024,steps:20} as const;
- const job={...heldJob('more-menu','succeeded'),outputRoot:'/old-env/output',intent,outputs:[{filename:'result.png',subfolder:'raw',type:'output' as const}]};
+ const job={...heldJob('more-menu','succeeded'),outputRoot:'/old-env/output',outputs:[{filename:'result.png',subfolder:'raw',type:'output' as const}]};
  vi.mocked(readCurrentWorkbench).mockResolvedValue(collection([job]));
  vi.mocked(readImageMetadata).mockResolvedValue([['parameters','imported prompt\nSteps: 7, Sampler: Euler, CFG scale: 3, Seed: 11, Size: 512x512, Model: a.safetensors']]);
  render(<I18nProvider><Workbench endpoint={evidence.baseUrl} roots={{models:'/m',output:'/old-env/output'}}/></I18nProvider>);
@@ -627,7 +753,7 @@ test('More closes on its own summary and outside clicks; metadata actions apply 
  expect(summary.closest('details')!.open).toBe(false);
  fireEvent.click(summary);
  fireEvent.click(document.querySelector('[data-more-apply]')!);
- await waitFor(()=>expect(screen.getByText('All settings applied.')).toBeTruthy());
+ await waitFor(()=>expect(screen.getByText('Only the settings found in this file were applied; missing settings were left unchanged.')).toBeTruthy());
  expect((screen.getByLabelText('Prompt') as HTMLTextAreaElement).value).toBe('imported prompt');
  expect((screen.getByRole('spinbutton',{name:'Seed'}) as HTMLInputElement).value).toBe('11');
  expect(summary.closest('details')!.open).toBe(false);
@@ -637,15 +763,17 @@ test('More closes on its own summary and outside clicks; metadata actions apply 
  expect((screen.getByLabelText('Prompt') as HTMLTextAreaElement).value).toBe('imported prompt');
  expect((screen.getByRole('spinbutton',{name:'Seed'}) as HTMLInputElement).value).toBe('11');
 });
-test('a video gets the More menu: its own job refills the prompt, a video without a job says why',async()=>{
+test('a video gets the More menu: its own job refills the prompt, an uncorrelated file reads metadata',async()=>{
  const made={...heldJob('made','succeeded'),outputRoot:'/out',outputs:[{filename:'clip.mp4',subfolder:'',type:'output' as const}],intent:{recipeId:'video-generation',version:1,family:'ltx-2',positivePrompt:'made clip',negativePrompt:'no blur'} as unknown as JobStatus['intent']};
  const bare={...heldJob('bare','succeeded'),outputRoot:'/out',outputs:[{filename:'other.mp4',subfolder:'',type:'output' as const}]};
  vi.mocked(readCurrentWorkbench).mockResolvedValue(collection([made,bare]));
  render(<I18nProvider><Workbench endpoint="http://original:7801/" roots={{output:'/out'}}/></I18nProvider>);
  await waitFor(()=>expect(document.querySelector('[data-job-id="made"]')).not.toBeNull());
  fireEvent.click(document.querySelector('[data-job-id="bare"] .wb-queue-select')!);
- expect((await waitFor(()=>document.querySelector<HTMLButtonElement>('[data-more-apply]')!)).disabled).toBe(true);
- expect(document.querySelector('[data-more-apply]')!.getAttribute('title')).toContain('no job in the queue');
+ expect((await waitFor(()=>document.querySelector<HTMLButtonElement>('[data-more-apply]')!)).disabled).toBe(false);
+ vi.mocked(readImageMetadata).mockResolvedValueOnce([]);
+ fireEvent.click(document.querySelector('[data-more-apply]')!);
+ await screen.findByText('The shown file carries no reusable settings or prompt.');
  fireEvent.click(document.querySelector('[data-job-id="made"] .wb-queue-select')!);
  await waitFor(()=>expect(document.querySelector<HTMLButtonElement>('[data-more-reuse]')!.disabled).toBe(false));
  fireEvent.click(document.querySelector('[data-more-reuse]')!);
@@ -2152,6 +2280,11 @@ test('a queue click only previews; Use these settings is the explicit restore',a
  expect(screen.getByLabelText('Steps')).toHaveProperty('value','49');
  fireEvent.contextMenu(row);
  expect(document.querySelector('[data-pipeline]')).toHaveProperty('value','t2i');
+ fireEvent.click(screen.getByRole('menuitem',{name:'Reuse prompt'}));
+ expect(screen.getByLabelText('Prompt')).toHaveProperty('value','remembered i2i');
+ expect(screen.getByLabelText('Steps')).toHaveProperty('value','49');
+ expect(document.querySelector('[data-pipeline]')).toHaveProperty('value','t2i');
+ fireEvent.contextMenu(row);
  fireEvent.click(screen.getByRole('menuitem',{name:'Use these settings'}));
  await waitFor(()=>expect(document.querySelector('[data-pipeline]')).toHaveProperty('value','i2i'));
  await waitFor(()=>expect(screen.getByLabelText('Prompt')).toHaveProperty('value','remembered i2i'));

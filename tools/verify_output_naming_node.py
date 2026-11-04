@@ -12,7 +12,7 @@ out.mkdir(parents=True,exist_ok=True)
 js="""import {outputPrefix,defaultOutputNaming} from './src/lib/outputNaming.ts';
 console.log(outputPrefix(defaultOutputNaming,{type:'image',seed:42,model:'folder/My Model.safetensors'},new Date(2026,0,2,3,4,5)));"""
 prefix=subprocess.check_output(['node','--experimental-strip-types','--input-type=module','-e',js],cwd=root,text=True,encoding='utf-8').strip()
-assert prefix=='image/2026-01-02/03-04-05-42-My-Model',prefix
+assert prefix=='raw/image/2026-01-02/03-04-05-42-My-Model',prefix
 sys.argv=['output-naming-probe','--cpu']
 sys.path.insert(0,str(comfy))
 import folder_paths
@@ -50,13 +50,13 @@ for saver in (nodes.SaveImage(),metadata.DaSiWa_MetadataImageSaver()):
   saved=saver.save_images(extra_pnginfo={'deas_output_naming':True},images=torch.zeros((1,8,8,3)),filename_prefix=prefix,**kwargs)
   entry=saved['ui']['images'][0]
   path=out/entry['subfolder']/entry['filename']
-  assert entry['subfolder']=='image/2026-01-02',entry
+  assert entry['subfolder']=='raw/image/2026-01-02',entry
   assert entry['filename'].startswith('03-04-05-42-My-Model-') and entry['filename'].endswith('.png') and '_' not in entry['filename'],entry
   assert path not in paths,'counter reused a filename'
   with Image.open(path) as image:assert image.size==(8,8)
   paths.append(path)
 # Video combine: the video, its audio marker and frame exports share one dash-only counter; the returned path follows.
-vprefix=prefix.replace('image/','video/',1)
+vprefix=prefix.replace('raw/image/','raw/video/',1)
 names=[]
 for _ in range(2):
  saved=video.DaSiWa_EnhancedVideoCombine().combine(images=torch.rand((4,16,16,3)),frame_rate=8,codec='VP9',container='WebM',bit_depth='8',quality=30,pingpong=False,
@@ -64,12 +64,12 @@ for _ in range(2):
   save_first_frame=True,extra_pnginfo={'deas_output_naming':True})
  main=saved['ui']['gifs'][0]['filename'];frame=saved['ui']['images'][0]['filename']
  assert main.endswith('-audio.webm') and '_' not in main and frame==main.removesuffix('.webm')+'-first-frame.png',(main,frame)
- assert Path(saved['result'][1])==out/'video/2026-01-02'/main and Path(saved['result'][1]).is_file(),saved['result'][1]
- assert (out/'video/2026-01-02'/frame).is_file() and main not in names
+ assert Path(saved['result'][1])==out/'raw/video/2026-01-02'/main and Path(saved['result'][1]).is_file(),saved['result'][1]
+ assert (out/'raw/video/2026-01-02'/frame).is_file() and main not in names
  names.append(main)
-assert not list((out/'video/2026-01-02').glob('*_*')),'underscore leftovers'
+assert not list((out/'raw/video/2026-01-02').glob('*_*')),'underscore leftovers'
 # Unmarked standalone saver calls retain their original naming.
 plain=nodes.SaveImage().save_images(images=torch.zeros((1,8,8,3)),filename_prefix='standalone')
 assert plain['ui']['images'][0]['filename'].endswith('_.png')
-assert len(list((out/'image/2026-01-02').glob('*.png')))>=4
+assert len(list((out/'raw/image/2026-01-02').glob('*.png')))>=4
 print(json.dumps({'prefix':prefix,'saved':[str(p) for p in paths],'video':names},indent=2))

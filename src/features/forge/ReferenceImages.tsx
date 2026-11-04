@@ -71,7 +71,24 @@ export function ReferenceImages({ root, target, model, vocab, pictures, onPictur
     } catch { setError(t('forge.refs.unreadable')); }
   };
   const box = useRef<HTMLDivElement>(null);
+  const refs = useRef<HTMLDivElement>(null);
   const adding = useRef(add); adding.current = add;
+  useEffect(() => {
+    const element = refs.current;
+    if (!element) return;
+    const dialogs = 'dialog, [role="dialog"]';
+    const scope = element.closest(`.forge-builder, ${dialogs}`) ?? element;
+    const paste = (event: ClipboardEvent) => {
+      if (event.defaultPrevented || scope.closest('[hidden], dialog:not([open])') || !(event.target instanceof Element)
+        || !scope.contains(event.target) || event.target.closest(dialogs) !== element.closest(dialogs)) return;
+      const files = [...(event.clipboardData?.files ?? [])].filter(file => file.type.startsWith('image/'));
+      if (!files.length) return;
+      event.preventDefault();
+      void adding.current(files);
+    };
+    document.addEventListener('paste', paste);
+    return () => document.removeEventListener('paste', paste);
+  }, []);
   // Native webviews deliver OS file drops as paths for the whole window, never as DOM files.
   useEffect(() => {
     if (!isTauri()) return;
@@ -105,7 +122,7 @@ export function ReferenceImages({ root, target, model, vocab, pictures, onPictur
     <label className="forge-field"><span>{label}</span><select data-forge-ref-select={name} value={value} onChange={e => set(e.target.value)}>{list.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}</select></label>;
   const ruleOf = (key: string) => vocab.roles.find(r => r.key === key)?.rule;
 
-  return <div className="forge-refs">
+  return <div ref={refs} className="forge-refs">
     {pictures.map((p, i) => {
       const fresh = p.readback && p.readback.key === readKey(p);
       return <div key={p.id} className="forge-refcard" data-forge-ref={i + 1}>

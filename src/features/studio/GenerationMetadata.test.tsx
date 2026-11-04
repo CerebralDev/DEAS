@@ -42,29 +42,28 @@ test.each([
  if(generationMs===0)expect(time?.nextElementSibling?.textContent).toBe('0 sec');else expect(time).toBeUndefined();
 });
 
-test('an explicit apply button hands job settings back and reports what was skipped; file rows are display-only in the dock',async()=>{
+test('the metadata restore button hands back the exact immutable job; file rows are display-only in the dock',async()=>{
  localStorage.setItem('deas.locale.v1','en');
- const onApply=vi.fn((s:{checkpoint?:string})=>s.checkpoint==='m'?['Model: m']:[]);
- render(<I18nProvider><GenerationMetadata job={job} onApply={onApply}/></I18nProvider>);
+ const onRestore=vi.fn();
+ render(<I18nProvider><GenerationMetadata job={job} onRestore={onRestore}/></I18nProvider>);
  (await screen.findByRole('button',{name:'Use these settings'})).click();
- expect(onApply).toHaveBeenCalledWith({positive:'<img src=x onerror=alert(1)> forest',negative:'blur',checkpoint:'Krea2/model.safetensors',seed:940563189,steps:8,cfg:1,sampler:'euler',scheduler:'simple',width:896,height:1152,loras:[{name:'style.safetensors',strength:0.7}]});
- expect(await screen.findByText('All settings applied.')).toBeTruthy();
+ expect(onRestore).toHaveBeenCalledExactlyOnceWith(job);
  cleanup();
  const media=(name:string,kind:'image'|'video'='image')=>({name,path:`/images/${name}`,src:`asset:///${name}`,media:kind});
  vi.mocked(readImageMetadata).mockResolvedValueOnce([['parameters','cat\nSteps: 4, Sampler: Euler a, CFG scale: 2, Seed: 9, Size: 64x64, Model: m']]);
- const {rerender}=render(<I18nProvider><GenerationMetadata job={null} media={media('a.png')} onApply={onApply}/></I18nProvider>);
+ const {rerender}=render(<I18nProvider><GenerationMetadata job={null} media={media('a.png')} onRestore={onRestore}/></I18nProvider>);
  expect(await screen.findByText('cat Steps: 4, Sampler: Euler a, CFG scale: 2, Seed: 9, Size: 64x64, Model: m')).toBeTruthy();
  // The dock no longer carries the file's apply button — the preview's More menu owns that action (see Workbench.test).
  expect(screen.queryByRole('button',{name:'Use these settings'})).toBeNull();
  expect(generationSettings([['parameters','cat\nSteps: 4, Sampler: Euler a, CFG scale: 2, Seed: 9, Size: 64x64, Model: m']])).toMatchObject({positive:'cat',checkpoint:'m',seed:9,steps:4,cfg:2,sampler:'euler_ancestral',width:64,height:64});
  // Videos carry only the ComfyUI prompt/workflow container tags.
  vi.mocked(readImageMetadata).mockResolvedValueOnce([['prompt',JSON.stringify({'5':{class_type:'KSampler',inputs:{seed:5,steps:3,cfg:1,sampler_name:'euler',scheduler:'simple'}}})],['workflow','{}']]);
- rerender(<I18nProvider><GenerationMetadata job={null} media={media('clip.mp4','video')} onApply={onApply}/></I18nProvider>);
+ rerender(<I18nProvider><GenerationMetadata job={null} media={media('clip.mp4','video')} onRestore={onRestore}/></I18nProvider>);
  expect(await screen.findByText((t:string)=>t.includes('KSampler #5 · seed'))).toBeTruthy();
  expect(screen.queryByRole('button',{name:'Use these settings'})).toBeNull();
  {const g=generationSettings([['prompt',JSON.stringify({'5':{class_type:'KSampler',inputs:{seed:5,steps:3,cfg:1,sampler_name:'euler',scheduler:'simple'}}})]]); expect(g).toBeTruthy(); expect(g).toMatchObject({seed:5,steps:3,cfg:1,sampler:'euler',scheduler:'simple'});}
  vi.mocked(readImageMetadata).mockResolvedValueOnce([['Description','plain']]);
- rerender(<I18nProvider><GenerationMetadata job={null} media={media('b.png')} onApply={onApply}/></I18nProvider>);
+ rerender(<I18nProvider><GenerationMetadata job={null} media={media('b.png')} onRestore={onRestore}/></I18nProvider>);
  expect(await screen.findByText('plain')).toBeTruthy();expect(screen.queryByRole('button',{name:'Use these settings'})).toBeNull();
 });
 
@@ -94,7 +93,7 @@ test('reads selected local images, clears stale values, ignores late replies and
  vi.mocked(readImageMetadata).mockImplementationOnce(()=>new Promise(resolve=>{finishOld=resolve;}));
  const media=(name:string)=>({name,path:`/images/${name}`,src:`asset:///${name}`,media:'image' as const});
  const {container,rerender}=render(<I18nProvider><GenerationMetadata job={null} media={media('old.png')}/></I18nProvider>);
- expect(screen.getByText('Reading image metadata…')).toBeTruthy();
+ expect(screen.getByText('Reading media metadata…')).toBeTruthy();
  vi.mocked(readImageMetadata).mockResolvedValueOnce([['parameters',JSON.stringify({sui_image_params:{prompt:'<img src=x> imported',model:'old-model',seed:42}})]]);
  rerender(<I18nProvider><GenerationMetadata job={null} media={media('new.png')}/></I18nProvider>);
  expect(await screen.findByText('<img src=x> imported')).toBeTruthy();expect(container.querySelector('img')).toBeNull();
@@ -105,7 +104,7 @@ test('reads selected local images, clears stale values, ignores late replies and
  expect(screen.queryByText('old-model')).toBeNull();expect(await screen.findByText('No embedded metadata found.')).toBeTruthy();
  vi.mocked(readImageMetadata).mockRejectedValueOnce(new Error('bad chunk'));
  rerender(<I18nProvider><GenerationMetadata job={null} media={media('bad.png')}/></I18nProvider>);
- expect(await screen.findByText('Image metadata could not be read.')).toBeTruthy();
+ expect(await screen.findByText('Media metadata could not be read.')).toBeTruthy();
  rerender(<I18nProvider><GenerationMetadata job={job}/></I18nProvider>);
  expect(screen.getByText('Krea2/model.safetensors')).toBeTruthy();
 });

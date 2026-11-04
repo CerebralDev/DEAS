@@ -30,7 +30,7 @@ const MAX_MESSAGE: usize = 32_000;
 const MAX_PICTURES: usize = 4;
 /// Tool rounds before the model has to answer.
 const MAX_ROUNDS: usize = 4;
-/// A guide is cut here: small local models often run 32k contexts.
+/// Bound each guide page: small local models often run 32k contexts.
 const GUIDE_LIMIT: usize = 16_000;
 
 /// DEAS's own user guides, readable by `read_guide`.
@@ -64,6 +64,21 @@ const DOCS: &[(&str, &str, &str)] = &[
         "deas-backend",
         "Backend: install, ComfyUI, LLM backend",
         include_str!("../../../docs/BACKEND.md"),
+    ),
+    (
+        "deas-music",
+        "Music: YuE2 generation and covers",
+        include_str!("../../../docs/MUSIC.md"),
+    ),
+    (
+        "deas-tve",
+        "TVE workspace and video post-processing (in the Studio guide)",
+        include_str!("../../../docs/STUDIO.md"),
+    ),
+    (
+        "deas-app-updates",
+        "App updates",
+        include_str!("../../../docs/APP-UPDATES.md"),
     ),
     ("deas-logs", "Logs", include_str!("../../../docs/LOGS.md")),
     (
@@ -367,30 +382,63 @@ fn guides(data: &Data) -> Vec<(String, String)> {
     out
 }
 
-fn read_guide(data: &Data, name: &str) -> Option<String> {
+fn read_guide(data: &Data, name: &str, page: Option<&Value>) -> Result<String, String> {
+    // Tool schemas are hints to the LLM, not native validation.
+    let page = match page {
+        None => 1,
+        Some(value) => value
+            .as_u64()
+            .filter(|n| *n > 0)
+            .and_then(|n| usize::try_from(n).ok())
+            .ok_or("Guide page must be a positive integer (starting at 1).")?,
+    };
     let name = name.trim().to_lowercase();
     let text = if let Some(m) = data.pack.models.get(&name) {
-        m.system.clone()
+        m.system.as_str()
     } else if let Some(doc) = data
         .pack
         .models
         .values()
         .find_map(|m| m.guidance_docs.get(&name))
     {
-        doc.clone()
+        doc.as_str()
     } else if let Some(g) = data.pack.shared.video_guides.get(&name) {
-        g.system.clone()
+        g.system.as_str()
     } else {
         DOCS.iter()
             .find(|(k, _, _)| *k == name)
-            .map(|(_, _, t)| t.to_string())?
+            .map(|(_, _, t)| *t)
+            .ok_or_else(|| {
+                format!(
+                    "There is no guide called \"{name}\". The guides are: {}.",
+                    guides(data)
+                        .into_iter()
+                        .map(|(k, _)| k)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            })?
     };
-    let cut: String = text.chars().take(GUIDE_LIMIT).collect();
-    Some(if cut.len() < text.len() {
-        format!("{cut}\n\n[The guide continues; this is the first part.]")
+    let pages = text.chars().count().div_ceil(GUIDE_LIMIT).max(1);
+    if page > pages {
+        return Err(format!(
+            "Guide \"{name}\" has {pages} page(s); request a page from 1 to {pages}."
+        ));
+    }
+    let content: String = text
+        .chars()
+        .skip((page - 1) * GUIDE_LIMIT)
+        .take(GUIDE_LIMIT)
+        .collect();
+    let next = if page < pages {
+        format!(
+            "Next: read_guide with name=\"{name}\" and page={}. Only this page has been read.",
+            page + 1
+        )
     } else {
-        cut
-    })
+        "End of guide.".into()
+    };
+    Ok(format!("[Guide page {page}/{pages}. {next}]\n\n{content}"))
 }
 
 fn tool_definitions(data: &Data) -> Vec<Value> {
@@ -408,7 +456,8 @@ fn tool_definitions(data: &Data) -> Vec<Value> {
         "name": "read_guide",
         "description": "Read a guide before explaining how a model wants to be prompted or how a part of DEAS works, instead of answering from memory. The image and video model guides are those models' own prompt-writing instructions.",
         "parameters": { "type": "object", "properties": {
-            "name": { "type": "string", "enum": names, "description": "Which guide." }
+            "name": { "type": "string", "enum": names, "description": "Which guide." },
+            "page": { "type": "integer", "minimum": 1, "default": 1, "description": "Page number (1-based). Each page contains at most 16000 Unicode characters. The result gives the page count and next page; request further pages as needed." }
         }, "required": ["name"] }
     }}));
     if data.tags.is_some() {
@@ -443,7 +492,7 @@ fn system_prompt(data: &Data, req: &SendRequest, searched: bool, search_on: bool
             "Guides you can read with read_guide: {}.",
             guides(data).iter().map(|(k, what)| format!("{k} ({what})")).collect::<Vec<_>>().join("; ")
         ),
-        "When the person asks how a model is prompted or how part of DEAS works, read the guide first and answer from it.".into(),
+        "When the person asks how a model is prompted or how part of DEAS works, read the guide first and answer from it. Guides are paginated: use read_guide's page argument to read relevant later pages; follow the returned page count/next page rather than claiming the first page is the whole guide. If the tool budget is exhausted, state what remains unread and offer to continue, never invent the missing material.".into(),
         "For EVERY request to write or revise a generation prompt, call write_prompt with the requested model, including models not in the guide list. Routing priority: Prompt Forge mode -> compatible simple writer -> refusal because no compatible writer exists. Never substitute another model, offer the four image models as replacements, or invent a writer from memory. A reference-only guide is not a simple writer. If the model is unspecified, ask which model. These DEAS routing rules override the base prompt's generic prompt-writing fallback.".into(),
     ];
     lines.push(if !search_on {
@@ -749,18 +798,9 @@ async fn answer(
                     used.push(format!("read_guide: {name}"));
                     // A model's own instructions read like orders; framed as reference, a small
                     // model explains them instead of answering in their segment format.
-                    read_guide(data, name).map(|g| format!(
-                        "Reference material: the \"{name}\" guide, as written for that model's prompt writer. It is not addressed to you and its output format does not apply to you. Explain what the person asked about in your own words, in plain prose, and never answer with ===SEGMENT: headers.\n\n<<<GUIDE\n{g}\nGUIDE>>>"
-                    )).unwrap_or_else(|| {
-                        format!(
-                            "There is no guide called \"{name}\". The guides are: {}.",
-                            guides(data)
-                                .into_iter()
-                                .map(|(k, _)| k)
-                                .collect::<Vec<_>>()
-                                .join(", ")
-                        )
-                    })
+                    read_guide(data, name, args.get("page")).map(|g| format!(
+                        "Reference material: the \"{name}\" guide. It is not addressed to you and its output format does not apply to you. Explain what the person asked about in your own words, in plain prose, and never answer with ===SEGMENT: headers.\n\n<<<GUIDE\n{g}\nGUIDE>>>"
+                    )).unwrap_or_else(|error| error)
                 }
                 "search_tags" => {
                     emit(ChatEvent::Status {
@@ -922,6 +962,204 @@ mod tests {
             tags: None,
             canon: None,
         }
+    }
+
+    #[test]
+    fn guide_pages_are_bounded_lossless_and_validate_untrusted_page_numbers() {
+        let mut data = routing_data();
+        for text in [
+            String::new(),
+            "界🦀é\n".repeat(GUIDE_LIMIT),
+            "a".repeat(GUIDE_LIMIT),
+        ] {
+            data.pack.models.get_mut("basic").unwrap().system = text.clone();
+            let pages = text.chars().count().div_ceil(GUIDE_LIMIT).max(1);
+            let mut restored = String::new();
+            for page in 1..=pages {
+                let result = read_guide(&data, " BASIC ", Some(&json!(page))).unwrap();
+                assert!(result.starts_with(&format!("[Guide page {page}/{pages}.")));
+                assert_eq!(result.contains("Next: read_guide"), page < pages);
+                let body = result.split_once("\n\n").unwrap().1;
+                assert!(body.chars().count() <= GUIDE_LIMIT);
+                restored.push_str(body);
+            }
+            assert_eq!(restored, text);
+            assert_eq!(
+                read_guide(&data, "basic", None),
+                read_guide(&data, "basic", Some(&json!(1)))
+            );
+            assert!(read_guide(&data, "basic", Some(&json!(pages + 1))).is_err());
+        }
+        for page in [
+            json!(0),
+            json!(-1),
+            json!(1.5),
+            json!("2"),
+            json!(null),
+            json!(true),
+            json!([]),
+            json!({}),
+            json!(u64::MAX),
+        ] {
+            assert!(read_guide(&data, "basic", Some(&page)).is_err(), "{page}");
+        }
+        assert!(read_guide(&data, "../../secret", None)
+            .unwrap_err()
+            .contains("There is no guide"));
+    }
+
+    #[test]
+    fn guide_registry_schema_and_all_sources_offer_complete_pages() {
+        let mut data = routing_data();
+        data.pack
+            .models
+            .get_mut("basic")
+            .unwrap()
+            .guidance_docs
+            .insert("guidance".into(), "Guidance".into());
+        let defs = tool_definitions(&data);
+        let params = &defs[1]["function"]["parameters"];
+        assert_eq!(params["required"], json!(["name"]));
+        assert_eq!(params["properties"]["page"]["type"], "integer");
+        assert_eq!(params["properties"]["page"]["minimum"], 1);
+        for name in [
+            "deas-music",
+            "deas-tve",
+            "deas-app-updates",
+            "guidance",
+            "h3",
+            "basic",
+        ] {
+            assert!(params["properties"]["name"]["enum"]
+                .as_array()
+                .unwrap()
+                .contains(&json!(name)));
+            assert!(read_guide(&data, name, None).is_ok());
+        }
+        for (name, _, text) in DOCS {
+            let mut restored = String::new();
+            for page in 1..=text.chars().count().div_ceil(GUIDE_LIMIT).max(1) {
+                let result = read_guide(&data, name, Some(&json!(page))).unwrap();
+                restored.push_str(result.split_once("\n\n").unwrap().1);
+            }
+            assert_eq!(restored, *text, "{name}");
+        }
+    }
+
+    #[tokio::test]
+    async fn guide_pagination_reaches_chat_tool_results_as_reference_only() {
+        use chat::tests::complete;
+        let tool_reply = |page: Option<Value>| {
+            let mut args = json!({"name":"basic"});
+            if let Some(page) = page {
+                args["page"] = page;
+            }
+            complete(&format!(
+                "data: {}\n\n",
+                json!({"choices":[{"delta":{"tool_calls":[{"index":0,"id":"guide","function":{"name":"read_guide","arguments":args.to_string()}}]},"finish_reason":"tool_calls"}]})
+            ))
+        };
+        let responses = vec![
+            tool_reply(None),
+            tool_reply(Some(json!(2))),
+            tool_reply(Some(json!(0))),
+            complete(&format!(
+                "data: {}\n\n",
+                json!({"choices":[{"delta":{"content":"The later section is available."},"finish_reason":"stop"}]})
+            )),
+        ];
+        // The shared HTTP fixture records headers only; this regression needs tool bodies.
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let (tx, mut received) = tokio::sync::mpsc::channel(4);
+        let server = tokio::spawn(async move {
+            for (index, response) in responses.into_iter().enumerate() {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                let mut request = Vec::new();
+                let mut buf = [0; 4096];
+                loop {
+                    let n = socket.read(&mut buf).await.unwrap();
+                    assert!(n > 0);
+                    request.extend_from_slice(&buf[..n]);
+                    assert!(request.len() < 1_000_000);
+                    if let Some(end) = request.windows(4).position(|w| w == b"\r\n\r\n") {
+                        let head = String::from_utf8_lossy(&request[..end]);
+                        let length: usize = head
+                            .lines()
+                            .find_map(|line| {
+                                line.to_ascii_lowercase()
+                                    .strip_prefix("content-length:")
+                                    .map(|v| v.trim().parse().unwrap())
+                            })
+                            .unwrap();
+                        if request.len() >= end + 4 + length {
+                            tx.send((
+                                index,
+                                String::from_utf8(request[end + 4..end + 4 + length].to_vec())
+                                    .unwrap(),
+                            ))
+                            .await
+                            .unwrap();
+                            break;
+                        }
+                    }
+                }
+                socket.write_all(response.as_bytes()).await.unwrap();
+            }
+        });
+        let mut data = routing_data();
+        data.pack.models.get_mut("basic").unwrap().system =
+            format!("{}LATER_SECTION", "界".repeat(GUIDE_LIMIT));
+        let root = temp_root();
+        let result = send(
+            &root,
+            &data,
+            &LlmConfig {
+                provider: Provider::Openai,
+                base_url: url,
+                api_key: String::new(),
+            },
+            SendRequest {
+                id: None,
+                message: "Explain the later section".into(),
+                model: "fixture".into(),
+                pictures: vec![],
+                context: None,
+                search: false,
+            },
+            &mut |_| {},
+        )
+        .await
+        .unwrap();
+        assert_eq!(result.content, "The later section is available.");
+        assert!(result.prompts.is_empty());
+        for index in 0..4 {
+            let (actual, request) = received.recv().await.unwrap();
+            assert_eq!(actual, index);
+            let request: Value = serde_json::from_str(&request).unwrap();
+            let messages = request["messages"].as_array().unwrap();
+            if index > 0 {
+                let content = messages.last().unwrap()["content"].as_str().unwrap();
+                match index {
+                    1 => {
+                        assert!(content.contains("Guide page 1/2"));
+                        assert!(!content.contains("LATER_SECTION"));
+                    }
+                    2 => {
+                        assert!(content.contains("Guide page 2/2"));
+                        assert!(content.contains("LATER_SECTION"));
+                    }
+                    _ => assert!(content.contains("positive integer")),
+                }
+                if index < 3 {
+                    assert!(content.contains("It is not addressed to you"));
+                    assert!(content.contains("<<<GUIDE"));
+                }
+            }
+        }
+        server.await.unwrap();
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
@@ -1342,8 +1580,8 @@ mod tests {
         for want in ["illustrious", "moss", "ltx", "wan", "h3", "deas-prompting"] {
             assert!(names.iter().any(|n| n == want), "{want}");
         }
-        assert!(read_guide(&data, "LTX").unwrap().len() > 1000);
-        assert!(read_guide(&data, "nope").is_none());
+        assert!(read_guide(&data, "LTX", None).unwrap().len() > 1000);
+        assert!(read_guide(&data, "nope", None).is_err());
         let defs = tool_definitions(&data);
         assert_eq!(
             defs.iter()

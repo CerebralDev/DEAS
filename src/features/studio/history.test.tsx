@@ -3,6 +3,7 @@ import { invoke, isTauri } from '@tauri-apps/api/core';
 import { historicalRows, historyInputSelectionContext, historyRestore, readHistory, type HistoryRecord, type RestoreContext } from './history';
 import { defaultVideoOutput } from '../../lib/videoIntent';
 import type { JobIntent } from '../../lib/jobs';
+import builtinFamilies from '../../families/builtin.json' with { type: 'json' };
 vi.mock('@tauri-apps/api/core',()=>({invoke:vi.fn(),isTauri:vi.fn(()=>true)}));
 const image={recipeId:'checkpoint-text-to-image-diagnostic',version:1,positivePrompt:'forest 猫',negativePrompt:'blur',checkpoint:'exact.safetensors',seed:9007199254740000,width:1216,height:832,steps:17,cfg:4.25,sampler:'euler',scheduler:'normal',outputPrefix:'raw/image/exact'} as const;
 const record=(intent:JobIntent=image):HistoryRecord=>({id:'history-1',clientId:'client',promptId:'prompt',origin:'studio',appVersion:'0.1.48',admittedAt:10,observedAt:20,revision:3,state:'failed',intent,outputs:[],outputRoot:null,backendOrigin:'http://127.0.0.1:7801',error:null});
@@ -97,6 +98,26 @@ test('explicit-selection scopes distinguish backend prefixes/input roots and omi
  expect(credentialed).toBe(clean);expect(credentialed).not.toMatch(/password|secret|private|user/);
  expect(historyInputSelectionContext('http://127.0.0.1:7801/backend-B/','C:/env/input')).not.toBe(clean);
  expect(historyInputSelectionContext('http://127.0.0.1:7801/backend-A/','C:/other/input')).not.toBe(clean);
+});
+test.each(['ltx-2','minimax-h3'] as const)('current %s text-to-video intent has no projection warning with unchanged capabilities',family=>{
+ const {imageFormat,imageCompression,...output}=defaultVideoOutput;void imageFormat;void imageCompression;
+ const intent:JobIntent={recipeId:'video-generation',version:1,positivePrompt:'film',negativePrompt:'',model:'video.safetensors',textEncoder:'clip.safetensors',vae:'vae.safetensors',seed:7,width:768,height:512,frames:family==='ltx-2'?121:124,frameRate:24,steps:8,cfg:1,sampler:'euler',scheduler:'normal',outputPrefix:'raw/video/7',output,...(family==='ltx-2'?{family,ltx:{passes:1,audioVae:'vae.safetensors',textProjection:'clip.safetensors'}}:{family,h3:{mode:'T2VA',audioVae:'vae.safetensors',shiftVideo:10,shiftAudio:3,references:[]}})};
+ const original={...record(intent),state:'succeeded' as const},before=JSON.stringify(original);
+ const restored=historyRestore(original,{...context,models:[{name:'video.safetensors',family}]});
+ expect(restored.pipeline).toBe('t2v');expect(restored.unsupported).toEqual([]);expect(restored.unavailable).toEqual([]);
+ expect(restored.intent).toEqual(intent);expect(JSON.stringify(original)).toBe(before);expect(invoke).not.toHaveBeenCalled();
+});
+test('history accepts the same declared LoRA family as Studio without accepting missing or unrelated LoRAs',()=>{
+ const family=builtinFamilies.find(f=>f.id==='qwen-image-2.1-turbo')!;
+ const intent={...image,sigmas:family.sigmas,diffusion:{textEncoder:'clip.safetensors',vae:'vae.safetensors',clipType:family.clipType!},loras:[{name:'style.safetensors',strength:0.75}]};
+ const current:RestoreContext={...context,models:[{name:image.checkpoint,family:family.id},{name:'style.safetensors',family:'qwen-image-2.1'}]};
+ const original={...record(intent),state:'succeeded' as const},before=JSON.stringify(original);
+ const restored=historyRestore(original,current);
+ expect(restored.unavailable).toEqual([]);expect(restored.unsupported).toEqual([]);
+ expect(restored.intent).toEqual(intent);expect(JSON.stringify(original)).toBe(before);expect(invoke).not.toHaveBeenCalled();
+ expect(historyRestore(original,{...current,models:[current.models[0],{name:'style.safetensors',family:'sdxl'}]}).unavailable).toContain('LoRA: style.safetensors');
+ expect(historyRestore(original,{...current,models:[current.models[0]]}).unavailable).toContain('LoRA: style.safetensors');
+ expect(historyRestore(original,{...current,allow:{...current.allow!,loras:[]}}).unavailable).toContain('LoRA: style.safetensors');
 });
 test('absent effective sigmas cannot silently pick a family default',()=>{
  const restored=historyRestore(record(image),{...context,models:[{name:image.checkpoint,family:'qwen-image-2.1-turbo'}]});

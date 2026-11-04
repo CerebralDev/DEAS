@@ -23,6 +23,8 @@ struct Family {
     clip_type: Option<String>,
     #[serde(default)]
     multiple: Option<u64>,
+    #[serde(default, rename = "temporalLatent")]
+    temporal_latent: bool,
     architectures: Vec<String>,
     bases: Vec<String>,
     model: Vec<Vec<String>>,
@@ -71,6 +73,7 @@ struct Patch {
 #[derive(Default)]
 pub(crate) struct ImageRecipe {
     pub(crate) latent: Option<&'static str>,
+    pub(crate) temporal_latent: bool,
     pub(crate) zero_negative: bool,
     pub(crate) patch: Option<(&'static str, f64)>,
     pub(crate) sigma_node: Option<&'static str>,
@@ -93,6 +96,7 @@ pub(crate) fn image_recipe_by_id(id: &str) -> Option<ImageRecipe> {
 fn recipe_of(f: &'static Family) -> ImageRecipe {
     ImageRecipe {
         latent: f.latent.as_deref(),
+        temporal_latent: f.temporal_latent,
         zero_negative: f.negative.as_deref() == Some("zero"),
         patch: f
             .patch

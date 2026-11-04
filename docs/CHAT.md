@@ -22,7 +22,7 @@ The model decides when to use these; what it used is listed under its answer.
 | Tool | What it does |
 | --- | --- |
 | `write_prompt` | Routes every prompt-writing or revision request for the specified generation model: **Prompt Forge mode first → compatible simple writer → refusal**. A Forge route gives the exact **Studio → Prompt Forge → Write for** selection; it does not change tabs, replace drafts, run a writer or select another model automatically. Only a model without a Forge mode can use its registered simple writer with a nonempty system prompt and supported output contract in its effective default mode; its result appears verbatim as a card with **Copy** and **Send to Generate**. If neither exists, Chat says no compatible prompt writer is available. |
-| `read_guide` | Reads a guide before answering how something works: each image model's own prompt-writing instructions and guidance documents, the **MiniMax H3, Wan 2.2 and LTX 2.3** prompt guides, and DEAS's user guides (Getting started, Studio, Prompting, Chat, Library, Media, Backend, Logs, Projects, Comfy). Each guide is read only up to its first 16,000 characters, so later sections of long guides (most of Studio, Presets/Wildcards in Prompting) are not visible to Chat. "How does LTX prompting work?" reads the LTX guide first. |
+| `read_guide` | Reads model prompt-writing instructions, the MiniMax H3/Wan/LTX guides and bundled DEAS user guides, including Music and App updates. Each call reads at most 16,000 Unicode characters. Optional `page` is a 1-based positive integer (default 1); the response gives page count, next-page instructions and an end marker. Later sections are reachable without dumping the whole document into a small model’s context. `deas-tve` explicitly uses the Studio guide, where TVE is documented; `deas-music` and `deas-app-updates` read their own guides. Native validation rejects invalid or out-of-range pages. |
 | `search_tags` | Looks tags up in the local Danbooru tag database: whether a tag exists, its spelling and how common it is. |
 
 ## Web search
@@ -40,6 +40,8 @@ With a search mode chosen, the **Search** button appears beside the message box.
 - The chat system prompt and guides come from PromptForge's own files, exported into the data pack by `tools/export-forge-pack.mjs`.
 
 ## Limits
+
+- Chat allows four tool rounds per answer. Long guides may need a follow-up message; the model is instructed to disclose unread pages rather than invent their content. Pagination makes the full text reachable, not a guarantee that every LLM will request the relevant pages.
 
 - No rendering or picture editing from chat; make pictures in Studio's Generate (send a prompt there with **Send to Generate**).
 - The family plugin currently provides Prompt Forge modes for **Illustrious/SDXL/Pony, Anima, Krea2, MOSS, MiniMax H3, Wan and LTX**. Chat directs writing requests to those modes, including image models; it no longer asks you to choose one of the four image writers instead of the requested video model.

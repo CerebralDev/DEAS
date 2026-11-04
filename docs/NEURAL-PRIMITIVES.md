@@ -17,7 +17,7 @@ Keep the language selector and chrome small. Do not make the map a long scrollin
 - `NeuralPath`: measured hierarchy road endpoints and directional light/paw/off motion.
 - `NeuralIncludedFeatures`: passive caller-translated microbubbles for the included parts of any parent node/choice; no controls, callbacks or extra graph nodes.
 - `NeuralGraph`: responsive snake packing, stable shell/option measurements and composition, without domain transitions.
-- `setupPresentation(state, focusedStep)`: pure projection of the current active decision and selected history. Persisted domain values remain unchanged.
+- Automatic setup renders its own compact review controls. The retired guided `setupPresentation` projection is no longer used; the shared neural primitives remain available to their actual consumers.
 - `AiOSetup`: actual state changes, explicit native IPC and inline controls, not connector geometry.
 
 `NeuralNode` supports `choices?: NeuralChoice[]` and `selectionMode?: 'single'|'multi'`. Each choice carries its stable ID, heading, optional description/status, selected/disabled state and optional `suggests` target IDs. `NeuralGraph` accepts `history?: NeuralNode[]`; one `onSelect(id)` handles heading, choice and history actions.

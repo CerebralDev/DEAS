@@ -705,6 +705,12 @@ fn compile(i: &Value) -> Result<Value, String> {
             })
         })
         .unwrap_or_default();
+    if recipe.temporal_latent && refine.is_some_and(|r| r.get("tiled").is_some()) {
+        return Err(
+            "Invalid refine.tiled: tiled diffusion does not support temporal latent families"
+                .into(),
+        );
+    }
     let mut graph = json!({
         "1":{"class_type":"CheckpointLoaderSimple","inputs":{"ckpt_name":i["checkpoint"]}},
         "2":{"class_type":"CLIPTextEncode","inputs":{"text":i["positivePrompt"],"clip":["1",1]}},

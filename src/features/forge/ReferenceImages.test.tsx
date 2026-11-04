@@ -9,7 +9,7 @@ import type { NativeReferences } from '../../lib/forge';
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(), isTauri: vi.fn(() => false), convertFileSrc: (p: string) => `asset://${p}` }));
 const os = vi.hoisted(() => ({ drop: undefined as undefined | ((e: { payload: unknown }) => void) }));
 vi.mock('@tauri-apps/api/webview', () => ({ getCurrentWebview: () => ({ onDragDropEvent: async (h: (e: { payload: unknown }) => void) => { os.drop = h; return () => {}; } }) }));
-const vocab: NativeReferences = { roles: [{ key: 'style', label: 'Style' }], fidelity: [{ key: 'loose', label: 'Loose' }], defaultRole: 'style', defaultFidelity: 'loose', max: 4, analyze: true };
+const vocab: NativeReferences = { roles: [{ key: 'style', label: 'Style' }, { key: 'character', label: 'Character' }], fidelity: [{ key: 'loose', label: 'Loose' }, { key: 'strict', label: 'Strict' }], defaultRole: 'style', defaultFidelity: 'loose', max: 4, analyze: true };
 const picture = (id: string): RefPicture => ({ id, name: `${id}.png`, image: `data:image/png;base64,${id}`, role: 'style', fidelity: 'loose', note: '', character: '' });
 function Harness() {
   const [pictures, setPictures] = useState([picture('a'), picture('b')]);
@@ -42,6 +42,89 @@ it('keeps edits to the analyzed reference and its neighbors when analysis return
   expect((notes[0] as HTMLInputElement).value).toBe('new note');
   expect((notes[1] as HTMLInputElement).value).toBe('neighbor edit');
   expect(document.querySelector('[data-forge-readback]')?.hasAttribute('open')).toBe(false);
+});
+
+describe('clipboard pictures', () => {
+  const png = (name = 'clipboard.png') => new File(['pixels'], name, { type: 'image/png' });
+  const paste = (target: Element, files: File[] = [], text = '') => fireEvent.paste(target, {
+    clipboardData: { files, getData: () => text },
+  });
+  const editor = () => render(<I18nProvider><div className="forge-builder"><textarea aria-label="Brief"/><Harness/></div></I18nProvider>);
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('adds clipboard images from the Forge brief using the selected role and fidelity', async () => {
+    editor();
+    fireEvent.change(document.querySelector('[data-forge-ref-select="next-role"]')!, { target: { value: 'character' } });
+    fireEvent.change(document.querySelector('[data-forge-ref-select="next-fidelity"]')!, { target: { value: 'strict' } });
+    expect(paste(screen.getByRole('textbox', { name: 'Brief' }), [png(), new File(['text'], 'note.txt', { type: 'text/plain' })])).toBe(false);
+    const image = await screen.findByAltText('clipboard.png');
+    expect(image.getAttribute('src')).toBe('data:image/png;base64,cGl4ZWxz');
+    const card = image.closest('.forge-refcard')!;
+    expect((card.querySelector('[data-forge-ref-select="role-3"]') as HTMLSelectElement).value).toBe('character');
+    expect((card.querySelector('[data-forge-ref-select="fidelity-3"]') as HTMLSelectElement).value).toBe('strict');
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it('leaves ordinary text and non-image files to the default paste behavior', () => {
+    editor();
+    expect(paste(screen.getByRole('textbox', { name: 'Brief' }), [], 'a city')).toBe(true);
+    expect(paste(document.querySelector('[data-forge-ref-note]')!, [new File(['text'], 'note.txt', { type: 'text/plain' })], 'a note')).toBe(true);
+    expect(document.querySelectorAll('.forge-refcard')).toHaveLength(2);
+  });
+
+  it('does not handle paste outside its editor or in a hidden retained editor', () => {
+    const view = editor();
+    expect(paste(document.body, [png()])).toBe(true);
+    view.container.hidden = true;
+    expect(paste(screen.getByLabelText('Brief'), [png()])).toBe(true);
+    expect(document.querySelectorAll('.forge-refcard')).toHaveLength(2);
+  });
+
+  it('handles an image only in the innermost dialog, even when the outer listener mounts first', async () => {
+    render(<I18nProvider><div role="dialog" aria-label="Outer"><Harness/>
+      <dialog open aria-label="Inner"><textarea aria-label="Inner brief"/><Harness/></dialog>
+    </div></I18nProvider>);
+    expect(paste(screen.getByRole('textbox', { name: 'Inner brief' }), [png()])).toBe(false);
+    await screen.findByAltText('clipboard.png');
+    expect(screen.getAllByAltText('clipboard.png')).toHaveLength(1);
+    expect(screen.getByAltText('clipboard.png').closest('dialog')?.getAttribute('aria-label')).toBe('Inner');
+  });
+
+  it('ignores paste in an unrelated nested dialog without references', () => {
+    render(<I18nProvider><div className="forge-builder"><Harness/>
+      <div role="dialog"><textarea aria-label="Other dialog"/></div>
+    </div></I18nProvider>);
+    expect(paste(screen.getByRole('textbox', { name: 'Other dialog' }), [png()])).toBe(true);
+    expect(document.querySelectorAll('.forge-refcard')).toHaveLength(2);
+  });
+
+  it('respects an already handled paste and removes its listener on unmount', () => {
+    const view = render(<I18nProvider><div className="forge-builder"><textarea aria-label="Brief" onPaste={e => e.preventDefault()}/><Harness/></div></I18nProvider>);
+    const brief = screen.getByRole('textbox', { name: 'Brief' });
+    expect(paste(brief, [png()])).toBe(false);
+    expect(document.querySelectorAll('.forge-refcard')).toHaveLength(2);
+    view.rerender(<I18nProvider><div className="forge-builder"><textarea aria-label="Brief"/></div></I18nProvider>);
+    expect(paste(screen.getByRole('textbox', { name: 'Brief' }), [png()])).toBe(true);
+  });
+
+  it('keeps the existing picture cap and reports overflow even after the drop zone disappears', async () => {
+    editor();
+    paste(screen.getByRole('textbox', { name: 'Brief' }), [png('c.png'), png('d.png'), png('e.png')]);
+    expect((await screen.findByRole('alert')).textContent).toContain('At most 4');
+    await waitFor(() => expect(document.querySelectorAll('.forge-refcard')).toHaveLength(4));
+    expect(document.querySelector('.forge-refdrop')).toBeNull();
+    expect(paste(screen.getByRole('textbox', { name: 'Brief' }), [png('f.png')])).toBe(false);
+    expect(screen.getByRole('alert').textContent).toContain('At most 4');
+    expect(document.querySelectorAll('.forge-refcard')).toHaveLength(4);
+  });
+
+  it('uses the existing unreadable error and preserves current pictures on decode failure', async () => {
+    vi.stubGlobal('createImageBitmap', vi.fn().mockRejectedValue(new Error('decode failed')));
+    editor();
+    paste(screen.getByRole('textbox', { name: 'Brief' }), [new File(['bad'], 'bad.gif', { type: 'image/gif' })]);
+    expect((await screen.findByRole('alert')).textContent).toBe('That picture could not be read.');
+    expect(document.querySelectorAll('.forge-refcard')).toHaveLength(2);
+  });
 });
 
 describe('native file drops', () => {

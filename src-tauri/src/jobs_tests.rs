@@ -2544,6 +2544,82 @@ async fn live_mask_upload() {
 }
 
 #[test]
+fn temporal_latent_tiled_refine_direct_intents_are_rejected() {
+    for (family, clip_type) in [("anima", "stable_diffusion"), ("krea-2", "krea2")] {
+        for selection in ["family", "diffusion", "clipType"] {
+            let mut i = intent();
+            i["diffusion"] = json!({"textEncoder":"clip.safetensors","clipType":clip_type,"vae":"vae.safetensors"});
+            if selection == "family" {
+                i["family"] = json!(family);
+                i["diffusion"]["family"] = json!("sdxl");
+            } else if selection == "diffusion" {
+                i["diffusion"]["family"] = json!(family);
+            }
+            i["refine"] = json!({"width":1024,"height":1536,"denoise":0.3});
+            assert!(compile(&i).is_ok(), "untiled {family}/{selection}");
+            i["refine"]["tiled"] = json!({"tileWidth":512,"tileHeight":768,"overlap":64});
+            assert!(
+                compile(&i).unwrap_err().contains("temporal latent"),
+                "{family}/{selection}"
+            );
+        }
+    }
+    for family in ["anima", "krea-2", "minimax-h3"] {
+        let mut i = intent();
+        i["family"] = json!(family);
+        i["refine"] = json!({"width":1024,"height":1536,"denoise":0.3,"tiled":{"tileWidth":512,"tileHeight":768,"overlap":64}});
+        assert!(compile(&i).unwrap_err().contains("temporal latent"));
+        i["steps"] = json!(2);
+        i["sigmas"] = json!([1.0, 0.5, 0.0]);
+        i["refine"]["sigmas"] = json!([0.5, 0.0]);
+        assert!(compile(&i).unwrap_err().contains("temporal latent"));
+        if family != "minimax-h3" {
+            i["refine"].as_object_mut().unwrap().remove("tiled");
+            assert_eq!(
+                compile(&i).unwrap()["R5"]["class_type"],
+                "SamplerCustomAdvanced"
+            );
+        }
+    }
+    // An explicit SDXL selection wins over a conflicting diffusion-family hint.
+    let mut i = intent();
+    i["family"] = json!("sdxl");
+    i["diffusion"] = json!({"family":"anima","textEncoder":"clip.safetensors","clipType":"stable_diffusion","vae":"vae.safetensors"});
+    i["refine"] = json!({"width":1024,"height":1536,"denoise":0.3,"tiled":{"tileWidth":512,"tileHeight":768,"overlap":64}});
+    assert_eq!(
+        compile(&i).unwrap()["RT"]["class_type"],
+        "DaSiWaTiledDiffusion"
+    );
+    // H3 already rejects every refine pass, including direct tiled requests.
+    i["family"] = json!("minimax-h3");
+    i["diffusion"]["clipType"] = json!("minimax");
+    i["diffusion"]["family"] = json!("minimax-h3");
+    i["inputImage"] = json!("ref.png");
+    i["denoise"] = json!(0.5);
+    i["h3Edit"] = json!({"shiftVideo":3,"shiftAudio":3});
+    assert!(compile(&i)
+        .unwrap_err()
+        .contains("refine pass are not supported"));
+}
+
+#[tokio::test]
+async fn temporal_latent_tiled_refine_prepare_rejects_before_backend_access() {
+    let jobs = Jobs::default();
+    for family in ["anima", "krea-2", "minimax-h3"] {
+        let mut i = intent();
+        i["family"] = json!(family);
+        i["refine"] = json!({"width":1024,"height":1536,"denoise":0.3,"tiled":{"tileWidth":512,"tileHeight":768,"overlap":64}});
+        // A valid but unbound endpoint proves rejection happens before capability discovery.
+        let error = jobs
+            .prepare("http://127.0.0.1:1".into(), i)
+            .await
+            .unwrap_err();
+        assert!(error.contains("temporal latent"), "{family}: {error}");
+        assert!(jobs.lock().unwrap().plan.is_none());
+    }
+}
+
+#[test]
 fn refine_pass_upscales_resizes_and_resamples_after_the_first_decode() {
     let mut i = intent();
     i["refine"] =
@@ -4048,6 +4124,10 @@ fn native_reference_graphs_match_typescript_compiler_end_to_end() {
             }
             if clip != "moss_image" && variant > 1 {
                 i["refine"] = json!({"width":1024,"height":1536,"denoise":0.4,"tiled":{"tileWidth":512,"tileHeight":768,"overlap":64}});
+                if crate::model_families::image_recipe(clip).temporal_latent {
+                    assert!(compile(&i).unwrap_err().contains("temporal latent"));
+                    i["refine"].as_object_mut().unwrap().remove("tiled");
+                }
                 if variant == 3 {
                     i["steps"] = json!(2);
                     i["sigmas"] = json!([1, 0.5, 0]);

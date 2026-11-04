@@ -119,14 +119,11 @@ export function MediaLibrary({selected,onSelect,roots={},outputRevision=0,filter
   void (async()=>{
    try{const stop=await getCurrentWebview().onDragDropEvent(e=>{
     // A modal owns its drops; retained background browsers must not consume them too.
-    const modal=document.querySelector('dialog[open], [aria-modal="true"]');
-    if(modal){
-     const el=dropBox.current;
-     if(!el||!modal.contains(el)){setDragging(false);return;}
-     if(e.payload.type!=='leave'){
-      const r=el.getBoundingClientRect(),x=e.payload.position.x/devicePixelRatio,y=e.payload.position.y/devicePixelRatio;
-      if(x<r.left||x>r.right||y<r.top||y>r.bottom){setDragging(false);return;}
-     }
+    const modal=document.querySelector('dialog[open], [aria-modal="true"]'),el=dropBox.current;
+    if(!el||el.closest('[hidden]')||(modal&&!modal.contains(el))){setDragging(false);return;}
+    if(e.payload.type!=='leave'){
+     const r=el.getBoundingClientRect(),x=e.payload.position.x/devicePixelRatio,y=e.payload.position.y/devicePixelRatio;
+     if(r.width<=0||r.height<=0||x<r.left||x>r.right||y<r.top||y>r.bottom){setDragging(false);return;}
     }
     if(e.payload.type==='enter'||e.payload.type==='over')setDragging(true);
     else{setDragging(false);if(e.payload.type==='drop')void currentDrop.current(e.payload.paths);}

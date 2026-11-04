@@ -230,6 +230,25 @@ fn running_interrupt_source_backed_launch_proof_and_queue_race() {
 }
 
 #[test]
+fn output_naming_python_contract_fixture() {
+    let result = Command::new("/usr/bin/python3")
+        .args([
+            "-c",
+            include_str!("output_naming_tests.py"),
+            include_str!("output_naming.py"),
+        ])
+        .env_remove("PYTHONPATH")
+        .env("PYTHONDONTWRITEBYTECODE", "1")
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+}
+
+#[test]
 fn output_naming_adapter_is_installed_and_refuses_symlinks() {
     let (tmp, _) = fixture(SERVER);
     install_output_naming(tmp.path()).unwrap();

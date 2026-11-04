@@ -26,9 +26,16 @@ def publish(files):
                 os.link(source, target)
                 done.append(target)
             break
-        except FileExistsError:
+        except BaseException as error:
+            rollback_failed = False
             for target in done:
-                target.unlink()
+                try:
+                    target.unlink()
+                except OSError as cleanup_error:
+                    error.add_note(f"DEAS output naming rollback failed for {target}: {cleanup_error}")
+                    rollback_failed = True
+            if not isinstance(error, FileExistsError) or rollback_failed:
+                raise
             counter += 1
     for source, _ in files:
         source.unlink()
@@ -69,8 +76,9 @@ def prepare(data):
     if data.get("extra_data", {}).get("extra_pnginfo", {}).get("deas_output_naming"):
         for name in SAVERS:
             cls = nodes.NODE_CLASS_MAPPINGS.get(name)
-            save = getattr(cls, cls.FUNCTION) if cls else None
-            if save and not getattr(save, "_deas_naming", False):
+            function = getattr(cls, "FUNCTION", None)
+            save = getattr(cls, function, None) if isinstance(function, str) else None
+            if callable(save) and not getattr(save, "_deas_naming", False):
                 wrapped = wrap_save(save)
                 wrapped._deas_naming = True
                 setattr(cls, cls.FUNCTION, wrapped)

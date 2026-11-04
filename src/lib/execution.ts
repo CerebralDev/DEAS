@@ -316,8 +316,9 @@ export function compileRecipe(input: unknown, verified: unknown): CompiledRecipe
   if (intent.wildcard&&!allowlist.nodes.includes(wildcardNode)) throw new RecipeCompileError('MISSING_CAPABILITY',wildcardNode,'Wildcard plugin is unavailable.','Install the DaSiWa node pack or disable wildcards.');
   const d = intent.diffusion;
   // Family-declared recipe points (latent node, zeroed negative, sampling patch); unknown architectures keep the plain graph.
-  const recipeList = families as unknown as { id?: string; clipType?: string; latent?: string; negative?: string; patch?: { node: string; shift?: number }; sigmaNode?: string; encodeNode?: string }[];
-  const recipe = recipeList.find(f => f.id === (d?.family ?? intent.family)) ?? recipeList.find(f => d !== undefined && f.clipType === d.clipType);
+  const recipeList = families as unknown as { id?: string; clipType?: string; temporalLatent?: boolean; latent?: string; negative?: string; patch?: { node: string; shift?: number }; sigmaNode?: string; encodeNode?: string }[];
+  const recipe = recipeList.find(f => f.id === intent.family) ?? recipeList.find(f => f.id === d?.family) ?? recipeList.find(f => d !== undefined && f.clipType === d.clipType);
+  if (recipe?.temporalLatent && intent.refine?.tiled) throw new RecipeCompileError('INVALID_INTENT', 'refine.tiled', 'Tiled diffusion does not support temporal latent families.', 'Disable tiled refine for the selected family.');
   const loras = intent.loras ?? [];
   if (isGguf(intent.checkpoint) && !d) throw new RecipeCompileError('INVALID_INTENT','checkpoint','GGUF requires a diffusion recipe with separate text encoder and VAE.','Select a compatible split-model family.');
   if (d && isGguf(d.vae)) throw new RecipeCompileError('INVALID_INTENT','diffusion.vae','GGUF VAE is unsupported.','Select a supported VAE file.');

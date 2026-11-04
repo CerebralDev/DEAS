@@ -1,5 +1,14 @@
 # News
 
+## 0.2.14 BETA (unreleased)
+
+- Output-naming failures preserve originals and roll back incomplete publications. Temporal tiled-refine restrictions now also apply to direct native requests. Old guided-setup-only code is removed without changing automatic installation.
+
+- Paste clipboard pictures into the active Forge editor; ordinary text paste still works. Chat can read later guide pages, including Music, App updates and TVE documentation, within its existing tool budget.
+
+- Reuse image/video settings from the media context menu, preview toolbar or a preview drop. Queue prompt reuse is separate and never starts generation. Embedded metadata is explicitly partial; exact queued intents take precedence.
+- Restoring compatible Qwen Image 2.1 Turbo LoRAs no longer reports the base family as incompatible; missing models remain blocked.
+
 ## 0.2.13 BETA
 
 - **SD3 and SD3.5 are selectable.** Pick `clip_l`/`clip_g` and `t5xxl` in the two encoder slots plus the SD3 VAE; the recipe uses the dual CLIP loader, the SD3 latent and a shift-3 sampling patch.

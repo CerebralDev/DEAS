@@ -16,9 +16,17 @@ type Entries = Vec<(String, String)>;
 
 #[tauri::command]
 pub async fn native_media_metadata(path: String) -> Result<Vec<(String, String)>, String> {
-    tauri::async_runtime::spawn_blocking(move || read_metadata(Path::new(&path)))
+    let result = tauri::async_runtime::spawn_blocking(move || read_metadata(Path::new(&path)))
         .await
-        .map_err(|e| e.to_string())?
+        .map_err(|_| "Media metadata reader failed".to_string())
+        .and_then(|value| value);
+    if let Err(error) = &result {
+        crate::logs::push(
+            crate::logs::Source::Deas,
+            &format!("ERROR [media.metadata] read: {error}"),
+        );
+    }
+    result
 }
 
 pub fn read_metadata(path: &Path) -> Result<Vec<(String, String)>, String> {
@@ -605,6 +613,25 @@ mod tests {
     use std::sync::atomic::{AtomicU64, Ordering};
 
     static SERIAL: AtomicU64 = AtomicU64::new(0);
+
+    #[tokio::test]
+    async fn metadata_command_errors_reach_shared_logs_without_paths() {
+        let after = crate::logs::native_logs(0)
+            .last()
+            .map_or(0, |entry| entry.seq);
+        let error = native_media_metadata("private-prompt-name.png".into())
+            .await
+            .unwrap_err();
+        assert_eq!(error, "Media path must be absolute");
+        let entries = crate::logs::native_logs(after);
+        assert!(entries.iter().any(|entry| {
+            entry.source == crate::logs::Source::Deas
+                && entry.text == "ERROR [media.metadata] read: Media path must be absolute"
+        }));
+        assert!(!entries
+            .iter()
+            .any(|entry| entry.text.contains("private-prompt-name")));
+    }
     struct Fixture(std::path::PathBuf);
     impl Fixture {
         fn new(data: &[u8]) -> Self {

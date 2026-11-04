@@ -71,9 +71,21 @@ fn tidy_body(body: &str) -> String {
 fn is_meta_notes(label: &str) -> bool {
     matches!(
         label.trim().to_lowercase().as_str(),
-        "notes" | "note" | "notes about the prompt" | "explanation" | "explanations"
-            | "reasoning notes" | "thinking" | "thoughts" | "analysis" | "commentary"
-            | "comment" | "comments" | "meta" | "summary" | "feedback"
+        "notes"
+            | "note"
+            | "notes about the prompt"
+            | "explanation"
+            | "explanations"
+            | "reasoning notes"
+            | "thinking"
+            | "thoughts"
+            | "analysis"
+            | "commentary"
+            | "comment"
+            | "comments"
+            | "meta"
+            | "summary"
+            | "feedback"
     )
 }
 
@@ -217,6 +229,9 @@ mod tests {
         let text = "===SEGMENT: Positive prompt===\na\n===SEGMENT: Negative prompt===\nb\n===SEGMENT: Summary===\nkeep me\n";
         let expected = ["Positive prompt", "Negative prompt", "Summary"];
         let (segs, _) = parse(text, &expected, &[]).unwrap();
-        assert_eq!(segs.iter().find(|s| s.label == "Summary").unwrap().body, "keep me");
+        assert_eq!(
+            segs.iter().find(|s| s.label == "Summary").unwrap().body,
+            "keep me"
+        );
     }
 }

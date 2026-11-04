@@ -48,6 +48,19 @@ test.each([undefined,'invalid', '125','40','0'])('opacity defaults to 75% and pr
  expect((document.querySelector('.sie-mask') as HTMLCanvasElement).style.opacity).toBe(String(Number(expected)/100));
 });
 
+test('content revisions track repeated mask/base paint, clearing and reverted transforms',()=>{
+ const {ref,onMask}=mount(),vp=document.querySelector('[data-editor-viewport]')!;
+ let previous=ref.current!.contentRevision();
+ const changed=()=>{expect(ref.current!.contentRevision()).toBeGreaterThan(previous);previous=ref.current!.contentRevision();};
+ paint(vp);changed();expect(onMask).toHaveBeenLastCalledWith(true);
+ paint(vp,60,60);changed();expect(onMask).toHaveBeenLastCalledWith(true);
+ fireEvent.click(screen.getByRole('button',{name:'Base image'}));fireEvent.click(screen.getByRole('button',{name:'Brush'}));
+ paint(vp);changed();paint(vp,60,60);changed();
+ fireEvent.click(screen.getByRole('button',{name:'Clear'}));changed();
+ fireEvent.click(screen.getByRole('button',{name:'Select'}));const base=screen.getByRole('group',{name:'Base image'});
+ fireEvent.keyDown(base,{key:'ArrowRight'});changed();fireEvent.keyDown(base,{key:'ArrowLeft'});changed();
+ expect(base.style.left).toBe('0px');
+});
 test('base image exposes brushes and can be moved like an inserted image',()=>{
  mount();fireEvent.click(screen.getByRole('button',{name:'Base image'}));
  const brush=screen.getByRole('button',{name:'Brush'});
