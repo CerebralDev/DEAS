@@ -81,11 +81,11 @@ window.__TAURI_INTERNALS__.invoke=async(c,a)=>{
         select('android-white')
         page.evaluate("window.__themePacks=window.__themePacks.filter(p=>p.id!=='android-white')")
         refresh()
-        assert page.locator('html').get_attribute('data-theme') is None
+        assert page.locator('html').get_attribute('data-theme') == 'android-white'  # built-in restored, additive
         assert page.locator('html').get_attribute('data-theme-pack') is None
         return_to_studio()
         quick()
-        expect(page.locator('[data-scheme="android-white"]')).to_have_count(0)
+        expect(page.locator('[data-scheme="android-white"]')).to_have_count(1)
         page.locator('.studio-quick > button').click()
         page.evaluate('values=>window.__themePacks=values', data)
         refresh()
@@ -130,7 +130,7 @@ window.__TAURI_INTERNALS__.invoke=async(c,a)=>{
         collection.assert_clean(page, errors)
         forbidden = page.evaluate("__collection.calls.filter(c=>/(_start|_stop|_write|_send|_generate|_run|_submit|_cancel)$/.test(c.command))")
         assert not forbidden, forbidden
-        result = {'status': 'PASS', 'kind': 'Chromium with strict simulated IPC and actual pack manifests/assets', 'checks': ['all supplied classic palettes and navigation retention', 'deleted active Android White disappears; Default recovery and restoration', 'legacy IDs and reload', 'prompt retention', 'runtime refresh after palette edit', 'removed pack fallback and asset cleanup', 'restored pack reapplies', 'French PNG cursor', 'mouse door activation and Escape', 'wine progress follows retained native job percentage', 'Paris scene', 'six optional-theme viewports', 'no remote requests, writes or generation'], 'screenshots': str(shots)}
+        result = {'status': 'PASS', 'kind': 'Chromium with strict simulated IPC and actual pack manifests/assets', 'checks': ['all supplied classic palettes and navigation retention', 'deleted active Android White pack falls back to the always-available built-in; restoration reapplies the override', 'legacy IDs and reload', 'prompt retention', 'runtime refresh after palette edit', 'removed pack fallback and asset cleanup', 'restored pack reapplies', 'French PNG cursor', 'mouse door activation and Escape', 'wine progress follows retained native job percentage', 'Paris scene', 'six optional-theme viewports', 'no remote requests, writes or generation'], 'screenshots': str(shots)}
         (shots/'result.json').write_text(json.dumps(result, indent=2)+'\n')
         print(json.dumps(result, indent=2), flush=True)
     finally:

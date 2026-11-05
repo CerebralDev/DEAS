@@ -11,7 +11,7 @@ Theme packs extend DEAS's existing colour picker with local palettes and optiona
 3. Copy individual folders from the repository's `theme-packs/classic/themes` into that directory. For example: `<your-environment>/themes/sage/theme.json`. Do not overwrite an existing customized folder; back it up or give a copy a new unique ID.
 4. Click **Refresh themes**, then choose a theme in Quick Settings. Refresh applies colour/image changes without rebuilding or restarting the backend. Restarting DEAS also scans the folder.
 
-Nine palettes are supplied: Sage, Default, Liiti Pink, VOID (legacy ID `voud`), Alluring Abyss, Slimy Teal, Clawy Grey, Android White and Dragon's Hoard. Before an environment is selected, the compiled choices remain available. Once an environment is selected, pack folders own availability: deleting Android White and refreshing removes it from the menu. Only Default remains permanently available for recovery. The application does not automatically copy or overwrite packs in your environment.
+Nine palettes are supplied: Sage, Default, Liiti Pink, VOID (legacy ID `voud`), Alluring Abyss, Slimy Teal, Clawy Grey, Android White and Dragon's Hoard. The eight built-in schemes are always available; supplied packs add to the menu and a pack reusing a built-in ID overrides that entry in the selected environment. Deleting a pack folder and refreshing only removes its own entry. The application does not automatically copy or overwrite packs in your environment.
 
 French and Paris are optional separate packs in `theme-packs/optional/themes`; copy either in the same way. Neither is installed or selected automatically. Their artwork retains its source/license files.
 

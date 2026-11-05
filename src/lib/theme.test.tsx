@@ -31,24 +31,26 @@ test('failed scans clear custom images and retain Default recovery without resur
  vi.mocked(invoke).mockResolvedValue(catalog([pack]));render(<Probe/>);await screen.findByText('Sage');fireEvent.click(screen.getByRole('button'));
  vi.mocked(invoke).mockRejectedValue(new Error('native unavailable'));await refreshThemePacks('/env');
  await waitFor(()=>expect(document.documentElement.dataset.themePack).toBeUndefined());expect(document.documentElement.dataset.theme).toBeUndefined();
- expect(availableSchemes().map(s=>s.id)).toEqual(['default']);
-});
+ expect(availableSchemes().map(s=>s.id)).toEqual(['default','liiti-pink','voud','alluring-abyss','slimy-teal','clawy-grey','android-white','dragons-hoard']);
+ });
 
-test('deleting selected Android White removes its menu entry and palette on refresh; restoration reapplies it',async()=>{
- const android={...pack,id:'android-white',name:'Android White',base:'android-white'};
+ test('built-ins stay available; a pack overriding Android White is additive and its removal restores the built-in',async()=>{
+ const android={...pack,id:'android-white',name:'Android White Custom',base:'android-white',colors:{panel:'#010203'}};
  localStorage.setItem('deas.pref.appearance.scheme',JSON.stringify(android.id));
  vi.mocked(invoke).mockResolvedValue(catalog([android]));await refreshThemePacks('/env');
- expect(availableSchemes().some(s=>s.id===android.id)).toBe(true);
+ expect(availableSchemes().filter(s=>s.id===android.id)).toHaveLength(1);
  expect(document.documentElement.dataset.theme).toBe(android.id);
+ expect(document.documentElement.dataset.themePack).toBe(android.id);
+ expect(availableSchemes().length).toBe(8); // 7 built-ins + 1 override, nothing lost
  vi.mocked(invoke).mockResolvedValue(catalog([]));await refreshThemePacks('/env');
- expect(availableSchemes().map(s=>s.id)).toEqual(['default']);
- expect(document.documentElement.dataset.theme).toBeUndefined();
+ expect(availableSchemes().map(s=>s.id)).toEqual(['default','liiti-pink','voud','alluring-abyss','slimy-teal','clawy-grey','android-white','dragons-hoard']);
+ expect(document.documentElement.dataset.theme).toBe(android.id); // built-in palette, not Default
+ expect(document.documentElement.dataset.themePack).toBeUndefined();
  expect(document.documentElement.style.getPropertyValue('--panel')).toBe('');
- applySavedScheme();expect(document.documentElement.dataset.theme).toBeUndefined();
  expect(JSON.parse(localStorage.getItem('deas.pref.appearance.scheme')!)).toBe(android.id);
  vi.mocked(invoke).mockResolvedValue(catalog([android]));await refreshThemePacks('/env');
  expect(document.documentElement.dataset.themePack).toBe(android.id);
-});
+ });
 
 test('onboarding keeps classic choices before an environment is selected',()=>{
  expect(availableSchemes()).toHaveLength(8);

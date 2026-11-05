@@ -36,9 +36,9 @@ export function applyScheme(id: SchemeId) {
   for(const key of applied)root.style.removeProperty(key);applied.clear();
   delete root.dataset.themePack;delete root.dataset.themePresentation;delete root.dataset.themeMouse;
   delete root.dataset.themeCursor;delete root.dataset.themeScrollbar;
-  // With an environment selected, its folders own availability. Compiled palettes
-  // remain pack bases, but must not resurrect a deleted menu entry.
-  const pack=state.packs.find(p=>p.id===id),base=pack?.base??(!state.root&&SCHEMES.some(s=>s.id===id)?id:'default');
+  // Built-in schemes are always available; packs are additive and may
+  // override a built-in ID as their base for this environment.
+  const pack=state.packs.find(p=>p.id===id),base=pack?.base??(SCHEMES.some(s=>s.id===id)?id:'default');
   if (base === 'default') delete root.dataset.theme;
   else root.dataset.theme = base;
   if(pack){
@@ -72,7 +72,8 @@ export function useThemeCatalog(root?:string){
  return catalog;
 }
 export function availableSchemes(){
- return [...SCHEMES.filter(s=>(!state.root||s.id==='default')&&!state.packs.some(p=>p.id===s.id)),...state.packs.map(p=>({id:p.id,name:p.name,swatch:[p.colors.graphite??p.colors.panel??'#20262b',p.colors.ok??p.colors.blue??'#7c9cac'] as readonly[string,string]}))];
+ const ids=new Set(state.packs.map(p=>p.id));
+ return [...SCHEMES.filter(s=>!ids.has(s.id)),...state.packs.map(p=>({id:p.id,name:p.name,swatch:[p.colors.graphite??p.colors.panel??'#20262b',p.colors.ok??p.colors.blue??'#7c9cac'] as readonly[string,string]}))];
 }
 
 /** Reapply the saved choice against the current environment catalog. */
