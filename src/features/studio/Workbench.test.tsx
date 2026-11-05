@@ -4611,3 +4611,23 @@ test('Recent history restores a music record into the cover pipeline with every 
  await waitFor(()=>expect(run.disabled).toBe(false));
  expect(uploadInput).not.toHaveBeenCalled();expect(runWorkbenchJob).not.toHaveBeenCalled();
 });
+
+test('variable chips show picks and remove exactly that token occurrence from the prompt',async()=>{
+ vi.mocked(checkRecipePrerequisites).mockResolvedValue({...evidence,allowlist:{...evidence.allowlist,checkpoints:['m.safetensors'],nodes:[...evidence.allowlist.nodes,'DaSiWa_WildcardPresetPromptBuilder']}});
+ localStorage.setItem('deas.pref.studio.run.wildcardEnabled',JSON.stringify(true));
+ localStorage.setItem('deas.pref.studio.run.wildcard',JSON.stringify({style:'Booru',seed:7,reroll:3,token_budget:200,auto_reroll:false}));
+ localStorage.setItem('deas.pref.studio.run.customVariables',JSON.stringify({color:['red','blue']}));
+ vi.mocked(invoke).mockImplementation(async c=>c==='native_wildcard_library'?JSON.stringify({categories:{}}):{entries:[],truncated:false});
+ vi.mocked(scanModels).mockResolvedValue([{category:'checkpoints',name:'m.safetensors',path:'/m/checkpoints/m.safetensors',size:1,info:null}]);
+ vi.mocked(runWorkbenchJob).mockResolvedValue({id:'chip-job',baseUrl:evidence.baseUrl,promptId:'p',state:'succeeded',outputs:[],error:null,generationReady:false,intent:undefined as never});
+ render(<I18nProvider><Workbench endpoint={evidence.baseUrl} roots={{models:'/m'}}/></I18nProvider>);
+ await waitFor(()=>expect(screen.getByRole('button',{name:'Run'}).hasAttribute('disabled')).toBe(false));
+ const positive=screen.getByLabelText('Prompt') as HTMLTextAreaElement;
+ fireEvent.change(positive,{target:{value:'a $color cat with ${color}-light and $color'}});
+ const chips=await screen.findAllByRole('button',{name:/^\$color/});
+ expect(chips.length).toBe(3);
+ fireEvent.click(screen.getAllByRole('button',{name:'Remove color from the prompt'})[0]);
+ await waitFor(()=>expect(positive.value).toBe('a  cat with ${color}-light and $color'));
+ fireEvent.click(screen.getAllByRole('button',{name:'Remove color from the prompt'})[0]);
+ await waitFor(()=>expect(positive.value).toBe('a  cat with -light and $color'));
+});

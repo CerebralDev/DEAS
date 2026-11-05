@@ -37,5 +37,6 @@
   "wildcards.customInvalid": "JSON des variables personnalisées invalide : {message}",
   "wildcards.varPick": "Épingler {key}",
   "wildcards.varRandom": "Aléatoire (seed)",
-  "wildcards.varUnknown": "Variable inconnue {name}"
+  "wildcards.varUnknown": "Variable inconnue {name}",
+  "wildcards.chipRemove": "Retirer {name} du prompt"
 }

@@ -37,5 +37,6 @@
   "wildcards.customInvalid": "カスタム変数の JSON が無効です: {message}",
   "wildcards.varPick": "{key} を固定",
   "wildcards.varRandom": "ランダム（シード）",
-  "wildcards.varUnknown": "不明な変数 {name}"
+  "wildcards.varUnknown": "不明な変数 {name}",
+  "wildcards.chipRemove": "{name} をプロンプトから削除"
 }

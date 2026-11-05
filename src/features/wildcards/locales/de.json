@@ -37,5 +37,6 @@
   "wildcards.customInvalid": "JSON für eigene Variablen ungültig: {message}",
   "wildcards.varPick": "{key} festlegen",
   "wildcards.varRandom": "Zufall (Seed)",
-  "wildcards.varUnknown": "Unbekannte Variable {name}"
+  "wildcards.varUnknown": "Unbekannte Variable {name}",
+  "wildcards.chipRemove": "{name} aus dem Prompt entfernen"
 }

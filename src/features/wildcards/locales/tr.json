@@ -37,5 +37,6 @@
   "wildcards.customInvalid": "Özel değişken JSON'u geçersiz: {message}",
   "wildcards.varPick": "{key} sabitle",
   "wildcards.varRandom": "Rastgele (seed)",
-  "wildcards.varUnknown": "Bilinmeyen değişken {name}"
+  "wildcards.varUnknown": "Bilinmeyen değişken {name}",
+  "wildcards.chipRemove": "{name} değerini istemden kaldır"
 }

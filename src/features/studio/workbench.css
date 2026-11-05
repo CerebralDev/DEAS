@@ -336,5 +336,8 @@
 .wb-dock[data-collapsed] { min-height: 0; }
 .wb-dock[data-collapsed] > :not(.wb-dock-handle, .wb-pane-toggle) { display: none; }
 .wb-var-chips { display: flex; flex-wrap: wrap; gap: 5px; margin: 4px 0; }
-.wb-var-chip { font-family: monospace; font-size: 11px; padding: 2px 7px; border: 1px solid rgb(var(--blue-rgb) / 0.4); border-radius: 999px; background: none; color: var(--ok); cursor: pointer; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wb-var-chip { display: inline-flex; align-items: center; gap: 2px; font-family: monospace; font-size: 11px; padding: 2px 7px; border: 1px solid rgb(var(--blue-rgb) / 0.4); border-radius: 999px; background: none; color: var(--ok); max-width: 100%; white-space: nowrap; }
 .wb-var-chip:hover { background: rgb(var(--blue-rgb) / 0.15); }
+.wb-var-chip-main { background: none; border: none; color: inherit; font: inherit; cursor: pointer; max-width: 100%; overflow: hidden; text-overflow: ellipsis; padding: 0; }
+.wb-var-chip-x { background: none; border: none; color: inherit; font: inherit; line-height: 1; cursor: pointer; padding: 0 2px; opacity: 0.7; }
+.wb-var-chip-x:hover { opacity: 1; }
