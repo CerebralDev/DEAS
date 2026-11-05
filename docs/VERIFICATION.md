@@ -1,5 +1,20 @@
 # DEAS verification — native baseline, optional capabilities and languages
 
+## Release 0.2.14 (published)
+
+Tag `v0.2.14` at commit `8e95cd60f986f8a33860218da62ddd2b1b92262a` (tree `f2e56cc565e351c2248283025fdf457943fac3ec`), GitHub release published with the four-asset set; rolled up the untagged 0.2.11/0.2.12 sections.
+
+Local build from a clean worktree at the tag (`bash build-linux.sh --release`, shared `CARGO_TARGET_DIR`), rustc 1.97.0, node v26.13.0.
+
+Gates on the release tree: `npm run typecheck`, `npm test` (core + UI, 0 failed), `cargo fmt --check`, `cargo clippy --locked --release --lib --bins -- -D warnings`, `cargo test --locked -- --test-threads=1` (745 passed, 0 failed), `cargo xwin check --locked --target x86_64-pc-windows-msvc --all-targets`, `cargo xwin clippy --locked --target x86_64-pc-windows-msvc --all-targets -- -D warnings`.
+
+Linux glibc floor 2.39 (`objdump -T` max symbol version); `ldd`: zero 'not found'. Embedded frontend `index-D7Ss886d.js` byte-present in both binaries. Windows exe is cross-built (MSVC): first real Windows launch is the acceptance test. NSIS installer/portable zip require a native Windows runner; not shipped.
+
+SHA-256 (verified with `sha256sum -c` before upload and again after `gh release download`):
+
+- `43e6211124821d9e2b9bc84e74b8f272c455dc5fbdb0122cbfe876d439758e44`  BUILD-MANIFEST.json
+- `14e8d70cc4a93189fdfeb85e249c963153f313e94a878a9d241a46f434080a1e`  deas.exe
+- `c42addbdcb0640b56040b0bbf30aec62758ec6fc9db7f4532b9eee90662ef0c8`  deas-linux-amd64
 ## Drop-in theme packs (0.2.14, shipped in 0.2.14)
 
 Theme-only adoption of `DEAS-0.2.13-THEME-PLUGIN-UPDATE.zip` (SHA-256 `48ef7537…f934e97`, verified against its MANIFEST embedded hashes) into the current application. The separate Beginner interface and its executable were not imported; all 0.2.13 native/frontend files were ported by hand onto current sources, not copied wholesale.
