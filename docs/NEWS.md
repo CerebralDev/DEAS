@@ -2,6 +2,8 @@
 
 ## 0.2.14 BETA (unreleased)
 
+- Install local colour/image themes from `theme-packs/`, customize them with the offline editor and apply changes through Quick Settings → Refresh themes. French and Paris remain optional; existing packs and saved selections are not overwritten. [Theme packs](THEME-PACKS.md).
+
 - Reuse SwarmUI `Stable-Diffusion` and `Lora` folders through the existing model-root settings, including existing directory links. Model-family sidecars are saved beside the actual file without moving weights. The checkpoint dropdown filters candidates for the current pipeline and keeps an unavailable saved selection explicit.
 
 - Hand-edited config files saved with a UTF-8 BOM (PowerShell, VS Code "UTF-8 with BOM") now read correctly: startup settings, model folders, Studio presets, wildcard libraries and opened JSON documents.

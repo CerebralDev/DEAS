@@ -33,6 +33,14 @@ DEAS — Dark Engine AI Studio is maintained under the [darksidewalker GitHub pr
 
 Tests/builds also rely on Node/npm, Vitest/Testing Library, Playwright and their dependencies. Manifests/lockfiles identify packages and versions; this credits list is not an exhaustive legal notice inventory. Model weights, vendor SDKs and gated assets carry separate terms.
 
+## Theme packs and image decoder
+
+The drop-in theme implementation, offline editor, Sage palette and optional French/Paris presentations are adapted from the supplied `DEAS-0.2.13-THEME-PLUGIN-UPDATE.zip` (a separate CHOPIN-requested local edition). Original DEAS/character palettes remain credited to Dasiwa / Darksidewalker. The theme-only adoption does not import the separate Beginner application.
+
+French/Paris artwork retains its source manifest and notices in each [optional pack](../theme-packs/optional/themes/): Twemoji graphics by Twitter and contributors (CC-BY 4.0, `LICENSE-TWEMOJI.txt`), Wikimedia Eiffel artwork and the Openclipart street lamp (`SOURCES.json`). Preserve these notices when sharing customized packs.
+
+Static WebP validation uses the pure-Rust [image-webp 0.2.4](https://crates.io/crates/image-webp/0.2.4) (MIT OR Apache-2.0), with [byteorder-lite 0.1.0](https://crates.io/crates/byteorder-lite/0.1.0) (Unlicense OR MIT) and [quick-error 2.0.1](https://crates.io/crates/quick-error/2.0.1) (MIT OR Apache-2.0). Corresponding notices are retained under [`theme-decoder-licenses/`](theme-decoder-licenses/); exact versions/integrity are pinned by Cargo.lock. PNG uses the existing decoder.
+
 ## Behavioral and planned integration references
 
 These are sources inspected for architecture/behavior, **not claims that their full implementations are bundled or ported into DEAS**:

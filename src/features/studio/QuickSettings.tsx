@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { useI18n } from '../../i18n/I18nProvider';
-import { SCHEMES, useScheme } from '../../lib/theme';
+import { availableSchemes, useScheme, useThemeCatalog,refreshThemePacks } from '../../lib/theme';
 import './quickSettings.css';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { DICTIONARY_EVENT, reportPromptSpellcheckError, usePromptTools } from '../../lib/promptTools';
 
-export function QuickSettings(){
+export function QuickSettings({root}:{root?:string}={}){
+ const themes=useThemeCatalog(root);
+ const [folderError,setFolderError]=useState(false);
  const tools=usePromptTools();
  // Dictionary status only (read-only, no network); the install lives under Backend → Language.
  const [dictionaries,setDictionaries]=useState(0);
@@ -39,9 +41,18 @@ export function QuickSettings(){
    <button type="button" aria-pressed={tools.autocomplete} onClick={()=>tools.update({autocomplete:!tools.autocomplete})}>{t('settings.prompt.autocomplete')}</button>
    <div className="studio-quick-schemes" role="group" aria-label={t('studio.quick.scheme')}>
     <span className="studio-quick-label">{t('studio.quick.scheme')}</span>
-    {SCHEMES.map(s=><button key={s.id} type="button" data-scheme={s.id} aria-pressed={scheme===s.id} onClick={()=>setScheme(s.id)}>
+    {availableSchemes().map(s=><button key={s.id} type="button" data-scheme={s.id} aria-pressed={scheme===s.id} onClick={()=>setScheme(s.id)}>
      <span className="studio-quick-swatch" aria-hidden="true" style={{background:s.swatch[0],boxShadow:`inset -9px 0 0 ${s.swatch[1]}`}}/>{s.name}
     </button>)}
+   </div>
+   <div className="theme-pack-actions">
+    <small>{t(root?'theme.ui.folderHint':'theme.ui.chooseEnvironment')}</small>
+    <button type="button" data-theme-action="refresh" disabled={!root||!isTauri()||themes.loading} onClick={()=>void refreshThemePacks(root)}>{t(themes.loading?'theme.ui.loading':'theme.ui.refresh')}</button>
+    <button type="button" data-theme-action="folder" disabled={!root||!isTauri()} onClick={()=>{setFolderError(false);void invoke('native_theme_folder',{root}).catch(()=>setFolderError(true));}}>{t('theme.ui.openThemesFolder')}</button>
+    {folderError&&<p role="status">{t('theme.ui.folderFailed')}</p>}
+    {themes.directory&&<small className="theme-pack-directory">{themes.directory}</small>}
+    {(themes.error||themes.warnings.length>0)&&<p role="status">{t('theme.ui.someThemePacksCouldNotBeLoadedBuilt')}</p>}
+    {!availableSchemes().some(s=>s.id===scheme)&&<p role="status">{t('theme.ui.theSavedThemeIsUnavailableDefaultIsShown')}</p>}
    </div>
   </div>}
  </div>;

@@ -1,4 +1,6 @@
 pub mod auth;
+pub mod themes;
+pub use themes::{native_theme_folder, native_theme_packs};
 pub mod spellcheck;
 pub mod video;
 pub mod video_post;

@@ -19,6 +19,7 @@ Top-level tabs: Studio · Library · Prompt Forge · Chat · TVE · Run Plan · 
 | GGUF models and **Edit meta…** architecture assignment | [GGUF and manual architecture](STUDIO.md#gguf-models-and-manual-architecture-assignment) |
 | Per-pipeline session drafts, prompt counts, spellcheck and tag completion | [Session drafts](STUDIO.md#session-only-pipeline-and-model-drafts-0164-shipped-in-0166) · [Writing aids](STUDIO.md#prompt-writing-aids-0163-shipped-in-0166) |
 | Quick Settings, layout reset and colour schemes | [Layout and Quick Settings](STUDIO.md#layout-last-used-state-and-quick-settings) |
+| Install, refresh and edit local colour/image theme packs | [Theme packs](THEME-PACKS.md) |
 | Music (Text to Music / Cover Music) with YuE2 | [Music](MUSIC.md) |
 | TVE tab: video source inspection, output drafts and bounded native spatial rendering (Linux) | [TVE workspace](STUDIO.md#tve-workspace) |
 | Monitoring tab: last ten generations with timing, live host/GPU telemetry | [Monitoring tab](STUDIO.md#monitoring-tab) |

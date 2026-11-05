@@ -1,0 +1,23 @@
+/* Presentation is opt-in through a validated external pack; palette values come from its manifest. */
+:root[data-theme-presentation="french"] {color-scheme:light}
+:root[data-theme-presentation="french"],:root[data-theme-presentation="french"] button,:root[data-theme-presentation="french"] a,:root[data-theme-presentation="french"] select,:root[data-theme-presentation="french"] summary {cursor:var(--theme-asset-cheese) 3 4,auto}
+:root[data-theme-presentation="french"] * {scrollbar-width:auto;scrollbar-color:auto}
+:root[data-theme-presentation="french"] ::-webkit-scrollbar {width:18px;height:18px}
+:root[data-theme-presentation="french"] ::-webkit-scrollbar-track {background:var(--raised);border:1px solid var(--line);border-radius:12px}
+:root[data-theme-presentation="french"] ::-webkit-scrollbar-thumb {background-color:#e6ad57;background-image:var(--theme-asset-baguette),linear-gradient(90deg,#b87531,#edb85e 40%,#f5c978 66%,#c88b3b);background-size:100% 32px,100% 100%;background-repeat:repeat-y,no-repeat;border:2px solid #dce7ff;border-radius:999px;background-clip:padding-box;min-height:40px}
+:root[data-theme-presentation="french"] ::-webkit-scrollbar-thumb:horizontal {background-image:var(--theme-asset-baguette-horizontal),linear-gradient(#b87531,#edb85e 40%,#f5c978 66%,#c88b3b);background-size:32px 100%,100% 100%;background-repeat:repeat-x,no-repeat;min-width:40px}
+:root[data-theme-presentation="french"] .aio-topbar {background:linear-gradient(90deg,#244e7b 0 33.33%,#fffaf0 33.33% 66.66%,#a5384d 66.66%) top/100% 4px no-repeat,var(--panel)}
+:root[data-theme-presentation="french"] .wb-stage {background:var(--surface) var(--theme-asset-eiffel) right 24px bottom 16px/auto 80% no-repeat}
+.french-wine {display:none}
+:root[data-theme-presentation="french"] .french-wine {display:flex;align-items:center;gap:10px;position:absolute;bottom:18px;left:18px;z-index:8;max-width:calc(100% - 36px);width:200px;padding:9px 13px;background:var(--panel);border:2px solid var(--blue);border-bottom:4px solid var(--ok);border-radius:13px;box-shadow:0 8px 20px #003aa820;pointer-events:none;text-align:left;color:var(--chalk);text-transform:none}
+.french-wine svg {width:64px;height:75px;flex:none;overflow:visible}
+.french-wine small {display:block;font:600 7px 'DM Sans',sans-serif;letter-spacing:1.5px;color:var(--ok)}
+.french-wine strong {display:block;font:400 25px Georgia,serif;margin:7px 0 4px}
+.french-wine span {display:block;font:400 9px 'DM Sans',sans-serif;max-width:100px;overflow-wrap:anywhere;color:var(--muted)}
+.french-wine em {display:block;font:italic 9px Georgia,serif;color:var(--ok);margin-top:5px}
+.french-wine [data-wine-liquid] {transition:y .7s ease,height .7s ease}
+.french-wine.is-indeterminate strong {font-size:16px;line-height:1.2}
+.french-wine.is-indeterminate svg {animation:french-swish 2.4s ease-in-out infinite alternate;transform-origin:center bottom}
+@keyframes french-swish {from{transform:rotate(-7deg)}to{transform:rotate(7deg)}}
+@media(prefers-reduced-motion:reduce){.french-wine [data-wine-liquid]{transition:none}.french-wine.is-indeterminate svg{animation:none}}
+@media(max-width:600px){:root[data-theme-presentation="french"] .french-wine{left:9px;bottom:9px;width:155px;padding:6px 10px;gap:7px}.french-wine svg{width:32px;height:60px}.french-wine strong{font-size:21px}:root[data-theme-presentation="french"] .wb-stage{background-size:auto 125px}}

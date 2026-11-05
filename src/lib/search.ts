@@ -27,6 +27,9 @@ export interface SearchEntry {
 const studio: SearchView = 'studio';
 
 export const searchIndex: readonly SearchEntry[] = [
+  { view: 'backend', tab: 'settings.button', section: 'studio.quick.title', label: 'theme.ui.mouseDoorKnockFourTimesToInviteThe', target: '[data-theme-mouse-door]', aliases: ['mouse', 'cheese', 'easter egg'] },
+  { view: 'backend', tab: 'settings.button', section: 'studio.quick.title', label: 'theme.ui.refresh', target: '[data-theme-action="refresh"]', aliases: ['reload themes', 'theme packs'], reason: 'theme.ui.chooseEnvironment' },
+  { view: 'backend', tab: 'settings.button', section: 'studio.quick.title', label: 'theme.ui.openThemesFolder', target: '[data-theme-action="folder"]', aliases: ['theme directory', 'theme packs'], reason: 'theme.ui.chooseEnvironment' },
   // Studio · settings
   { view: studio, studioTab: 'generate', tab: 'setup.tab.studio', section: 'studio.run.settings', label: 'studio.run.pipeline', target: '[data-pipeline]', aliases: ['mode', 'task'] },
   { view: studio, studioTab: 'generate', tab: 'setup.tab.studio', section: 'studio.run.settings', label: 'studio.run.checkpoint', target: '[data-model-picker]', aliases: ['model'], reason: 'search.reason.models' },
@@ -147,6 +150,7 @@ export interface RevealOutcome {
 
 /** Opens collapsed ancestors, scrolls to the control and flashes it; reports a currently disabled control. */
 export function revealTarget(target: string): RevealOutcome {
+  if(target.startsWith('[data-theme-action='))document.querySelector<HTMLButtonElement>('.studio-quick > button[aria-expanded="false"]')?.click();
   const element = document.querySelector<HTMLElement>(target);
   if (!element) return { state: 'missing' };
   for (let parent = element.parentElement; parent; parent = parent.parentElement) {

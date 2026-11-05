@@ -1,8 +1,13 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { expect, test, vi } from 'vitest';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, expect, test, vi } from 'vitest';
+import { invoke, isTauri } from '@tauri-apps/api/core';
 import { I18nProvider } from '../../i18n/I18nProvider';
 import { QuickSettings } from './QuickSettings';
-import { applySavedScheme } from '../../lib/theme';
+import { applySavedScheme, refreshThemePacks } from '../../lib/theme';
+import { revealTarget, searchIndex } from '../../lib/search';
+
+vi.mock('@tauri-apps/api/core',()=>({invoke:vi.fn(),isTauri:vi.fn(()=>false)}));
+beforeEach(async()=>{vi.mocked(invoke).mockReset();vi.mocked(isTauri).mockReturnValue(false);await refreshThemePacks();});
 
 test('Quick Settings exposes separate layout and authoring reset requests and closes with Escape',()=>{
  localStorage.setItem('deas.locale.v1','en');
@@ -52,4 +57,37 @@ test('a colour scheme applies at once, is remembered and survives a reload; Defa
  fireEvent.click(screen.getByRole('button',{name:'Default'}));
  expect(document.documentElement.dataset.theme).toBeUndefined();
  view.unmount();
+});
+
+test('theme controls are searchable before opening Quick Settings and unavailable without a native environment',async()=>{
+ localStorage.setItem('deas.locale.v1','en');
+ const view=render(<I18nProvider><QuickSettings/></I18nProvider>);
+ for(const key of ['theme.ui.refresh','theme.ui.openThemesFolder']){
+  const entry=searchIndex.find(e=>e.label===key)!;expect(entry).toBeTruthy();
+  act(()=>{revealTarget(entry.target);});
+  expect(revealTarget(entry.target).state).toBe('disabled');
+ }
+ expect(screen.getByRole('button',{name:'Quick Settings'}).getAttribute('aria-expanded')).toBe('true');
+ expect(invoke).not.toHaveBeenCalled();view.unmount();
+});
+
+test('refresh reloads the environment catalog and opening its folder reports failure without hiding it behind a scan',async()=>{
+ localStorage.setItem('deas.locale.v1','en');vi.mocked(isTauri).mockReturnValue(true);
+ vi.mocked(invoke).mockImplementation(async command=>{
+  if(command==='native_theme_packs')return {directory:'/env/themes',packs:[],warnings:[]};
+  if(command==='native_theme_folder')throw Error('folder unavailable');
+  if(command==='native_spellcheck_status')return {available:true,installed:true};
+  throw Error('Unexpected fixture IPC '+command);
+ });
+ const view=render(<I18nProvider><QuickSettings root="/env"/></I18nProvider>);
+ fireEvent.click(screen.getByRole('button',{name:'Quick Settings'}));
+ await waitFor(()=>expect(screen.getByRole('button',{name:'Refresh themes'}).matches(':disabled')).toBe(false));
+ expect(invoke).toHaveBeenCalledWith('native_theme_packs',{root:'/env'});
+ fireEvent.click(screen.getByRole('button',{name:'Refresh themes'}));
+ await waitFor(()=>expect(vi.mocked(invoke).mock.calls.filter(([c])=>c==='native_theme_packs')).toHaveLength(2));
+ fireEvent.click(screen.getByRole('button',{name:'Open themes folder'}));
+ await screen.findByText('Could not open the themes folder. See Logs.');
+ expect(invoke).toHaveBeenCalledWith('native_theme_folder',{root:'/env'});
+ expect(vi.mocked(invoke).mock.calls.filter(([c])=>c==='native_theme_packs')).toHaveLength(2);
+ view.unmount();await refreshThemePacks();
 });

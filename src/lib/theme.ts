@@ -1,4 +1,6 @@
-import { oneOf, readPref, usePref } from './preferences';
+import { readPref, usePref, writePref } from './preferences';
+import {useEffect,useSyncExternalStore} from 'react';
+import {invoke,isTauri} from '@tauri-apps/api/core';
 
 /**
  * Colour schemes, one per OC (owner, 23 Oct 2026). Each is a `data-theme` block in src/themes.css over the colour
@@ -15,20 +17,68 @@ export const SCHEMES = [
   { id: 'android-white', name: 'Android White', swatch: ['#eef1f5', '#0a84ff'] },
   { id: 'dragons-hoard', name: "Dragon's Hoard", swatch: ['#16110b', '#e3b341'] },
 ] as const;
-export type SchemeId = typeof SCHEMES[number]['id'];
+export type SchemeId = string;
 const KEY = 'appearance.scheme';
-const valid = oneOf<SchemeId>(...SCHEMES.map(s => s.id));
+const valid=(v:unknown):v is string=>typeof v==='string'&&/^[a-z0-9-]{1,64}$/.test(v);
+export interface ThemePack {id:string;name:string;author:string;base:string;colors:Record<string,string>;assets:Record<string,string>;presentation:'french'|'paris'|null;effects:{mouse:boolean;wine:boolean}}
+interface ThemeCatalog {directory:string;packs:ThemePack[];warnings:string[]}
+let state:ThemeCatalog&{root:string;loading:boolean;error:boolean;active:ThemePack|null}={directory:'',packs:[],warnings:[],root:'',loading:false,error:false,active:null};
+const listeners=new Set<()=>void>();let epoch=0;const applied=new Set<string>();
+const subscribe=(listener:()=>void)=>{listeners.add(listener);return()=>{listeners.delete(listener);};};
+const snapshot=()=>state;
+const publish=(patch:Partial<typeof state>)=>{state={...state,...patch};for(const listener of listeners)listener();};
+export const useThemeState=()=>useSyncExternalStore(subscribe,snapshot,snapshot);
+const image=(src:string)=>/^data:image\/(?:png|webp);base64,[A-Za-z0-9+/]+=*$/.test(src);
+function property(name:string,value:string){document.documentElement.style.setProperty(name,value);applied.add(name);}
 
 export function applyScheme(id: SchemeId) {
   const root = document.documentElement;
-  if (id === 'default') delete root.dataset.theme;
-  else root.dataset.theme = id;
+  for(const key of applied)root.style.removeProperty(key);applied.clear();
+  delete root.dataset.themePack;delete root.dataset.themePresentation;delete root.dataset.themeMouse;
+  delete root.dataset.themeCursor;delete root.dataset.themeScrollbar;
+  // With an environment selected, its folders own availability. Compiled palettes
+  // remain pack bases, but must not resurrect a deleted menu entry.
+  const pack=state.packs.find(p=>p.id===id),base=pack?.base??(!state.root&&SCHEMES.some(s=>s.id===id)?id:'default');
+  if (base === 'default') delete root.dataset.theme;
+  else root.dataset.theme = base;
+  if(pack){
+   root.dataset.themePack=pack.id;if(pack.presentation)root.dataset.themePresentation=pack.presentation;
+   if(pack.effects.mouse)root.dataset.themeMouse='true';
+   for(const [key,value]of Object.entries(pack.colors)){
+    if(!/^[a-z0-9-]{1,40}$/.test(key)||!/^#(?:[a-f\d]{3}|[a-f\d]{6}|[a-f\d]{8})$/i.test(value))continue;
+    property('--'+key,value);const hex=value.slice(1);const full=hex.length===3?[...hex].map(c=>c+c).join(''):hex;
+    property('--'+key+'-rgb',[0,2,4].map(i=>parseInt(full.slice(i,i+2),16)).join(' '));
+   }
+   for(const [role,src]of Object.entries(pack.assets))if(/^[a-z0-9-]{1,64}$/.test(role)&&image(src))property('--theme-asset-'+role,`url("${src}")`);
+   if(pack.assets.cursor&&image(pack.assets.cursor))root.dataset.themeCursor='true';
+   if(pack.assets.scrollbar&&image(pack.assets.scrollbar))root.dataset.themeScrollbar='true';
+  }
+  publish({active:pack??null});
 }
 
-/** Before the first paint, so a saved scheme never flashes the default one. */
+export async function refreshThemePacks(root?:string){
+ const version=++epoch;
+ if(state.root!==(root??'')){publish({root:root??'',directory:'',packs:[],warnings:[],active:null});applySavedScheme();}
+ if(!root||!isTauri()){publish({loading:false,error:false});return;}
+ publish({loading:true,error:false});
+ try{const result=await invoke<ThemeCatalog>('native_theme_packs',{root});
+  if(version!==epoch)return;
+  publish({...result,loading:false,error:false});applySavedScheme();
+ }catch{if(version===epoch){publish({packs:[],loading:false,error:true});applySavedScheme();}}
+}
+export function useThemeCatalog(root?:string){
+ const catalog=useThemeState();
+ useEffect(()=>{void refreshThemePacks(root);return()=>{epoch++;};},[root]);
+ return catalog;
+}
+export function availableSchemes(){
+ return [...SCHEMES.filter(s=>(!state.root||s.id==='default')&&!state.packs.some(p=>p.id===s.id)),...state.packs.map(p=>({id:p.id,name:p.name,swatch:[p.colors.graphite??p.colors.panel??'#20262b',p.colors.ok??p.colors.blue??'#7c9cac'] as readonly[string,string]}))];
+}
+
+/** Reapply the saved choice against the current environment catalog. */
 export const applySavedScheme = () => applyScheme(readPref(KEY, 'default', valid));
 
 export function useScheme() {
   const [scheme, setScheme] = usePref<SchemeId>(KEY, 'default', valid);
-  return [scheme, (id: SchemeId) => { applyScheme(id); setScheme(id); }] as const;
+  return [scheme, (id: SchemeId) => { if(!valid(id))return;writePref(KEY,id);applyScheme(id); setScheme(id); }] as const;
 }

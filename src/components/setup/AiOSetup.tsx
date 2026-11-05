@@ -12,6 +12,7 @@ import { RepoLinks } from './RepoLinks';
 import { GlobalSearch } from './GlobalSearch';
 import type { SearchEntry } from '../../lib/search';
 import { QuickSettings } from '../../features/studio/QuickSettings';
+import { ThemeAmbient } from '../../features/themes/ThemeEffects';
 import { DownloadWorkspace } from '../../features/downloads/DownloadWorkspace';
 import { FoldersPanel, FolderFields } from '../../features/settings/FoldersPanel';
 import { LanguageSetting } from '../../features/settings/LanguageSetting';
@@ -313,7 +314,7 @@ export function AiOSetup({ onConnectExisting, onInstalled, onEnvironment, studio
    <button type="button" role="tab" data-node="settings" className="aio-tab" disabled={folderPickerBusy} aria-selected={inBackend} onClick={()=>setView('backend')}>{t('settings.button')}</button>
    <button type="button" role="tab" data-node="logs" className="aio-tab" disabled={folderPickerBusy} aria-selected={view==='logs'} onClick={()=>setView('logs')}>{t('logs.title')}</button>
   </div>
-<QuickSettings/><GlobalSearch onNavigate={searchNavigate}/><RepoLinks canStar={verified.includes('github')}/></div>
+<QuickSettings root={installedRoot||undefined}/><ThemeAmbient/><GlobalSearch onNavigate={searchNavigate}/><RepoLinks canStar={verified.includes('github')}/></div>
   {inBackend&&<div className="backend-overview" aria-label={t('setup.overview')}>
    <span data-backend-installed className={installed?'is-set':undefined}>{installed&&<span aria-hidden="true">✓ </span>}{t('setup.backendLifecycle.title')} · <span>{t(installed?'setup.tab.installed':'setup.overview.missing')}</span>{(backendStatus?.state==='starting'||backendStatus?.state==='running')&&<small data-backend-state> · {t(backendStatus.state==='running'?'setup.backendStarted':'setup.backendStarting')}</small>}</span>
    {authProviders.filter(p=>configured.includes(p.id)).map(p=><span key={p.id} className="is-set" title={t('downloads.auth.set')} data-provider-configured={p.id}><span aria-hidden="true">✓ </span>{p.label} · {t('downloads.auth.set')}</span>)}

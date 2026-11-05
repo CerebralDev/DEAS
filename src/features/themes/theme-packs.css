@@ -1,0 +1,11 @@
+.theme-pack-actions{display:flex;flex-direction:column;gap:7px;border-top:1px solid var(--line);margin-top:8px;padding-top:10px}
+.theme-pack-actions small,.theme-pack-actions p{font-size:10px;line-height:1.5;color:var(--muted);margin:0;max-width:260px;overflow-wrap:anywhere}
+.theme-pack-actions button{font-size:11px;padding:7px 10px;text-align:left}
+.studio-quick-actions{max-height:75dvh;overflow:auto}
+:root[data-theme-pack]{background-image:var(--theme-asset-background,none);background-size:cover;background-position:center}
+:root[data-theme-pack] .app-shell{background-image:var(--theme-asset-background,none);background-size:cover;background-position:center}
+:root[data-theme-scrollbar] ::-webkit-scrollbar-thumb{background-image:var(--theme-asset-scrollbar);background-size:100% 100%}
+:root[data-theme-cursor]{cursor:var(--theme-asset-cursor) 3 4,auto}
+:root[data-theme-cursor] button,:root[data-theme-cursor] a{cursor:var(--theme-asset-cursor) 3 4,pointer}
+/* Runtime effect styles are inert unless a validated external pack enables them. */
+:root:not([data-theme-presentation=french]) .french-wine{display:none}

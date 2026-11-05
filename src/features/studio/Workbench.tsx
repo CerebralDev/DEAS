@@ -1,3 +1,4 @@
+import {ThemeScene,ThemeProgress} from '../themes/ThemeEffects';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { backendErrorText } from '../../lib/backendErrors';
 import { type DownloadStatus } from '../../lib/downloads';
@@ -1394,6 +1395,7 @@ const promptTools=forgeContext&&<>
    {columnHandle('settings')}{paneToggle(settingsHidden,setSettingsHidden,'settings','studio-settings',settingsHidden?9:sideSize+5)}
    <div className="wb-center">
     <section className={`wb-stage${!browsed&&sideBySide?' wb-split':''}`} aria-label={t('studio.run.preview')} onDragOver={e=>{if(e.dataTransfer.types.includes(MEDIA_DRAG))e.preventDefault();}} onDrop={e=>{if(e.defaultPrevented)return;const item=draggedItem(e.dataTransfer);if(item&&item.media!=='audio'){e.preventDefault();void applyFileSettings(item,'all',true);}}}>
+     <ThemeScene/><ThemeProgress active={!!current||working||resolving||preparing>0||frontendAdmitting} progress={current?.progress} label={t('studio.run.working')}/>
      {stageWarnings.length>0&&<div className="wb-stage-warning" role="alert">{stageWarnings.map(message=><p key={message}>{message}</p>)}{mossIssues.map(issue=><button type="button" key={issue.name} onClick={issue.reset}>{t('studio.run.opt.reset',{name:issue.name})}</button>)}</div>}
      {(browsed||media||shown)&&<button type="button" className="wb-stage-close" data-preview-close aria-label={t('studio.run.close')} title={t('studio.run.close')} onClick={closePreview}>✕</button>}
      {(browsed||media||shown)&&<button type="button" className="wb-stage-meta" data-metadata-toggle aria-pressed={metaOpen} onClick={()=>setMetaOpen(!metaOpen)}>{t('studio.run.metadata.button')}</button>}

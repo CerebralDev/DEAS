@@ -1,0 +1,20 @@
+{
+  "theme.ui.openThemesFolder": "Tema klasörünü aç",
+  "theme.ui.someThemePacksCouldNotBeLoadedBuilt": "Bazı tema paketleri yüklenemedi. Kurtarma için Default kullanılabilir. Günlüklere bakın.",
+  "theme.ui.theSavedThemeIsUnavailableDefaultIsShown": "Kaydedilen tema kullanılamıyor. Paketi geri yükleyene veya başka tema seçene kadar Default gösterilir.",
+  "theme.ui.pixelVintage": "PİKSEL REKOLTESİ",
+  "theme.ui.wineInProgress": "Şarap hazırlanıyor.",
+  "theme.ui.mouseDoorKnockFourTimesToInviteThe": "Fare kapısı — fareyi davet etmek için dört kez tıklayın",
+  "theme.ui.knockFourTimesQuicklyDodgeTheMouseFor": "Hızla dört kez tıklayın. Fareden 10 saniye kaçın. Escape onu eve gönderir.",
+  "theme.ui.folderHint": "Tema klasörlerini ortamınızın themes klasörüne bırakın.",
+  "theme.ui.chooseEnvironment": "Tema paketlerini yüklemek için Backend altında DEAS ortamınızı seçin.",
+  "theme.ui.loading": "Temalar yükleniyor…",
+  "theme.ui.refresh": "Temaları yenile",
+  "theme.ui.folderFailed": "Tema klasörü açılamadı. Günlüklere bakın.",
+  "theme.ui.wineWaiting": "Biraz nefes alsın…",
+  "theme.ui.mouseIdle": "Dört kez tıklayın. Peynire dikkat!",
+  "theme.ui.mouseCaught": "Peynir çalındı! İşaretçiniz hâlâ çalışıyor.",
+  "theme.ui.mouseEscaped": "Kurtuldunuz! On saniye, peynir kaybı yok.",
+  "theme.ui.mouseChasing": "Yakalayabilirsen yakala! 10 saniye kaçın.",
+  "theme.ui.mouseSafe": "Peyniriniz güvende."
+}

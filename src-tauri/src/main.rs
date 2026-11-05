@@ -99,6 +99,8 @@ fn main() {
             deas::native_workbench_current,
             deas::native_workbench_poll,
             deas::native_workbench_run,
+            deas::native_theme_packs,
+            deas::native_theme_folder,
             deas::native_workbench_stop,
             deas::native_jobs_history,
             deas::native_jobs_history_outputs,

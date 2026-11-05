@@ -1,0 +1,20 @@
+{
+  "theme.ui.openThemesFolder": "Ouvrir le dossier des thèmes",
+  "theme.ui.someThemePacksCouldNotBeLoadedBuilt": "Certains thèmes n’ont pas pu être chargés. Default reste disponible pour rétablir l’affichage. Voir les journaux.",
+  "theme.ui.theSavedThemeIsUnavailableDefaultIsShown": "Le thème enregistré est indisponible. Default est affiché jusqu’à sa restauration ou au choix d’un autre thème.",
+  "theme.ui.pixelVintage": "MILLÉSIME PIXEL",
+  "theme.ui.wineInProgress": "Vin en cours.",
+  "theme.ui.mouseDoorKnockFourTimesToInviteThe": "Porte de la souris — frappez quatre fois pour l’inviter",
+  "theme.ui.knockFourTimesQuicklyDodgeTheMouseFor": "Frappez quatre fois rapidement. Évitez la souris pendant 10 secondes. Échap la renvoie chez elle.",
+  "theme.ui.folderHint": "Placez les dossiers de thèmes dans le dossier themes de votre environnement.",
+  "theme.ui.chooseEnvironment": "Choisissez votre environnement DEAS dans Backend pour charger les thèmes.",
+  "theme.ui.loading": "Chargement des thèmes…",
+  "theme.ui.refresh": "Actualiser les thèmes",
+  "theme.ui.folderFailed": "Impossible d’ouvrir le dossier des thèmes. Voir les journaux.",
+  "theme.ui.wineWaiting": "Laissez-le respirer…",
+  "theme.ui.mouseIdle": "Frappez quatre fois. Gare au fromage !",
+  "theme.ui.mouseCaught": "Vol de fromage ! Votre pointeur fonctionne toujours.",
+  "theme.ui.mouseEscaped": "Bien esquivé ! Dix secondes, aucun fromage perdu.",
+  "theme.ui.mouseChasing": "Attrapez-moi si vous pouvez ! Esquivez pendant 10 secondes.",
+  "theme.ui.mouseSafe": "Votre fromage est en sécurité."
+}

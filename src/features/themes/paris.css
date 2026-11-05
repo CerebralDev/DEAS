@@ -1,0 +1,18 @@
+.paris-scene{display:none}
+:root[data-theme-presentation=paris]{color-scheme:dark}
+:root[data-theme-presentation=paris] .aio-topbar{background:radial-gradient(ellipse at 18% -20%,#d3935130,transparent 40%),radial-gradient(ellipse at 85% -20%,#d3935128,transparent 40%),var(--panel);border-bottom:1px solid #78614760;box-shadow:0 5px 24px #0003}
+:root[data-theme-presentation=paris] .wb-stage{isolation:isolate;background:radial-gradient(ellipse at 50% 90%,#694c6126,transparent 70%),linear-gradient(#101426,#1d1c30 72%,#242130);border:1px solid #5d4d5655}
+:root[data-theme-presentation=paris] .paris-scene{display:block;position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:-1;border-radius:inherit}
+.paris-moon{position:absolute;right:23%;top:10%;width:30px;height:30px;border-radius:50%;background:#fff2d3;box-shadow:0 0 35px #e9caa566,0 0 100px #dba5b426;opacity:.8}
+.paris-lamp{position:absolute;bottom:7%;height:88%;width:11%;opacity:.75}
+.paris-lamp.left{left:2%}.paris-lamp.right{right:2%;transform:scaleX(-1)}
+.paris-lamp img{position:absolute;inset:0 0 auto;width:100%;height:auto;object-fit:contain;z-index:2;filter:brightness(0) saturate(100%) invert(71%) sepia(30%) saturate(410%) hue-rotate(348deg);opacity:.65}
+.paris-lamp::before{content:'';position:absolute;left:50%;top:5%;bottom:0;width:5px;transform:translateX(-50%);border-radius:3px 3px 0 0;background:linear-gradient(90deg,#3d3436,#ab8d69,#514247);box-shadow:2px 0 5px #0004}
+.paris-lamp i{position:absolute;left:-30%;top:-40px;width:160%;height:210px;z-index:3;background:radial-gradient(ellipse at 28% 38%,#ffe3a86b,#f3bf6c20 20%,transparent 50%),radial-gradient(ellipse at 72% 38%,#ffe3a86b,#f3bf6c20 20%,transparent 50%);filter:blur(5px);mix-blend-mode:screen}
+.paris-tower{position:absolute;right:21%;bottom:11%;height:35%;opacity:.25;filter:sepia(1) saturate(.7) brightness(1.5)}
+.paris-river{position:absolute;bottom:-3%;left:0;right:0;height:17%;background:repeating-linear-gradient(178deg,transparent 0 7px,#dab8890c 8px 9px),linear-gradient(0deg,#d7a26e0b,transparent);transform:perspective(150px) rotateX(25deg)}
+.paris-hearts{position:absolute;left:28%;bottom:13%;font:25px Georgia,serif;color:#e4aab0;opacity:.38}
+:root[data-theme-presentation=paris] ::-webkit-scrollbar{width:12px;height:12px}
+:root[data-theme-presentation=paris] ::-webkit-scrollbar-track{background:#151523}
+:root[data-theme-presentation=paris] ::-webkit-scrollbar-thumb{background:#78614c;border:3px solid #151523;border-radius:10px}
+@media(max-width:760px){.paris-lamp{width:24%;height:68%;opacity:.45}.paris-moon{right:30%;width:22px;height:22px}.paris-lamp i{width:140px;height:140px}}

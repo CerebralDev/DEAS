@@ -1,0 +1,20 @@
+{
+  "theme.ui.openThemesFolder": "打开主题文件夹",
+  "theme.ui.someThemePacksCouldNotBeLoadedBuilt": "部分主题包无法加载。仍可使用 Default 恢复显示。请查看日志。",
+  "theme.ui.theSavedThemeIsUnavailableDefaultIsShown": "已保存的主题不可用。恢复主题包或选择其他主题前将显示 Default。",
+  "theme.ui.pixelVintage": "像素佳酿",
+  "theme.ui.wineInProgress": "美酒酿制中。",
+  "theme.ui.mouseDoorKnockFourTimesToInviteThe": "鼠门 — 敲四下邀请小鼠",
+  "theme.ui.knockFourTimesQuicklyDodgeTheMouseFor": "快速敲四下，躲避小鼠10秒。Escape 可让它回家。",
+  "theme.ui.folderHint": "将主题文件夹放入环境的 themes 文件夹。",
+  "theme.ui.chooseEnvironment": "请在 Backend 中选择 DEAS 环境以加载主题包。",
+  "theme.ui.loading": "正在加载主题…",
+  "theme.ui.refresh": "刷新主题",
+  "theme.ui.folderFailed": "无法打开主题文件夹。请查看日志。",
+  "theme.ui.wineWaiting": "让它醒醒酒…",
+  "theme.ui.mouseIdle": "敲四下，小心奶酪！",
+  "theme.ui.mouseCaught": "奶酪被偷了！鼠标指针仍可正常使用。",
+  "theme.ui.mouseEscaped": "逃脱成功！十秒内没有丢失奶酪。",
+  "theme.ui.mouseChasing": "来抓我呀！躲避10秒。",
+  "theme.ui.mouseSafe": "你的奶酪安全了。"
+}

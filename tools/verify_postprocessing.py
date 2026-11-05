@@ -197,11 +197,23 @@ def verify(browser, url, screenshots):
         context.close()
 
 
-def main():
+def main(*, serve=True):
     root = Path(__file__).resolve().parents[1]
     scratch = Path.home()/'.hermes/cache/scratch'
     scratch.mkdir(parents=True, exist_ok=True)
     screenshots = Path(tempfile.mkdtemp(prefix='deas-postprocessing-', dir=scratch))
+    def run(url):
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch()
+            try:
+                print('CHROMIUM '+browser.version, flush=True)
+                verify(browser, url, screenshots)
+            finally:
+                browser.close()
+    # The offline editor needs only file://, not a running app or Vite child.
+    if not serve:
+        run(root.as_uri())
+        return
     with socket.socket() as reserve:
         reserve.bind(('127.0.0.1', 0))
         port = reserve.getsockname()[1]
@@ -221,13 +233,7 @@ def main():
             else:
                 raise RuntimeError('isolated Vite startup timeout')
             print(f'ISOLATED_VITE {url} pid={server.pid}; artifacts={screenshots}', flush=True)
-            with sync_playwright() as playwright:
-                browser = playwright.chromium.launch()
-                try:
-                    print('CHROMIUM '+browser.version, flush=True)
-                    verify(browser, url, screenshots)
-                finally:
-                    browser.close()
+            run(url)
         finally:
             server.terminate()
             try:

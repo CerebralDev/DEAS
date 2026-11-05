@@ -24,7 +24,7 @@ const plan=(r=request)=>({id:'fixture-plan',request:r,steps:[],warnings:[],unsup
 const DEPS=[{id:'environment',ok:true},{id:'python',ok:true},{id:'comfyui',ok:true},{id:'nodes',ok:true},{id:'api',ok:true}];
 function nativeFixture(){
  vi.mocked(isTauri).mockReturnValue(true);
- vi.mocked(invoke).mockImplementation(async(command,args)=>{if(command==='native_llm_read')return defaultLlmConfig;if(command==='native_llm_models')return {models:[],warnings:[]};
+ vi.mocked(invoke).mockImplementation(async(command,args)=>{if(command==='native_theme_packs')return {directory:'/fixture/env/themes',packs:[],warnings:[]};if(command==='native_llm_read')return defaultLlmConfig;if(command==='native_llm_models')return {models:[],warnings:[]};
   if(command==='native_install_defaults')return defaults;
   if(command==='native_install_plan')return plan((args as {request:NativeInstallRequest}).request);
   if(command==='native_detect_hardware')return {backend:null};
@@ -58,7 +58,7 @@ describe('automatic-first installation — read-only mock IPC fixtures',()=>{
    if(command==='native_install_defaults')return defaults;
    if(command==='native_install_plan')return plan((args as {request:NativeInstallRequest}).request);
    if(command==='native_install_start')return {state:'succeeded',logs:[],error:null};
-   if(command==='native_llm_read')return defaultLlmConfig;
+   if(command==='native_theme_packs')return {directory:'/fixture/env/themes',packs:[],warnings:[]};if(command==='native_llm_read')return defaultLlmConfig;
    if(command==='native_llm_models')return {models:[],warnings:[]};
    if(command==='native_settings_read')return {};
    if(command==='native_backend_test')return DEPS;
@@ -118,7 +118,7 @@ describe('automatic-first installation — read-only mock IPC fixtures',()=>{
  });
  it('loads only the owned running endpoint and keeps the editor mounted across tab switches',async()=>{
   nativeFixture();
-  vi.mocked(invoke).mockImplementation(async(c,args)=>{if(c==='native_llm_read')return defaultLlmConfig;if(c==='native_llm_models')return {models:[],warnings:[]};
+  vi.mocked(invoke).mockImplementation(async(c,args)=>{if(c==='native_theme_packs')return {directory:'/fixture/env/themes',packs:[],warnings:[]};if(c==='native_llm_read')return defaultLlmConfig;if(c==='native_llm_models')return {models:[],warnings:[]};
    if(c==='native_install_defaults')return defaults;
    if(c==='native_install_plan')return plan((args as {request:NativeInstallRequest}).request);
    if(c==='native_install_start')return {state:'succeeded',logs:[],error:null};
@@ -153,7 +153,7 @@ describe('automatic-first installation — read-only mock IPC fixtures',()=>{
  });
  it('autostarts after successful fresh provisioning but never before install consent',async()=>{
   nativeFixture();localStorage.removeItem('deas.pref.backend.autostart');
-  vi.mocked(invoke).mockImplementation(async(c,args)=>{if(c==='native_llm_read')return defaultLlmConfig;if(c==='native_llm_models')return {models:[],warnings:[]};
+  vi.mocked(invoke).mockImplementation(async(c,args)=>{if(c==='native_theme_packs')return {directory:'/fixture/env/themes',packs:[],warnings:[]};if(c==='native_llm_read')return defaultLlmConfig;if(c==='native_llm_models')return {models:[],warnings:[]};
    if(c==='native_install_defaults')return defaults;
    if(c==='native_install_plan')return plan((args as {request:NativeInstallRequest}).request);
    if(c==='native_install_start')return {state:'succeeded',stepId:null,logs:[],error:null};
@@ -168,7 +168,7 @@ describe('automatic-first installation — read-only mock IPC fixtures',()=>{
  it.each(['default','running','stopped'])('restores the checked environment respecting one-shot update state: %s',async resume=>{
   nativeFixture();localStorage.setItem('deas.pref.backend.autostart',resume==='running'?'false':'true');localStorage.setItem('deas.pref.install.root','"/custom/env"');
   if(resume!=='default')localStorage.setItem('deas.pref.backend.resumeAfterUpdate',JSON.stringify(resume));
-  vi.mocked(invoke).mockImplementation(async c=>{if(c==='native_llm_read')return defaultLlmConfig;if(c==='native_llm_models')return {models:[],warnings:[]};
+  vi.mocked(invoke).mockImplementation(async c=>{if(c==='native_theme_packs')return {directory:'/fixture/env/themes',packs:[],warnings:[]};if(c==='native_llm_read')return defaultLlmConfig;if(c==='native_llm_models')return {models:[],warnings:[]};
    if(c==='native_files_present')return [true];
    if(c==='native_install_defaults')return defaults;
    if(c==='native_install_plan')return {...plan({...request,storagePath:'/custom/env'}),id:'reopen',reopenId:'reopen'};
@@ -190,7 +190,7 @@ describe('automatic-first installation — read-only mock IPC fixtures',()=>{
  });
  it('recognizes a chosen environment root without nesting another environment directory',async()=>{
   nativeFixture();
-  vi.mocked(invoke).mockImplementation(async(c,args)=>{if(c==='native_llm_read')return defaultLlmConfig;if(c==='native_llm_models')return {models:[],warnings:[]};
+  vi.mocked(invoke).mockImplementation(async(c,args)=>{if(c==='native_theme_packs')return {directory:'/fixture/env/themes',packs:[],warnings:[]};if(c==='native_llm_read')return defaultLlmConfig;if(c==='native_llm_models')return {models:[],warnings:[]};
    if(c==='native_install_defaults')return defaults;
    if(c==='native_pick_directory')return '/chosen/env';
    if(c==='native_files_present')return [true,true];
@@ -209,7 +209,7 @@ describe('automatic-first installation — read-only mock IPC fixtures',()=>{
  });
  it('opens a validated existing environment instead of reinstalling the selected folder',async()=>{
   nativeFixture();const installed=vi.fn();const existing={...plan({...request,storagePath:'/real/existing-env',features:[]}),id:'reopen-preview',reopenId:'reopen-preview'};
-  vi.mocked(invoke).mockImplementation(async(command,args)=>{if(command==='native_llm_read')return defaultLlmConfig;if(command==='native_llm_models')return {models:[],warnings:[]};
+  vi.mocked(invoke).mockImplementation(async(command,args)=>{if(command==='native_theme_packs')return {directory:'/fixture/env/themes',packs:[],warnings:[]};if(command==='native_llm_read')return defaultLlmConfig;if(command==='native_llm_models')return {models:[],warnings:[]};
    if(command==='native_install_defaults')return defaults;
    if(command==='native_install_plan')return (args as {request:NativeInstallRequest}).request.storagePath==='/alias/existing-env'?existing:plan();
    if(command==='native_settings_read')return {models:'/saved/models'};
@@ -226,7 +226,7 @@ describe('automatic-first installation — read-only mock IPC fixtures',()=>{
  });
  it('hands off exact successful native features once, without starting or inspecting a backend',async()=>{
   nativeFixture();const installed=vi.fn();let prepared=plan();
-  vi.mocked(invoke).mockImplementation(async(command,args)=>{if(command==='native_llm_read')return defaultLlmConfig;if(command==='native_llm_models')return {models:[],warnings:[]};
+  vi.mocked(invoke).mockImplementation(async(command,args)=>{if(command==='native_theme_packs')return {directory:'/fixture/env/themes',packs:[],warnings:[]};if(command==='native_llm_read')return defaultLlmConfig;if(command==='native_llm_models')return {models:[],warnings:[]};
    if(command==='native_install_defaults')return defaults;
    if(command==='native_install_plan'){prepared=plan((args as {request:NativeInstallRequest}).request);return prepared;}
    return {state:'succeeded',stepId:null,logs:['installed fixture'],error:null};
@@ -238,7 +238,7 @@ describe('automatic-first installation — read-only mock IPC fixtures',()=>{
   expect(installed.mock.calls[0][0]).toEqual(['director','forge','refmods','continuity']);
   view.rerender(<I18nProvider><AiOSetup onConnectExisting={vi.fn()} onInstalled={features=>installed(features)}/></I18nProvider>);
   expect(installed).toHaveBeenCalledTimes(1);
-  expect(vi.mocked(invoke).mock.calls.map(([command])=>command).filter(c=>c!=='native_spellcheck_status'&&c!=='native_auth_status'&&c!=='native_repo_stars'&&c!=='native_update_check')).toEqual(['native_install_defaults','native_install_plan','native_install_start']);
+  expect(vi.mocked(invoke).mock.calls.map(([command])=>command).filter(c=>c!=='native_theme_packs'&&c!=='native_spellcheck_status'&&c!=='native_auth_status'&&c!=='native_repo_stars'&&c!=='native_update_check')).toEqual(['native_install_defaults','native_install_plan','native_install_start']);
  });
  it.each(['idle','failed','cancelled'] as const)('does not hand off a native %s install',async state=>{
   nativeFixture();const installed=vi.fn();
@@ -248,7 +248,7 @@ describe('automatic-first installation — read-only mock IPC fixtures',()=>{
  });
  it.each(['failed','cancelled'] as const)('re-plans after a %s install instead of reusing its consumed plan',async state=>{
   nativeFixture();let id=0;const started:string[]=[];
-  vi.mocked(invoke).mockImplementation(async(command,args)=>{if(command==='native_llm_read')return defaultLlmConfig;if(command==='native_llm_models')return {models:[],warnings:[]};
+  vi.mocked(invoke).mockImplementation(async(command,args)=>{if(command==='native_theme_packs')return {directory:'/fixture/env/themes',packs:[],warnings:[]};if(command==='native_llm_read')return defaultLlmConfig;if(command==='native_llm_models')return {models:[],warnings:[]};
    if(command==='native_install_defaults')return defaults;
    if(command==='native_install_plan')return {...plan((args as {request:NativeInstallRequest}).request),id:`plan-${++id}`};
    if(command==='native_install_start'){started.push((args as {planId:string}).planId);return {state,stepId:null,logs:['attempt ended'],error:state==='failed'?'uv download stalled':null};}
@@ -262,7 +262,7 @@ describe('automatic-first installation — read-only mock IPC fixtures',()=>{
  it.each(['failed','cancelled'] as const)('recovers from a polled %s install only after choosing a new target',async state=>{
   nativeFixture();let id=0;let usedRoot='';const started:string[]=[];const completion=deferred<unknown>();
   vi.mocked(invoke).mockImplementation(async(command,args)=>{
-   if(command==='native_llm_read')return defaultLlmConfig;
+   if(command==='native_theme_packs')return {directory:'/fixture/env/themes',packs:[],warnings:[]};if(command==='native_llm_read')return defaultLlmConfig;
    if(command==='native_llm_models')return {models:[],warnings:[]};
    if(command==='native_install_defaults')return defaults;
    if(command==='native_install_plan'){
@@ -284,7 +284,7 @@ describe('automatic-first installation — read-only mock IPC fixtures',()=>{
  });
  it('shows a planning error in the review panel where Start would be',async()=>{
   nativeFixture();
-  vi.mocked(invoke).mockImplementation(async command=>{if(command==='native_llm_read')return defaultLlmConfig;if(command==='native_llm_models')return {models:[],warnings:[]};
+  vi.mocked(invoke).mockImplementation(async command=>{if(command==='native_theme_packs')return {directory:'/fixture/env/themes',packs:[],warnings:[]};if(command==='native_llm_read')return defaultLlmConfig;if(command==='native_llm_models')return {models:[],warnings:[]};
    if(command==='native_install_defaults')return defaults;
    if(command==='native_install_plan')throw new Error('unfinished installation fixture');
    return {state:'idle',stepId:null,logs:[],error:null};
@@ -297,7 +297,7 @@ describe('automatic-first installation — read-only mock IPC fixtures',()=>{
  });
  it('hands off only when a running actual install polls succeeded',async()=>{
   nativeFixture();const installed=vi.fn();const completion=deferred<unknown>();
-  vi.mocked(invoke).mockImplementation(async(command,args)=>{if(command==='native_llm_read')return defaultLlmConfig;if(command==='native_llm_models')return {models:[],warnings:[]};
+  vi.mocked(invoke).mockImplementation(async(command,args)=>{if(command==='native_theme_packs')return {directory:'/fixture/env/themes',packs:[],warnings:[]};if(command==='native_llm_read')return defaultLlmConfig;if(command==='native_llm_models')return {models:[],warnings:[]};
    if(command==='native_install_defaults')return defaults;
    if(command==='native_install_plan')return plan((args as {request:NativeInstallRequest}).request);
    if(command==='native_install_status')return completion.promise;
@@ -338,10 +338,10 @@ describe('automatic-first installation — read-only mock IPC fixtures',()=>{
   expect(screen.queryByRole('button',{name:'Confirm & continue'})).toBeNull();expect(invoke).not.toHaveBeenCalled();expect(screen.queryByRole('button',{name:'Start install'})).toBeNull();
  });
  it('reads defaults on the initial Backend view; automatic planning never starts installation; final click confirms once',async()=>{
-  nativeFixture();mount();expect(vi.mocked(invoke).mock.calls.filter(([c])=>c!=='native_spellcheck_status'&&c!=='native_auth_status'&&c!=='native_repo_stars'&&c!=='native_update_check')).toEqual([['native_install_defaults',{}]]);open();await screen.findByText('CPU fallback fixture');
+  nativeFixture();mount();expect(vi.mocked(invoke).mock.calls.filter(([c])=>c!=='native_theme_packs'&&c!=='native_spellcheck_status'&&c!=='native_auth_status'&&c!=='native_repo_stars'&&c!=='native_update_check')).toEqual([['native_install_defaults',{}]]);open();await screen.findByText('CPU fallback fixture');
   expect(invoke).toHaveBeenCalledWith('native_install_defaults',{});
   await screen.findByRole('button',{name:'Start install'});
-  expect(vi.mocked(invoke).mock.calls.map(([c])=>c).filter(c=>c!=='native_spellcheck_status'&&c!=='native_auth_status'&&c!=='native_repo_stars'&&c!=='native_update_check')).toEqual(['native_install_defaults','native_install_plan']);expect(invoke).toHaveBeenCalledWith('native_install_plan',{request});expect(invoke).not.toHaveBeenCalledWith('native_install_start',expect.anything());
+  expect(vi.mocked(invoke).mock.calls.map(([c])=>c).filter(c=>c!=='native_theme_packs'&&c!=='native_spellcheck_status'&&c!=='native_auth_status'&&c!=='native_repo_stars'&&c!=='native_update_check')).toEqual(['native_install_defaults','native_install_plan']);expect(invoke).toHaveBeenCalledWith('native_install_plan',{request});expect(invoke).not.toHaveBeenCalledWith('native_install_start',expect.anything());
   const button=screen.getByRole('button',{name:'Start install'});fireEvent.click(button);fireEvent.click(button);
   await screen.findByText('native fixture log');expect(vi.mocked(invoke).mock.calls.filter(([c])=>c==='native_install_start')).toEqual([['native_install_start',{planId:'fixture-plan',confirmed:true}]]);
   expect(screen.getByLabelText('Storage directory').matches(':disabled')).toBe(true);
@@ -410,7 +410,7 @@ describe('automatic-first installation — read-only mock IPC fixtures',()=>{
  });
  it.each([{keys:['models']},{keys:['output','models','input']}])('can start after choosing folders in $keys order and a native serialization round trip',async({keys})=>{
   nativeFixture();let selected='';let id=0;
-  vi.mocked(invoke).mockImplementation(async(command,args)=>{if(command==='native_llm_read')return defaultLlmConfig;if(command==='native_llm_models')return {models:[],warnings:[]};
+  vi.mocked(invoke).mockImplementation(async(command,args)=>{if(command==='native_theme_packs')return {directory:'/fixture/env/themes',packs:[],warnings:[]};if(command==='native_llm_read')return defaultLlmConfig;if(command==='native_llm_models')return {models:[],warnings:[]};
    if(command==='native_install_defaults')return defaults;
    if(command==='native_pick_directory')return `/real/${selected}`;
    if(command==='native_install_plan'){
@@ -430,7 +430,7 @@ describe('automatic-first installation — read-only mock IPC fixtures',()=>{
   click('Start install');await waitFor(()=>expect(invoke).toHaveBeenCalledWith('native_install_start',{planId:latestId,confirmed:true}));
  });
  it.each(['models','input','output'] as const)('refuses a native plan with a different %s folder',async(key)=>{
-  nativeFixture();vi.mocked(invoke).mockImplementation(async(command,args)=>{if(command==='native_llm_read')return defaultLlmConfig;if(command==='native_llm_models')return {models:[],warnings:[]};
+  nativeFixture();vi.mocked(invoke).mockImplementation(async(command,args)=>{if(command==='native_theme_packs')return {directory:'/fixture/env/themes',packs:[],warnings:[]};if(command==='native_llm_read')return defaultLlmConfig;if(command==='native_llm_models')return {models:[],warnings:[]};
    if(command==='native_install_defaults')return defaults;
    if(command==='native_pick_directory')return '/chosen';
    if(command==='native_install_plan'){
@@ -455,7 +455,7 @@ describe('automatic-first installation — read-only mock IPC fixtures',()=>{
    if(command==='native_install_status')return {state:running?'succeeded':'idle',stepId:null,logs:[],error:null};
    if(command==='native_backend_test')return DEPS;
    if(command==='native_backend_status')return {state:'stopped',endpoint:null,error:null,generationReady:false};
-   if(command==='native_llm_read')return defaultLlmConfig;
+   if(command==='native_theme_packs')return {directory:'/fixture/env/themes',packs:[],warnings:[]};if(command==='native_llm_read')return defaultLlmConfig;
    if(command==='native_llm_models')return {models:[],warnings:[]};
    throw Error('Unexpected fixture IPC '+command);
   });

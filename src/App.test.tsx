@@ -162,6 +162,7 @@ test.each(['Library','Comfy','Backend','Logs','TVE',null])('deferred missing For
   if(command==='native_backend_status')return {state:'stopped',logs:[],error:null};
   if(command==='native_models_scan')return [];
   if(command==='native_media_list')return {path:'/env',parent:null,entries:[],truncated:false};
+  if(command==='native_theme_packs')return {directory:'/fixture/env/themes',packs:[],warnings:[]};
   if(command==='native_llm_read')return defaultLlmConfig;
   if(command==='native_llm_models')return read;
   throw Error('Unexpected fixture IPC '+command);
@@ -213,7 +214,7 @@ test("first entry shows only AiO and keeps the studio behind an honest preview c
 test.each([false,true])("successful native install reveals studio without an extra enable action (Director: %s)", async (director) => {
   localStorage.setItem('deas.pref.backend.autostart','false');
   vi.mocked(isTauri).mockReturnValue(true);
-  vi.mocked(invoke).mockImplementation(async(command,args)=>{if(command==='native_llm_read')return defaultLlmConfig;if(command==='native_llm_models')return {models:[],warnings:[]};
+  vi.mocked(invoke).mockImplementation(async(command,args)=>{if(command==='native_theme_packs')return {directory:'/fixture/env/themes',packs:[],warnings:[]};if(command==='native_llm_read')return defaultLlmConfig;if(command==='native_llm_models')return {models:[],warnings:[]};
     if(command==='native_install_defaults')return {storagePath:'/app/new',backend:'cpu',warnings:[]};
     if(command==='native_workbench_current')return {jobs:[],preparing:0,capacity:20,stopAvailable:true,admissionEpoch:0,stopping:false};
     if(command==='native_models_scan')return [];
@@ -237,7 +238,7 @@ test.each([false,true])("successful native install reveals studio without an ext
   expect(screen.getByLabelText('Shot direction')).toBeTruthy();
   expect(inspectBackend).not.toHaveBeenCalled();
   expect(screen.queryByRole('button',{name:/generate/i})).toBeNull();
-  expect(vi.mocked(invoke).mock.calls.map(([command])=>command).filter(c=>!['native_spellcheck_status','native_auth_status','native_repo_stars','native_update_check','native_models_scan','native_media_list'].includes(c))).toEqual(['native_install_defaults','native_install_plan','native_install_start','native_wildcard_library','native_workbench_current']); // read-only session recovery is explicit; media/model listings of the installed root are timing-dependent and asserted in their own suites
+  expect(vi.mocked(invoke).mock.calls.map(([command])=>command).filter(c=>!['native_theme_packs','native_spellcheck_status','native_auth_status','native_repo_stars','native_update_check','native_models_scan','native_media_list'].includes(c))).toEqual(['native_install_defaults','native_install_plan','native_install_start','native_wildcard_library','native_workbench_current']); // read-only session recovery is explicit; media/model listings of the installed root are timing-dependent and asserted in their own suites
 });
 
 test("existing setup handoff reveals Engine and prefills its endpoint without inspection", () => {
