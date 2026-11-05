@@ -150,6 +150,7 @@
   "settings.title": "Einstellungen",
   "settings.help": "Ordner für das eigene Backend. Leer = Standard in der Umgebung. Wird neben der Umgebung gespeichert; ein laufendes Backend startet zum Übernehmen neu.",
   "settings.noRoot": "Einstellungen gehören zu einer Umgebung; zuerst den Speicherordner festlegen.",
+  "settings.modelsHelp": "Wähle einen Modellstamm mit Kategorieordnern (checkpoints / Stable-Diffusion, loras / Lora), keinen Kategorie- oder Modellunterordner. Zusätzliche Modellstämme verwenden dieselbe Struktur. Bestehende Ordnerverknüpfungen werden verfolgt; Dateien werden nicht verschoben.",
   "settings.models": "Modellordner",
   "settings.input": "Eingabeordner",
   "settings.output": "Ausgabeordner",

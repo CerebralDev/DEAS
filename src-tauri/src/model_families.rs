@@ -156,14 +156,7 @@ pub(crate) fn image_multiple(clip_type: &str) -> Option<u64> {
 }
 
 fn read_header(path: &Path) -> Option<(serde_json::Map<String, Value>, u64)> {
-    let mut options = std::fs::OpenOptions::new();
-    options.read(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.custom_flags(libc::O_NONBLOCK);
-    }
-    let mut file = options.open(path).ok()?;
+    let mut file = crate::downloads::models::open_model_file(path).ok()?;
     let meta = file.metadata().ok()?;
     if !meta.is_file() {
         return None;
@@ -387,14 +380,7 @@ fn skip_gguf_value<R: Read + Seek>(r: &mut GgufReader<R>, vtype: u32) -> Option<
 /// source tensor names, so detection reuses the safetensors key policy; `general.architecture`
 /// is the quantizer's free-form label. Unreadable metadata stays unknown, never a filename guess.
 fn gguf_metadata(path: &Path) -> Option<(String, String)> {
-    let mut options = std::fs::OpenOptions::new();
-    options.read(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.custom_flags(libc::O_NONBLOCK);
-    }
-    let file = options.open(path).ok()?;
+    let file = crate::downloads::models::open_model_file(path).ok()?;
     let meta = file.metadata().ok()?;
     if !meta.is_file() {
         return None;

@@ -335,3 +335,6 @@
 .wb-column-handle[data-locked], .wb-dock-handle[data-locked] { cursor: default; }
 .wb-dock[data-collapsed] { min-height: 0; }
 .wb-dock[data-collapsed] > :not(.wb-dock-handle, .wb-pane-toggle) { display: none; }
+.wb-var-chips { display: flex; flex-wrap: wrap; gap: 5px; margin: 4px 0; }
+.wb-var-chip { font-family: monospace; font-size: 11px; padding: 2px 7px; border: 1px solid rgb(var(--blue-rgb) / 0.4); border-radius: 999px; background: none; color: var(--ok); cursor: pointer; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wb-var-chip:hover { background: rgb(var(--blue-rgb) / 0.15); }

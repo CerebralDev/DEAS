@@ -150,6 +150,7 @@
   "settings.title": "設定",
   "settings.help": "バックエンドが使うフォルダー。空＝環境内の既定。環境の横に保存され、実行中のバックエンドは適用のため再起動します。",
   "settings.noRoot": "設定は環境に属します。先に保存先を設定してください。",
+  "settings.modelsHelp": "カテゴリーフォルダー（checkpoints / Stable-Diffusion、loras / Lora）を含むモデルルートを選択してください。カテゴリーやモデルのサブフォルダーは選択しないでください。追加ルートも同じ構成です。既存のフォルダーリンクをたどりますが、ファイルは移動しません。",
   "settings.models": "モデルフォルダー",
   "settings.input": "入力フォルダー",
   "settings.output": "出力フォルダー",

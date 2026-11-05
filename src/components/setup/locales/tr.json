@@ -150,6 +150,7 @@
   "settings.title": "Ayarlar",
   "settings.help": "Arka ucun kullandığı klasörler. Boş = ortam içindeki varsayılan. Ortamın yanına kaydedilir; çalışan arka uç uygulamak için yeniden başlar.",
   "settings.noRoot": "Ayarlar bir ortama aittir; önce depolama klasörünü belirleyin.",
+  "settings.modelsHelp": "Kategori klasörlerini (checkpoints / Stable-Diffusion, loras / Lora) içeren model kökünü seçin; kategori veya model alt klasörünü değil. Ek kökler de aynı düzeni kullanır. Mevcut klasör bağlantıları izlenir; dosyalar taşınmaz.",
   "settings.models": "Model klasörü",
   "settings.input": "Girdi klasörü",
   "settings.output": "Çıktı klasörü",

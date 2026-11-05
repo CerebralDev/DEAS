@@ -21,7 +21,10 @@ it('requires an explicit move selection and reports only native results',async()
 });
 it('adds extra model roots to the payload only when chosen and drops them on reset',async()=>{
  mount();await choose();
+ const help=screen.getByRole('button',{name:'Choose Models folder'}).closest('[title]')?.getAttribute('title');
+ expect(help).toContain('Stable-Diffusion');expect(help).toContain('Lora');
  fireEvent.click(screen.getByRole('button',{name:'Add another model folder'}));
+ expect(screen.getByRole('button',{name:'Choose additional model folder 1'}).closest('[title]')?.getAttribute('title')).toBe(help);
  await screen.findByText('Additional model folder 1');
  fireEvent.click(screen.getByRole('button',{name:'Save folders'}));
  await waitFor(()=>expect(invoke).toHaveBeenCalledWith('native_settings_write',{root:'/env',folders:{models:'/new/models'}}));

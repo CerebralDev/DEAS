@@ -1,16 +1,19 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { invoke } from '@tauri-apps/api/core';
 import { useState } from 'react';
 import { I18nProvider } from '../../i18n/I18nProvider';
 import { WildcardPanel } from './WildcardPanel';
-import { defaultWildcard } from '../../lib/wildcard';
-vi.mock('@tauri-apps/api/core',()=>({invoke:vi.fn(),isTauri:()=>true}));
-const library={categories:{Art:[{subject:'Lighting',booru_wildcards:['{red|blue} light'],nl_wildcards:['{Red|Blue} light.'],booru_presets:['cinematic'],nl_presets:['Cinematic.']}],'Negative Prompts':[{subject:'Blur',booru_presets:['blur']}]}};
-beforeEach(()=>{localStorage.clear();localStorage.setItem('deas.locale','en');vi.mocked(invoke).mockResolvedValue(JSON.stringify(library));});
+import { defaultWildcard, type WildcardLibrary } from '../../lib/wildcard';
+const library:WildcardLibrary={Art:[{subject:'Lighting',booru_wildcards:['{red|blue} light'],nl_wildcards:['{Red|Blue} light.'],booru_presets:['cinematic'],nl_presets:['Cinematic.']}],'Negative Prompts':[{subject:'Blur',booru_presets:['blur']}]};
+beforeEach(()=>{localStorage.clear();localStorage.setItem('deas.locale','en');});
 afterEach(()=>{cleanup();vi.clearAllMocks();});
-function Harness(){const [rules,setRules]=useState(defaultWildcard);const [enabled,setEnabled]=useState(false);return <I18nProvider><WildcardPanel endpoint="http://127.0.0.1:7801" value={rules} onChange={setRules} enabled={enabled} onEnabled={setEnabled}/><output data-testid="rules">{JSON.stringify(rules)}</output></I18nProvider>;}
-it('loads the original library, preserves independent preset/wildcard weights and explicit activation',async()=>{
+function Harness({initialLibrary=library,initialPositive='',initialNegative=''}:{initialLibrary?:WildcardLibrary|null;initialPositive?:string;initialNegative?:string}={}){
+ const [rules,setRules]=useState(defaultWildcard);const [enabled,setEnabled]=useState(false);
+ const [lib,setLib]=useState<WildcardLibrary|null>(initialLibrary);
+ const [error,setError]=useState(initialLibrary?'':'404 missing plugin');
+ return <I18nProvider><WildcardPanel library={lib} loading={false} error={error} onReload={()=>{setLib(library);setError('');}} value={rules} onChange={setRules} enabled={enabled} onEnabled={setEnabled} positive={initialPositive} negative={initialNegative} onInsert={name=>{void name;}}/><output data-testid="rules">{JSON.stringify(rules)}</output></I18nProvider>;
+}
+it('preserves independent preset/wildcard weights and explicit activation',async()=>{
  render(<Harness/>);
  fireEvent.click(await screen.findByText('Art'));
  fireEvent.click(screen.getByRole('checkbox',{name:'Lighting · Wildcards'}));
@@ -26,10 +29,9 @@ it('loads the original library, preserves independent preset/wildcard weights an
  expect(r.auto_reroll).toBe(true);
  fireEvent.click(screen.getByRole('button',{name:'New picks'}));
  expect(JSON.parse(screen.getByTestId('rules').textContent!).selection_state).toEqual(r.selection_state);
- expect(invoke).toHaveBeenCalledWith('native_wildcard_library',{baseUrl:'http://127.0.0.1:7801'});
 });
-it('shows a retryable library error, never a fake catalog',async()=>{
- vi.mocked(invoke).mockRejectedValueOnce('404 missing plugin');render(<Harness/>);
+it('shows a retryable library error',async()=>{
+ render(<Harness initialLibrary={null}/>);
  expect(await screen.findByRole('alert')).toHaveProperty('textContent',expect.stringContaining('404'));
  fireEvent.click(screen.getByRole('button',{name:'Reload library'}));
  await screen.findByText('Art');
@@ -42,4 +44,14 @@ it('random selection chooses available subjects without changing rule modes',asy
  expect(r.auto_reroll).toBe(false);expect(r.seed).toBe(0);
  fireEvent.click(screen.getByRole('button',{name:'Clear selection'}));
  expect(JSON.parse(screen.getByTestId('rules').textContent!).selection_state).toEqual({});
+});
+it('lists $variables from the prompt, pins win over the seed, unknown tokens are flagged',async()=>{
+ render(<Harness initialPositive="a $Art cat at ${Art}-light, $unknown"/>);
+ const rows=document.querySelectorAll('[data-wildcard-var]');
+ expect(rows.length).toBe(3); // Art:0, Art:1, unknown
+ const pins=await screen.findByLabelText(/Pin Art:0/);
+ fireEvent.change(pins,{target:{value:'{red|blue} light'}});
+ const r=JSON.parse(screen.getByTestId('rules').textContent!);
+ expect(JSON.parse(r.variable_selections)).toEqual({'Art:0':'{red|blue} light'});
+ expect(document.querySelector('[data-wildcard-var="positive:unknown:0"]')?.textContent).toContain('Unknown variable unknown');
 });

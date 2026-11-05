@@ -19,6 +19,12 @@ struct Rules {
     token_budget: u32,
     auto_reroll: bool,
     selection_state: BTreeMap<String, Selection>,
+    /// JSON `{variable: [choices]}` for `$name` prompt variables (node pack 0.5.39).
+    #[serde(default)]
+    variables_json: Option<String>,
+    /// JSON `{"name:index": "pinned choice"}`; pins win over the seed pick.
+    #[serde(default)]
+    variable_selections: Option<String>,
 }
 pub(crate) fn validate(value: &Value) -> Result<(), String> {
     let r: Rules = serde_json::from_value(value.clone()).map_err(|_| "Invalid wildcard rules")?;
@@ -26,6 +32,8 @@ pub(crate) fn validate(value: &Value) -> Result<(), String> {
         || r.reroll > 0x7fffffff
         || !(1..=10000).contains(&r.token_budget)
         || r.selection_state.len() > 4096
+        || r.variables_json.as_ref().is_some_and(|v| v.len() > 1_000_000)
+        || r.variable_selections.as_ref().is_some_and(|v| v.len() > 256_000)
         || r.selection_state.iter().any(|(k, s)| {
             k.is_empty()
                 || k.encode_utf16().count() > 512
@@ -52,6 +60,19 @@ pub async fn native_wildcard_build(base_url: String, rules: Value) -> Result<Val
     let url = crate::validate_base_url(&base_url)?
         .join("dasiwa/wildcard-preset-prompt-builder/build")
         .map_err(|_| "Invalid backend URL")?;
+    // Packs older than 0.5.39 reject the optional variable fields; empty ones carry no information.
+    let mut payload = rules;
+    if let Some(map) = payload.as_object_mut() {
+        for key in ["variables_json", "variable_selections"] {
+            if map
+                .get(key)
+                .and_then(|v| v.as_str())
+                .is_some_and(|s| s.trim() == "{}")
+            {
+                map.remove(key);
+            }
+        }
+    }
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .no_proxy()
@@ -59,12 +80,7 @@ pub async fn native_wildcard_build(base_url: String, rules: Value) -> Result<Val
         .timeout(Duration::from_secs(10))
         .build()
         .map_err(|_| "Cannot create wildcard client")?;
-    let response = client
-        .post(url)
-        .json(&rules)
-        .send()
-        .await
-        .map_err(|_| "Wildcard build request failed")?;
+    let response = client.post(url).json(&payload).send().await.map_err(|_| "Wildcard build request failed")?;
     if !response.status().is_success() {
         return Err(format!(
             "{} Wildcard build unavailable",

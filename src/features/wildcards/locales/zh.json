@@ -28,5 +28,14 @@
   "wildcards.baseNotice": "基础提示词；生成时会添加已启用的通配符规则。",
   "wildcards.wildcards": "通配符",
   "wildcards.presets": "预设",
-  "wildcards.preview": "预览"
+  "wildcards.preview": "预览",
+  "wildcards.insert": "将 ${name} 插入正向提示词",
+  "wildcards.varsTitle": "提示词变量",
+  "wildcards.varsHelp": "在提示词中输入 $name（${name} 用于界定，$$ 是字面量 $）。通配符分类即变量——点击分类上的 +。相同种子 = 相同选择；钉选优先于种子。",
+  "wildcards.varsNone": "提示词中还没有 $变量。",
+  "wildcards.custom": "自定义变量（JSON）",
+  "wildcards.customInvalid": "自定义变量 JSON 无效：{message}",
+  "wildcards.varPick": "钉选 {key}",
+  "wildcards.varRandom": "随机（种子）",
+  "wildcards.varUnknown": "未知变量 {name}"
 }

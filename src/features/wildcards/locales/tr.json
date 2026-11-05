@@ -28,5 +28,14 @@
   "wildcards.baseNotice": "Temel prompt; etkin wildcard kuralları üretimde eklenir.",
   "wildcards.wildcards": "Wildcard",
   "wildcards.presets": "Ön ayarlar",
-  "wildcards.preview": "Önizleme"
+  "wildcards.preview": "Önizleme",
+  "wildcards.insert": "${name} değerini pozitif isteme ekle",
+  "wildcards.varsTitle": "İstem değişkenleri",
+  "wildcards.varsHelp": "İstemlere $name yazın (${name} sınırlar, $$ düz $ karakteridir). Wildcard kategorileri değişkendir — bir kategorinin + düğmesine tıklayın. Aynı seed = aynı seçim; sabitlemeler seed'e öncelik verir.",
+  "wildcards.varsNone": "İstemlerde henüz $değişken yok.",
+  "wildcards.custom": "Özel değişkenler (JSON)",
+  "wildcards.customInvalid": "Özel değişken JSON'u geçersiz: {message}",
+  "wildcards.varPick": "{key} sabitle",
+  "wildcards.varRandom": "Rastgele (seed)",
+  "wildcards.varUnknown": "Bilinmeyen değişken {name}"
 }

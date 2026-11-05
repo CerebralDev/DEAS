@@ -237,7 +237,7 @@ test.each([false,true])("successful native install reveals studio without an ext
   expect(screen.getByLabelText('Shot direction')).toBeTruthy();
   expect(inspectBackend).not.toHaveBeenCalled();
   expect(screen.queryByRole('button',{name:/generate/i})).toBeNull();
-  expect(vi.mocked(invoke).mock.calls.map(([command])=>command).filter(c=>!['native_spellcheck_status','native_auth_status','native_repo_stars','native_update_check','native_models_scan','native_media_list'].includes(c))).toEqual(['native_install_defaults','native_install_plan','native_install_start','native_workbench_current']); // read-only session recovery is explicit; media/model listings of the installed root are timing-dependent and asserted in their own suites
+  expect(vi.mocked(invoke).mock.calls.map(([command])=>command).filter(c=>!['native_spellcheck_status','native_auth_status','native_repo_stars','native_update_check','native_models_scan','native_media_list'].includes(c))).toEqual(['native_install_defaults','native_install_plan','native_install_start','native_wildcard_library','native_workbench_current']); // read-only session recovery is explicit; media/model listings of the installed root are timing-dependent and asserted in their own suites
 });
 
 test("existing setup handoff reveals Engine and prefills its endpoint without inspection", () => {

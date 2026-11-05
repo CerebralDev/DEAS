@@ -28,5 +28,14 @@
   "wildcards.baseNotice": "基本プロンプト。生成時に有効なワイルドカード規則が追加されます。",
   "wildcards.wildcards": "ワイルドカード",
   "wildcards.presets": "プリセット",
-  "wildcards.preview": "プレビュー"
+  "wildcards.preview": "プレビュー",
+  "wildcards.insert": "${name} をポジティブプロンプトに挿入",
+  "wildcards.varsTitle": "プロンプト変数",
+  "wildcards.varsHelp": "プロンプトに $name を入力（${name} は区切り、$$ はリテラルの $）。ワイルドカードカテゴリは変数です — カテゴリの + をクリック。同じシード = 同じ選択；ピンはシードに優先します。",
+  "wildcards.varsNone": "プロンプトに $変数がまだありません。",
+  "wildcards.custom": "カスタム変数（JSON）",
+  "wildcards.customInvalid": "カスタム変数の JSON が無効です: {message}",
+  "wildcards.varPick": "{key} を固定",
+  "wildcards.varRandom": "ランダム（シード）",
+  "wildcards.varUnknown": "不明な変数 {name}"
 }

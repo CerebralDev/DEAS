@@ -55,13 +55,13 @@ test('model metadata action enables an unknown supported file while GGUF stays u
  const picker=document.querySelector('[data-model-picker]') as HTMLSelectElement;
  expect(picker.value).toBe(gguf.name);
  expect([...document.querySelector<HTMLSelectElement>('[data-pipeline]')!.options].find(o=>o.value==='t2v')).toHaveProperty('disabled',true);
- expect([...picker.options].find(o=>o.value===bad.name)?.disabled).toBe(true);
+ expect([...picker.options].find(o=>o.value===bad.name)).toBeUndefined();
  expect([...picker.options].find(o=>o.value===gguf.name)?.disabled).toBe(false);
  expect(tile.textContent).toContain('User-declared family');
  fireEvent.contextMenu(tile);fireEvent.click(screen.getByRole('menuitem',{name:'Edit meta…'}));
  vi.mocked(writeModelFamily).mockResolvedValue(unknown);fireEvent.click(screen.getByRole('button',{name:'Reset to detection'}));
  await waitFor(()=>expect(tile.getAttribute('aria-disabled')).toBe('true'));
- expect([...picker.options].find(o=>o.value===unknown.name)).toHaveProperty('disabled',true);
+ expect([...picker.options].find(o=>o.value===unknown.name)).toBeUndefined();
  // The usable declared GGUF stays selected; Run stays gated by the offline backend, not by the unknown file.
  expect(picker.value).toBe(gguf.name);
  expect(screen.getByRole('button',{name:'Run'})).toHaveProperty('disabled',true);
@@ -101,6 +101,65 @@ test('checkpoint picker stays a compact native select without a custom filter or
  expect(JSON.parse(localStorage.getItem('deas.pref.studio.run.checkpoint')!)).toBe('krea_d.safetensors');
  expect(runWorkbenchJob).not.toHaveBeenCalled();
 });
+test('checkpoint picker filters mixed inventories on image/video pipeline changes and restores drafts',async()=>{
+ const files=[
+  {category:'checkpoints',name:'image.safetensors',family:'sdxl'},
+  {category:'checkpoints',name:'unknown.safetensors'},
+  {category:'checkpoints',name:'wrong-folder.safetensors',family:'anima'},
+  {category:'diffusion_models',name:'video.safetensors',family:'ltx-2'},
+  {category:'diffusion_models',name:'unknown-split.safetensors'},
+  {category:'diffusion_models',name:'invalid.safetensors',family:'anima',metadataError:'invalid sidecar'},
+ ].map(m=>({...m,path:'/m/'+m.name,size:1,info:null}));
+ vi.mocked(scanModels).mockResolvedValue(files);
+ vi.mocked(checkRecipePrerequisites).mockResolvedValue(evidence);
+ render(<I18nProvider><Workbench endpoint={evidence.baseUrl} roots={{models:'/m'}}/></I18nProvider>);
+ const picker=document.querySelector<HTMLSelectElement>('[data-model-picker]')!;
+ const values=()=>[...picker.options].map(o=>o.value);
+ await waitFor(()=>expect(values()).toEqual(['image.safetensors','unknown.safetensors']));
+ fireEvent.change(screen.getByLabelText('Prompt'),{target:{value:'  image draft\n'}});
+ fireEvent.change(screen.getByLabelText('Negative prompt'),{target:{value:''}});
+ fireEvent.change(picker,{target:{value:'unknown.safetensors'}});
+ expect(screen.getByLabelText('Prompt')).toHaveProperty('value','  image draft\n');
+ expect(screen.getByLabelText('Negative prompt')).toHaveProperty('value','');
+ fireEvent.change(document.querySelector('[data-pipeline]')!,{target:{value:'t2v'}});
+ expect(values()).toEqual(['video.safetensors']);expect(picker.value).toBe('video.safetensors');
+ fireEvent.change(screen.getByLabelText('Prompt'),{target:{value:'video draft'}});
+ fireEvent.change(document.querySelector('[data-pipeline]')!,{target:{value:'t2i'}});
+ expect(values()).toEqual(['image.safetensors','unknown.safetensors']);expect(picker.value).toBe('unknown.safetensors');
+ expect(screen.getByLabelText('Prompt')).toHaveProperty('value','  image draft\n');
+ expect(screen.getByLabelText('Negative prompt')).toHaveProperty('value','');
+ fireEvent.change(document.querySelector('[data-pipeline]')!,{target:{value:'t2v'}});
+ expect(screen.getByLabelText('Prompt')).toHaveProperty('value','video draft');
+ expect(runWorkbenchJob).not.toHaveBeenCalled();expect(uploadInput).not.toHaveBeenCalled();
+});
+test.each(['missing','incompatible','invalid','wrong-folder','unsupported','empty'] as const)('checkpoint picker retains a saved %s selection with its disabled reason',async kind=>{
+ const name='saved.safetensors';
+ localStorage.setItem('deas.pref.studio.run.checkpoint',JSON.stringify(name));
+ const saved={category:kind==='incompatible'?'diffusion_models':'checkpoints',name,path:'/m/'+name,size:1,info:null,...(kind==='incompatible'?{family:'ltx-2'}:kind==='invalid'?{metadataError:'bad sidecar'}:kind==='wrong-folder'?{family:'anima'}:{})};
+ const selected=kind==='unsupported'?{...saved,name:'saved.gguf',family:'sdxl'}:saved;
+ localStorage.setItem('deas.pref.studio.run.checkpoint',JSON.stringify(selected.name));
+ vi.mocked(scanModels).mockResolvedValue(kind==='empty'?[]:[{category:'checkpoints',name:'compatible.safetensors',path:'/m/compatible',size:1,info:null},...(kind==='missing'?[]:[selected])]);
+ vi.mocked(checkRecipePrerequisites).mockResolvedValue(evidence);
+ render(<I18nProvider><Workbench endpoint={evidence.baseUrl} roots={{models:'/m'}}/></I18nProvider>);
+ await act(async()=>{});
+ const picker=document.querySelector<HTMLSelectElement>('[data-model-picker]')!;
+ const option=picker.selectedOptions[0];
+ expect(picker.value).toBe(selected.name);expect(option.disabled).toBe(true);
+ expect(option.title).toBeTruthy();expect(option.textContent).toContain(option.title);expect(picker.title).toBe(option.title);
+ expect(option.title).toMatch(kind==='incompatible'?/recipe/i:kind==='invalid'?/metadata/i:kind==='wrong-folder'?/diffusion_models/i:kind==='unsupported'?/GGUF/i:/unavailable/i);
+ expect([...picker.options].map(o=>o.value)).toEqual(kind==='empty'?[selected.name]:[selected.name,'compatible.safetensors']);
+ expect(screen.getByRole('button',{name:'Run'})).toHaveProperty('disabled',true);
+ expect(JSON.parse(localStorage.getItem('deas.pref.studio.run.checkpoint')!)).toBe(selected.name);
+ expect(runWorkbenchJob).not.toHaveBeenCalled();
+});
+test.each([false,true])('checkpoint picker shows the disabled empty state without compatible models (empty inventory: %s)',async empty=>{
+ vi.mocked(scanModels).mockResolvedValue(empty?[]:[{category:'diffusion_models',name:'video.safetensors',family:'ltx-2',path:'/m/video',size:1,info:null}]);
+ render(<I18nProvider><Workbench endpoint={evidence.baseUrl} roots={{models:'/m'}}/></I18nProvider>);
+ await act(async()=>{});
+ const picker=document.querySelector<HTMLSelectElement>('[data-model-picker]')!;
+ expect([...picker.options].map(o=>o.value)).toEqual(['']);expect(picker.selectedOptions[0].disabled).toBe(true);
+ expect(screen.getByRole('button',{name:'Run'})).toHaveProperty('disabled',true);
+});
 test('declared GGUF runs through the GGUF loader while invalid metadata fails closed',async()=>{
  const file={category:'diffusion_models',name:'declared.gguf',path:'/m/declared.gguf',size:1,info:null,family:'anima',familyOverride:'anima'};
  const companions=[{category:'text_encoders',name:'qwen_3_600m.gguf',path:'/m/text_encoders/qwen_3_600m.gguf',size:1,info:null},{category:'vae',name:'wan_2.1_vae.safetensors',path:'/m/vae/wan_2.1_vae.safetensors',size:1,info:null}];
@@ -111,10 +170,12 @@ test('declared GGUF runs through the GGUF loader while invalid metadata fails cl
  expect(screen.getByRole('button',{name:'Run'})).toHaveProperty('disabled',false);
  view.unmount();
  vi.mocked(scanModels).mockResolvedValue([{...file,category:'checkpoints'},...companions]);
+ localStorage.setItem('deas.pref.studio.run.checkpoint',JSON.stringify(file.name));
  const second=render(<I18nProvider><Workbench endpoint={evidence.baseUrl} roots={{models:'/m'}}/></I18nProvider>);
  await waitFor(()=>expect(document.querySelector('[data-model-picker]')?.textContent).toContain(file.name));
  expect(screen.getByRole('button',{name:'Run'})).toHaveProperty('disabled',true);
  second.unmount();
+ localStorage.setItem('deas.pref.studio.run.checkpoint',JSON.stringify('invalid.safetensors'));
  vi.mocked(scanModels).mockResolvedValue([{...file,name:'invalid.safetensors',path:'/m/invalid.safetensors',metadataError:'invalid metadata'}]);
  render(<I18nProvider><Workbench endpoint={evidence.baseUrl} roots={{models:'/m'}}/></I18nProvider>);await waitFor(()=>expect(document.querySelector('[data-model-picker]')?.textContent).toContain('invalid.safetensors'));
  expect(screen.getByRole('button',{name:'Run'})).toHaveProperty('disabled',true);expect(runWorkbenchJob).not.toHaveBeenCalled();
@@ -2532,7 +2593,7 @@ test('checkpoint dropdown and Models tiles share selection/defaults and missing 
  render(<I18nProvider><Workbench endpoint="" roots={{models:'/m'}}/></I18nProvider>);
  const select=await screen.findByRole('combobox',{name:'Checkpoint'});
  await waitFor(()=>expect((select as HTMLSelectElement).value).toBe('first.safetensors'));
- expect((within(select).getByRole('option',{name:'unsupported.safetensors'}) as HTMLOptionElement).disabled).toBe(true);
+ expect(within(select).queryByRole('option',{name:'unsupported.safetensors'})).toBeNull();
  fireEvent.change(select,{target:{value:'second.safetensors'}});
  dock('Models');expect(screen.getByRole('button',{name:'second.safetensors'}).getAttribute('aria-pressed')).toBe('true');
  expect((screen.getByLabelText('Steps') as HTMLInputElement).value).toBe('28');
@@ -2540,18 +2601,16 @@ test('checkpoint dropdown and Models tiles share selection/defaults and missing 
  expect(localStorage.getItem('deas.pref.studio.run.checkpoint')).toBe('"first.safetensors"');
  expect(runWorkbenchJob).not.toHaveBeenCalled();
 });
-test('known models in the wrong loader folder remain visible but disabled, including duplicate names',async()=>{
+test('known models in the wrong loader folder are hidden from the picker but remain disabled in Models, including duplicate names',async()=>{
  const m=(category:string,name:string,family?:string)=>({category,name,family,path:`/m/${category}/${name}`,size:1,info:null});
  const anima='dasiwaAnima_obsidianArchivesV2+Int8.safetensors';
  vi.mocked(scanModels).mockResolvedValue([m('checkpoints',anima,'anima'),m('diffusion_models',anima,'anima'),m('diffusion_models','misplaced-sdxl.safetensors','sdxl'),m('unet','legacy-anima.safetensors','anima'),m('checkpoints','unknown.safetensors')]);
  render(<I18nProvider><Workbench endpoint="" roots={{models:'/m'}}/></I18nProvider>);
  const select=await screen.findByRole('combobox',{name:'Checkpoint'});
- await waitFor(()=>expect(within(select).getAllByRole('option',{name:anima})).toHaveLength(2));
- const options=within(select).getAllByRole('option',{name:anima}) as HTMLOptionElement[];
- expect(options.filter(o=>o.disabled)).toHaveLength(1);
- expect(options.find(o=>o.disabled)?.title).toContain('diffusion_models');
+ await waitFor(()=>expect(within(select).getAllByRole('option',{name:anima})).toHaveLength(1));
+ expect((within(select).getByRole('option',{name:anima}) as HTMLOptionElement).value).toBe(JSON.stringify(['diffusion_models',`/m/diffusion_models/${anima}`,anima]));
  expect((select as HTMLSelectElement).selectedOptions[0].disabled).toBe(false);
- expect((within(select).getByRole('option',{name:'misplaced-sdxl.safetensors'}) as HTMLOptionElement).disabled).toBe(true);
+ expect(within(select).queryByRole('option',{name:'misplaced-sdxl.safetensors'})).toBeNull();
  expect((within(select).getByRole('option',{name:'legacy-anima.safetensors'}) as HTMLOptionElement).disabled).toBe(false);
  expect((within(select).getByRole('option',{name:'unknown.safetensors'}) as HTMLOptionElement).disabled).toBe(false);
  dock('Models');
@@ -2878,7 +2937,7 @@ test.each(['ltx-2','wan','sdxl','minimax-h3'])('Continuity is absent from non-H3
  const model={category:'diffusion_models',name:'model.safetensors',path:'/m/model.safetensors',size:1,info:null,family};
  vi.mocked(scanModels).mockResolvedValue(family==='ltx-2'?[...ltxModels]:[model]);
  render(<I18nProvider><Workbench onOpenPromptForge={vi.fn()} endpoint="http://127.0.0.1:7801" roots={{models:'/m'}}/></I18nProvider>);
- await screen.findByRole('option',{name:family==='ltx-2'?'LTX2/ltx.safetensors':'model.safetensors'});
+ await act(async()=>{});
  for(const pipeline of family==='ltx-2'||family==='wan'?['t2v','i2v','v2v','ref2v']:['t2i','i2i']){
   fireEvent.change(screen.getByRole('combobox',{name:'Pipeline'}),{target:{value:pipeline}});
   expect(screen.queryByRole('button',{name:'Continuity'})).toBeNull();
@@ -4091,7 +4150,7 @@ test('history restores independent latent post settings without submitting or ch
  vi.mocked(checkRecipePrerequisites).mockResolvedValue({...evidence,allowlist:{...evidence.allowlist,nodes:[...evidence.allowlist.nodes,'LatentUpscaleModelLoader','LTXVLatentUpsampler'],latentUpscaleModels:['ltx-held.safetensors'],textEncoders:[ltxModels[1].name,ltxModels[2].name],vaes:[ltxModels[3].name,ltxModels[4].name]}});
  vi.mocked(invoke).mockImplementation(async c=>c==='native_jobs_history'?{schemaVersion:1,records:[original],readOnly:false,error:null}:{path:'/env/input',parent:'/env',entries:[],truncated:false});
  render(<I18nProvider><Workbench endpoint={evidence.baseUrl} roots={{models:'/m'}}/></I18nProvider>);
- await waitFor(()=>expect(document.querySelector('[data-model-picker]')?.textContent).toContain(ltxModels[0].name));
+ await waitFor(()=>expect(pipe('Text → Video').disabled).toBe(false));
  await openHistoryRecord();fireEvent.click(document.querySelector('[data-history-apply]')!);
  fireEvent.click(screen.getByRole('button',{name:'Close history'}));
  fireEvent.click(document.querySelector('[data-dock-tab="post"]')!);

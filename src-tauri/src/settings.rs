@@ -23,6 +23,76 @@ pub(crate) const MODEL_FOLDERS: [&str; 16] = [
     "hypernetworks",
 ];
 
+/// Disk folder names and backend namespaces are separate (SwarmUI uses two aliases).
+pub(crate) fn model_folder_category(name: &str) -> Option<&'static str> {
+    match name {
+        "Stable-Diffusion" => Some("checkpoints"),
+        "Lora" => Some("loras"),
+        _ => MODEL_FOLDERS.iter().copied().find(|folder| *folder == name),
+    }
+}
+
+/// Every configured root contains category folders; aliases share backend namespaces.
+pub(crate) fn model_locations(root: &Path) -> Vec<(&'static str, PathBuf)> {
+    let mut locations: Vec<_> = MODEL_FOLDERS
+        .iter()
+        .map(|&category| (category, root.join(category)))
+        .collect();
+    for alias in ["Stable-Diffusion", "Lora"] {
+        let path = root.join(alias);
+        if std::fs::symlink_metadata(&path).is_ok_and(|m| m.is_dir() || m.file_type().is_symlink())
+        {
+            locations.push((model_folder_category(alias).unwrap(), path));
+        }
+    }
+    locations
+}
+
+fn model_yaml(yaml: &mut String, root: &Path) -> Result<(), String> {
+    // shortcut: nested junction prefixes still need backend traversal; revisit if ComfyUI supports OS448-safe traversal.
+    let locations = model_locations(root);
+    for category in MODEL_FOLDERS {
+        let paths: Vec<_> = locations
+            .iter()
+            .filter(|(c, _)| *c == category)
+            .map(|(_, path)| {
+                let target = match std::fs::symlink_metadata(path) {
+                    Ok(_) => crate::downloads::models::backend_directory_target(path)?,
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+                    Err(e) => return Err(e.to_string()),
+                };
+                let path = target
+                    .as_deref()
+                    .unwrap_or_else(|| path.strip_prefix(root).unwrap());
+                path.to_str()
+                    .map(str::to_owned)
+                    .ok_or_else(|| "Non-UTF-8 model directory".to_owned())
+            })
+            .collect::<Result<_, String>>()?;
+        if paths.iter().any(|path| Path::new(path).is_absolute()) {
+            // Escape NEL too: JSON leaves it literal, but YAML normalizes it to a space.
+            yaml.push_str(&format!(
+                "  {category}: {}\n",
+                serde_json::to_string(&paths.join("\n"))
+                    .map_err(|e| e.to_string())?
+                    .replace('\u{85}', "\\u0085")
+            ));
+            continue;
+        }
+        match paths.as_slice() {
+            [] => {}
+            [path] => yaml.push_str(&format!("  {category}: {path}\n")),
+            paths => {
+                yaml.push_str(&format!("  {category}: |\n"));
+                for path in paths {
+                    yaml.push_str(&format!("    {path}\n"));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Folders {
@@ -117,9 +187,7 @@ pub(crate) fn backend_configuration(root: &Path) -> Result<(Vec<String>, Vec<Pat
             "deas:\n  base_path: {}\n",
             serde_json::to_string(models).map_err(|e| e.to_string())?
         ));
-        for folder in MODEL_FOLDERS {
-            yaml.push_str(&format!("  {folder}: {folder}\n"));
-        }
+        model_yaml(&mut yaml, Path::new(models))?;
         // The node pack's Prompt Forge reads `llm`; not in MODEL_FOLDERS so model scans skip LLM weights.
         yaml.push_str("  llm: llm\n");
     }
@@ -129,9 +197,7 @@ pub(crate) fn backend_configuration(root: &Path) -> Result<(Vec<String>, Vec<Pat
             index + 1,
             serde_json::to_string(extra).map_err(|e| e.to_string())?
         ));
-        for folder in MODEL_FOLDERS {
-            yaml.push_str(&format!("  {folder}: {folder}\n"));
-        }
+        model_yaml(&mut yaml, Path::new(extra))?;
     }
     if !yaml.is_empty() {
         let file = root.join("deas-models.yaml");
@@ -177,6 +243,166 @@ pub fn native_files_present(paths: Vec<String>) -> Result<Vec<bool>, String> {
 mod tests {
     use super::*;
     use tempfile::TempDir;
+    #[test]
+    fn swarm_backend_yaml_maps_aliases_inside_category_containing_roots() {
+        let tmp = TempDir::new().unwrap();
+        let models = tmp.path().join("Swarm models");
+        let extra_root = tmp.path().join("extra models");
+        std::fs::create_dir_all(models.join("Stable-Diffusion")).unwrap();
+        std::fs::create_dir_all(extra_root.join("Lora")).unwrap();
+        write(
+            tmp.path(),
+            Folders {
+                models: Some(models.to_str().unwrap().into()),
+                extra_models: vec![extra_root.to_str().unwrap().into()],
+                ..Folders::default()
+            },
+        )
+        .unwrap();
+        backend_configuration(tmp.path()).unwrap();
+        let yaml = std::fs::read_to_string(tmp.path().join("deas-models.yaml")).unwrap();
+        assert!(
+            yaml.contains("  checkpoints: |\n    checkpoints\n    Stable-Diffusion\n"),
+            "{yaml}"
+        );
+        let extra = yaml.split("deas-extra-1:").nth(1).unwrap();
+        assert!(
+            extra.contains("  loras: |\n    loras\n    Lora\n"),
+            "{extra}"
+        );
+        assert!(extra.contains("  checkpoints: checkpoints\n"));
+        assert!(yaml.contains("  llm: llm\n"));
+    }
+
+    fn junction_configuration_fixture(root: &Path) -> Vec<(&'static str, String)> {
+        let primary = root.join("primary");
+        let extra = root.join("extra");
+        std::fs::create_dir(&primary).unwrap();
+        std::fs::create_dir(&extra).unwrap();
+        let mut expected = vec![];
+        for (index, (models, folder, category)) in [
+            (&primary, "checkpoints", "checkpoints"),
+            (&primary, "Lora", "loras"),
+            (&extra, "Stable-Diffusion", "checkpoints"),
+            (&extra, "loras", "loras"),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let target = root.join(format!("actual # café \u{85} {index}"));
+            std::fs::create_dir(&target).unwrap();
+            let name = format!("backend-exact-{index}.safetensors");
+            let header = br#"{"__metadata__":{"modelspec.architecture":"stable-diffusion-xl"}}"#;
+            let mut bytes = (header.len() as u64).to_le_bytes().to_vec();
+            bytes.extend(header);
+            std::fs::write(target.join(&name), bytes).unwrap();
+            let alias = models.join(folder);
+            #[cfg(unix)]
+            std::os::unix::fs::symlink(&target, &alias).unwrap();
+            #[cfg(windows)]
+            {
+                let output = std::process::Command::new("cmd.exe")
+                    .args(["/D", "/C", "mklink", "/J"])
+                    .arg(&alias)
+                    .arg(&target)
+                    .output()
+                    .unwrap();
+                assert!(output.status.success(), "{output:?}");
+            }
+            expected.push((category, name));
+        }
+        write(
+            root,
+            Folders {
+                models: Some(primary.to_str().unwrap().into()),
+                extra_models: vec![extra.to_str().unwrap().into()],
+                ..Folders::default()
+            },
+        )
+        .unwrap();
+        backend_configuration(root).unwrap();
+        expected
+    }
+
+    #[test]
+    fn backend_yaml_resolves_category_links_and_quotes_multiline_targets() {
+        let tmp = TempDir::new().unwrap();
+        junction_configuration_fixture(tmp.path());
+        let yaml = std::fs::read_to_string(tmp.path().join("deas-models.yaml")).unwrap();
+        for index in 0..4 {
+            let target =
+                dunce::canonicalize(tmp.path().join(format!("actual # café \u{85} {index}")))
+                    .unwrap();
+            let escaped = serde_json::to_string(target.to_str().unwrap())
+                .unwrap()
+                .replace('\u{85}', "\\u0085");
+            assert!(yaml.contains(&escaped[1..escaped.len() - 1]), "{yaml}");
+        }
+        assert!(yaml.contains("  loras: \"loras\\n"), "{yaml}");
+        assert!(!yaml.contains("  checkpoints: checkpoints\n"), "{yaml}");
+        assert!(yaml.contains("  vae: vae\n"));
+        assert!(!yaml.contains('\u{85}'));
+        assert!(yaml.contains("\\u0085"));
+    }
+
+    #[test]
+    #[ignore = "Requires actual owned ComfyUI Python and source paths in DEAS_BACKEND_PYTHON / DEAS_COMFYUI"]
+    fn live_backend_config_parser_reads_category_junction_models() {
+        let tmp = TempDir::new().unwrap();
+        let expected = junction_configuration_fixture(tmp.path());
+        let script = r#"
+import sys,json,os
+sys.path.insert(0,sys.argv[1])
+import folder_paths
+from utils.extra_config import load_extra_path_config
+load_extra_path_config(sys.argv[2])
+results=[]
+for category,name in json.loads(sys.argv[3]):
+    names=folder_paths.get_filename_list(category)
+    assert name in names,(category,name,names)
+    path=folder_paths.get_full_path(category,name)
+    assert path,(category,name)
+    with open(path,'rb') as model:
+        size=int.from_bytes(model.read(8),'little')
+        header=json.loads(model.read(size))
+    assert header['__metadata__']['modelspec.architecture']=='stable-diffusion-xl'
+    results.append(dict(category=category,name=name,path=path,readableHeader=True))
+print('ACTUAL_BACKEND '+json.dumps(results,ensure_ascii=False))
+if os.name=='nt':
+    import subprocess,shutil
+    target=os.path.join(os.path.dirname(sys.argv[2]),'nested target')
+    os.mkdir(target)
+    source=folder_paths.get_full_path('loras','backend-exact-1.safetensors')
+    shutil.copyfile(source,os.path.join(target,'nested-backend.safetensors'))
+    alias=os.path.join(os.path.dirname(source),'nested')
+    subprocess.run(['cmd.exe','/D','/C','mklink','/J',alias,target],check=True,capture_output=True)
+    folder_paths.filename_list_cache.clear()
+    result={'name':'nested/nested-backend.safetensors'}
+    for key,operation in [
+        ('listed',lambda:result['name'] in folder_paths.get_filename_list('loras')),
+        ('path',lambda:folder_paths.get_full_path('loras',result['name']))
+    ]:
+        try: result[key]=operation()
+        except OSError as error: result[key]={'winerror':error.winerror,'error':str(error)}
+    print('NESTED_BACKEND '+json.dumps(result,ensure_ascii=False))
+"#;
+        let output = std::process::Command::new(std::env::var("DEAS_BACKEND_PYTHON").unwrap())
+            .arg("-c")
+            .arg(script)
+            .arg(std::env::var("DEAS_COMFYUI").unwrap())
+            .arg(tmp.path().join("deas-models.yaml"))
+            .arg(serde_json::to_string(&expected).unwrap())
+            .env("PYTHONIOENCODING", "utf-8")
+            .output()
+            .unwrap();
+        println!("{}", String::from_utf8_lossy(&output.stdout));
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
     #[test]
     fn latent_upscale_category_is_registered_and_scanned_for_all_model_roots() {
         let tmp = TempDir::new().unwrap();

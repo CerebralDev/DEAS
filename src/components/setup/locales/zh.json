@@ -150,6 +150,7 @@
   "settings.title": "设置",
   "settings.help": "后端使用的文件夹。留空＝环境内默认。保存在环境旁；正在运行的后端会重启以应用。",
   "settings.noRoot": "设置属于某个环境；请先设置存储目录。",
+  "settings.modelsHelp": "选择包含分类文件夹（checkpoints / Stable-Diffusion、loras / Lora）的模型根目录，不要选择分类或模型子文件夹。附加根目录也使用相同结构。会跟随现有目录链接，但不会移动文件。",
   "settings.models": "模型文件夹",
   "settings.input": "输入文件夹",
   "settings.output": "输出文件夹",

@@ -28,5 +28,14 @@
   "wildcards.baseNotice": "Basisprompt; aktive Wildcard-Regeln werden bei der Generierung ergänzt.",
   "wildcards.wildcards": "Wildcards",
   "wildcards.presets": "Presets",
-  "wildcards.preview": "Vorschau"
+  "wildcards.preview": "Vorschau",
+  "wildcards.insert": "${name} in den Positiv-Prompt einfügen",
+  "wildcards.varsTitle": "Prompt-Variablen",
+  "wildcards.varsHelp": "$name beliebig im Prompt verwenden (${name} begrenzt, $$ ist ein normales $). Wildcard-Kategorien sind Variablen — + auf der Kategorie klicken. Gleicher Seed = gleiche Auswahl; Pins gewinnen gegen den Seed.",
+  "wildcards.varsNone": "Noch keine $Variablen in den Prompts.",
+  "wildcards.custom": "Eigene Variablen (JSON)",
+  "wildcards.customInvalid": "JSON für eigene Variablen ungültig: {message}",
+  "wildcards.varPick": "{key} festlegen",
+  "wildcards.varRandom": "Zufall (Seed)",
+  "wildcards.varUnknown": "Unbekannte Variable {name}"
 }

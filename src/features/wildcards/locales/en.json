@@ -28,5 +28,14 @@
   "wildcards.baseNotice": "Base prompt; active wildcard rules are added during generation.",
   "wildcards.wildcards": "Wildcards",
   "wildcards.presets": "Presets",
-  "wildcards.preview": "Preview"
+  "wildcards.preview": "Preview",
+  "wildcards.insert": "Insert ${name} into positive prompt",
+  "wildcards.varsTitle": "Prompt variables",
+  "wildcards.varsHelp": "Type $name anywhere in the prompts (${name} delimits, $$ is a literal $). Wildcard categories are variables — click + on a category to insert one. Same seed = same pick; pins win over the seed.",
+  "wildcards.varsNone": "No $variables in the prompts yet.",
+  "wildcards.custom": "Custom variables (JSON)",
+  "wildcards.customInvalid": "Custom variables JSON invalid: {message}",
+  "wildcards.varPick": "Pin {key}",
+  "wildcards.varRandom": "Random (seed)",
+  "wildcards.varUnknown": "Unknown variable {name}"
 }

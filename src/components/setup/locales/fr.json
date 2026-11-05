@@ -150,6 +150,7 @@
   "settings.title": "Paramètres",
   "settings.help": "Dossiers utilisés par le backend. Vide = défaut dans l’environnement. Enregistré à côté de l’environnement ; un backend en marche redémarre pour les appliquer.",
   "settings.noRoot": "Les paramètres appartiennent à un environnement ; définissez d’abord le dossier de stockage.",
+  "settings.modelsHelp": "Choisissez une racine contenant les catégories (checkpoints / Stable-Diffusion, loras / Lora), pas une catégorie ni un sous-dossier de modèle. Les racines supplémentaires suivent la même structure. Les liens de dossiers existants sont suivis ; aucun fichier n’est déplacé.",
   "settings.models": "Dossier des modèles",
   "settings.input": "Dossier d’entrée",
   "settings.output": "Dossier de sortie",

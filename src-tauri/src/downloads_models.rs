@@ -93,20 +93,124 @@ fn checked_cache_file(file: &File) -> Result<(), String> {
 // Reuse the existing checked-directory policy. Linux child I/O is descriptor
 // relative. Windows rechecks the path's directory identity before path-based I/O;
 // its ACL/same-user substitution limits are the same as downloads/fs.rs.
+type DirectoryLinks = Vec<(PathBuf, (u64, [u8; 16]))>;
+
 struct CacheDir {
     anchor: fs::Anchor,
     path: PathBuf,
+    alias: PathBuf,
+    links: DirectoryLinks,
+}
+
+fn resolve_directory(path: &Path) -> Result<(PathBuf, DirectoryLinks), String> {
+    let mut links = vec![];
+    #[cfg(not(windows))]
+    {
+        for part in path.ancestors() {
+            let meta = std::fs::symlink_metadata(part).map_err(|e| e.to_string())?;
+            #[cfg(target_os = "linux")]
+            if meta.file_type().is_symlink() {
+                use std::os::unix::fs::MetadataExt;
+                let mut id = [0; 16];
+                id[..8].copy_from_slice(&meta.ino().to_le_bytes());
+                links.push((part.into(), (meta.dev(), id)));
+            }
+        }
+        let resolved = std::fs::canonicalize(path).map_err(|e| e.to_string())?;
+        if !resolved.is_dir() {
+            return Err("Model path is not a directory".into());
+        }
+        Ok((resolved, links))
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
+        use windows_sys::Win32::Storage::FileSystem::{
+            FILE_ATTRIBUTE_REPARSE_POINT, FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT,
+        };
+        let mut pending = path.to_owned();
+        // Windows can refuse traversal of user junctions (OS448), even for canonicalize.
+        for _ in 0..40 {
+            let mut current = PathBuf::new();
+            let mut parts = pending.components();
+            let mut redirected = false;
+            while let Some(part) = parts.next() {
+                current.push(part);
+                if !matches!(part, std::path::Component::Normal(_)) {
+                    continue;
+                }
+                let meta = std::fs::symlink_metadata(&current).map_err(|e| e.to_string())?;
+                if meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+                    let file = File::options()
+                        .read(true)
+                        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
+                        .open(&current)
+                        .map_err(|e| e.to_string())?;
+                    let (device, id, _) = file_identity(&file)?;
+                    let target = std::fs::read_link(&current).map_err(|e| e.to_string())?;
+                    links.push((current.clone(), (device, id)));
+                    pending = if target.is_absolute() {
+                        target
+                    } else {
+                        current.parent().ok_or("Missing link parent")?.join(target)
+                    }
+                    .join(parts.as_path());
+                    redirected = true;
+                    break;
+                }
+                if !meta.is_dir() {
+                    return Err("Model directory component is not a directory".into());
+                }
+            }
+            if !redirected {
+                return Ok((
+                    std::fs::canonicalize(current).map_err(|e| e.to_string())?,
+                    links,
+                ));
+            }
+        }
+        Err("Too many model directory links".into())
+    }
+}
+
+/// Backend configuration needs the same checked directory target, not a second resolver.
+pub(crate) fn backend_directory_target(path: &Path) -> Result<Option<PathBuf>, String> {
+    let dir = CacheDir::open(path)?;
+    if dir.links.is_empty() {
+        return Ok(None);
+    }
+    let target = dunce::canonicalize(&dir.path).map_err(|e| e.to_string())?;
+    dir.verify()?;
+    Ok(Some(target))
 }
 
 impl CacheDir {
     fn open(path: &Path) -> Result<Self, String> {
-        Ok(Self {
-            anchor: fs::Anchor::open(path)?,
-            path: path.into(),
-        })
+        if !path.is_absolute() {
+            return Err("Model directory must be absolute".into());
+        }
+        // Resolve directory aliases here only; final model/cache entries remain no-follow.
+        let (resolved, links) = resolve_directory(path)?;
+        let dir = Self {
+            anchor: fs::Anchor::open(&resolved)?,
+            path: resolved,
+            alias: path.into(),
+            links,
+        };
+        dir.verify()?;
+        Ok(dir)
     }
 
     fn verify(&self) -> Result<(), String> {
+        self.verify_target()?;
+        let (resolved, links) = resolve_directory(&self.alias)?;
+        if links != self.links || resolved != self.path {
+            return Err("Model directory alias changed during metadata lookup".into());
+        }
+        Ok(())
+    }
+
+    fn verify_target(&self) -> Result<(), String> {
         let again = fs::Anchor::open(&self.path)?;
         if again.identity()? != self.anchor.identity()? {
             return Err("Model directory changed during metadata lookup".into());
@@ -120,6 +224,11 @@ impl CacheDir {
 
     fn regular(&self, name: &str) -> Result<File, String> {
         self.verify()?;
+        self.regular_target(name)
+    }
+
+    fn regular_target(&self, name: &str) -> Result<File, String> {
+        self.verify_target()?;
         #[cfg(windows)]
         if name.contains(':') {
             return Err("Model cache filenames cannot address alternate data streams".into());
@@ -236,7 +345,7 @@ impl<'a> OwnedTemp<'a> {
     fn verify(&self) -> Result<(), String> {
         if !self.dir.anchor.owns_partial(&self.name, &self.file)
             || file_identity(&self.file)?.2 != 1
-            || fingerprint(&self.dir.regular(&self.name)?)? != fingerprint(&self.file)?
+            || fingerprint(&self.dir.regular_target(&self.name)?)? != fingerprint(&self.file)?
         {
             return Err("Metadata temporary file was replaced or linked".into());
         }
@@ -307,6 +416,13 @@ impl Source {
         }
         Ok(format!("{:x}", hasher.finalize()))
     }
+}
+
+/// Header parsers share the model-cache boundary, including no-follow final-file opening.
+pub(crate) fn open_model_file(path: &Path) -> Result<File, String> {
+    let source = Source::open(path)?;
+    source.verify()?;
+    Ok(source.file)
 }
 
 /// Generation settings taken from the first CivitAI showcase image that carries any.
@@ -575,11 +691,20 @@ pub(crate) fn validate_selected(roots: &[PathBuf], field: &str, name: &str) -> R
         return Err("Invalid backend model name".into());
     }
     for root in roots {
-        for category in categories {
-            let path = parts
-                .iter()
-                .fold(root.join(category), |p, part| p.join(part));
-            match std::fs::symlink_metadata(&path) {
+        for (category, base) in crate::settings::model_locations(root) {
+            if !categories.contains(&category) {
+                continue;
+            }
+            let path = parts.iter().fold(base, |p, part| p.join(part));
+            let parent = path.parent().ok_or("Missing model parent")?;
+            if std::fs::symlink_metadata(parent)
+                .is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound)
+            {
+                continue;
+            }
+            let (resolved, _) =
+                resolve_directory(parent).map_err(|e| format!("MODEL_METADATA_INVALID: {e}"))?;
+            match std::fs::symlink_metadata(resolved.join(path.file_name().unwrap())) {
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
                 Err(e) => return Err(format!("MODEL_METADATA_INVALID: {e}")),
                 Ok(_) => {}
@@ -598,7 +723,12 @@ fn describe(category: &str, base: &Path, path: &Path) -> Result<LocalModel, Stri
         .to_str()
         .ok_or("Model path is not valid UTF-8")?
         .to_owned();
-    let meta = std::fs::metadata(path).map_err(|e| format!("{shown}: {e}"))?;
+    let source = Source::open(path)?;
+    let header_path = source.dir.path.join(&source.name);
+    let meta = source
+        .file
+        .metadata()
+        .map_err(|e| format!("{shown}: {e}"))?;
     let metadata = checked_metadata(category, path);
     let metadata_error = metadata
         .as_ref()
@@ -609,7 +739,7 @@ fn describe(category: &str, base: &Path, path: &Path) -> Result<LocalModel, Stri
     let family_override = cache.as_ref().and_then(|c| c.family_override.clone());
     let detected_family = crate::model_families::detect(
         category,
-        path,
+        &header_path,
         info.as_ref()
             .and_then(|i| i.civitai.as_ref()?.base.as_deref()),
     );
@@ -618,7 +748,11 @@ fn describe(category: &str, base: &Path, path: &Path) -> Result<LocalModel, Stri
     } else {
         family_override.clone().or_else(|| detected_family.clone())
     };
-    let component = crate::model_families::detect_component(category, path).map(str::to_owned);
+    let component =
+        crate::model_families::detect_component(category, &header_path).map(str::to_owned);
+    let integrity = crate::model_families::intact(&header_path)
+        .and_then(|ok| (!ok).then(|| "truncated".to_owned()));
+    source.verify()?;
     if let Some(cache) = &cache {
         let current = Source::open(path)?;
         current.verify()?;
@@ -640,17 +774,19 @@ fn describe(category: &str, base: &Path, path: &Path) -> Result<LocalModel, Stri
         detected_family,
         family_override,
         metadata_error,
-        integrity: crate::model_families::intact(path)
-            .and_then(|ok| (!ok).then(|| "truncated".to_owned())),
+        integrity,
         path: shown,
     })
 }
 
 fn walk(category: &str, base: &Path, dir: &Path, depth: usize, out: &mut Vec<LocalModel>) {
-    let Ok(entries) = std::fs::read_dir(dir) else {
+    let Ok((resolved, _)) = resolve_directory(dir) else {
         return;
     };
-    let mut entries: Vec<_> = entries.flatten().map(|e| e.path()).collect();
+    let Ok(entries) = std::fs::read_dir(&resolved) else {
+        return;
+    };
+    let mut entries: Vec<_> = entries.flatten().map(|e| dir.join(e.file_name())).collect();
     entries.sort();
     for path in entries {
         if out.len() >= MAX_MODELS {
@@ -662,7 +798,7 @@ fn walk(category: &str, base: &Path, dir: &Path, depth: usize, out: &mut Vec<Loc
         if hidden {
             continue;
         }
-        if path.is_dir() {
+        if resolve_directory(&path).is_ok() {
             if depth < MAX_DEPTH {
                 walk(category, base, &path, depth + 1, out);
             }
@@ -681,6 +817,7 @@ pub fn scan_roots(roots: &[PathBuf]) -> Result<Vec<LocalModel>, String> {
     for root in roots {
         models.extend(scan(root)?);
     }
+    deduplicate(&mut models);
     Ok(models)
 }
 
@@ -689,15 +826,27 @@ pub fn scan(root: &Path) -> Result<Vec<LocalModel>, String> {
     if !root.is_absolute() {
         return Err("Models folder must be absolute".into());
     }
-    if !root.is_dir() {
+    if resolve_directory(root).is_err() {
         return Err(format!("{}: not an existing directory", root.display()));
     }
     let mut out = vec![];
-    for category in crate::settings::MODEL_FOLDERS {
-        let base = root.join(category);
+    for (category, base) in crate::settings::model_locations(root) {
         walk(category, &base, &base, 0, &mut out);
     }
+    deduplicate(&mut out);
     Ok(out)
+}
+
+fn deduplicate(models: &mut Vec<LocalModel>) {
+    let mut seen = std::collections::HashSet::new();
+    models.retain(|model| match Source::open(Path::new(&model.path)) {
+        Ok(source) => seen.insert((
+            model.category.clone(),
+            model.name.clone(),
+            source.dir.path.join(&source.name),
+        )),
+        Err(_) => true,
+    });
 }
 
 #[cfg(test)]
@@ -888,15 +1037,9 @@ pub async fn fetch(
         let mut cache = CachedMetadata::from_info(&info);
         cache.family_override = family_override;
         publish_cache(&source, &expected, &cache, || {})?;
-        let base = path.ancestors().skip(1).find(|a| {
-            a.file_name()
-                .and_then(|n| n.to_str())
-                .is_some_and(|n| crate::settings::MODEL_FOLDERS.contains(&n))
-        });
-        let model = match base {
-            Some(base) => describe(base.file_name().unwrap().to_str().unwrap(), base, &path),
-            None => describe("", path.parent().unwrap_or(&path), &path),
-        }?;
+        let (category, base) =
+            model_category(&path).unwrap_or(("", path.parent().unwrap_or(&path)));
+        let model = describe(category, base, &path)?;
         source.verify()?;
         if model.info.as_ref() != Some(&info) {
             return Err("Metadata cache changed before returning".into());
@@ -914,10 +1057,15 @@ fn model_category(path: &Path) -> Result<(&str, &Path), String> {
         .find(|a| {
             a.file_name()
                 .and_then(|n| n.to_str())
-                .is_some_and(|n| crate::settings::MODEL_FOLDERS.contains(&n))
+                .and_then(crate::settings::model_folder_category)
+                .is_some()
         })
         .ok_or("Model is not under a supported category folder")?;
-    Ok((base.file_name().and_then(|n| n.to_str()).unwrap(), base))
+    Ok((
+        crate::settings::model_folder_category(base.file_name().and_then(|n| n.to_str()).unwrap())
+            .unwrap(),
+        base,
+    ))
 }
 
 fn write_family(path: &Path, family: Option<&str>) -> Result<LocalModel, String> {
@@ -1013,6 +1161,289 @@ pub async fn native_model_info(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn directory_alias(target: &Path, alias: &Path) {
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(target, alias).unwrap();
+        #[cfg(windows)]
+        {
+            let output = std::process::Command::new("cmd")
+                .args(["/D", "/C", "mklink", "/J"])
+                .arg(alias)
+                .arg(target)
+                .output()
+                .unwrap();
+            assert!(output.status.success(), "mklink /J: {:?}", output);
+        }
+    }
+
+    fn remove_alias(alias: &Path) {
+        #[cfg(unix)]
+        std::fs::remove_file(alias).unwrap();
+        #[cfg(windows)]
+        std::fs::remove_dir(alias).unwrap();
+    }
+
+    #[test]
+    fn swarm_roots_contain_categories_and_arbitrary_subfolders_remain_unsupported() {
+        for category in crate::settings::MODEL_FOLDERS {
+            let (root, path) = family_fixture(category);
+            let contained = scan(root.path()).unwrap();
+            assert_eq!(contained.len(), 1);
+            assert_eq!(contained[0].category, category);
+            assert!(scan(path.parent().unwrap()).unwrap().is_empty());
+        }
+        let (_root, path) = family_fixture("Krea2");
+        assert!(scan(path.parent().unwrap()).unwrap().is_empty());
+        assert!(model_category(&path).is_err());
+    }
+
+    #[test]
+    fn swarm_aliases_share_namespace_inside_configured_roots() {
+        for (folder, category, field) in [
+            ("Stable-Diffusion", "checkpoints", "checkpoints"),
+            ("Lora", "loras", "loras"),
+            ("loras", "loras", "loras"),
+        ] {
+            let (root, path) = family_fixture(folder);
+            let models = scan(root.path()).unwrap();
+            assert_eq!(models.len(), 1, "missing {folder}");
+            assert_eq!(models[0].category, category);
+            assert_eq!(models[0].detected_family.as_deref(), Some("sdxl"));
+            let declared = write_family(&path, Some("sdxl")).unwrap();
+            assert_eq!(declared.category, category);
+            assert_eq!(scan(root.path()).unwrap(), vec![declared]);
+            write_cache_bytes(&sidecar(&path), b"{broken");
+            assert!(
+                validate_selected(&[root.path().into()], field, "unknown.safetensors").is_err()
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn swarm_junction_family_fetch_reset_and_category_deduplication() {
+        let (target, path) = family_fixture("checkpoints");
+        let root = tempfile::tempdir().unwrap();
+        let alias = root.path().join("Stable-Diffusion");
+        directory_alias(path.parent().unwrap(), &alias);
+        directory_alias(path.parent().unwrap(), &root.path().join("checkpoints"));
+        let linked = alias.join(path.file_name().unwrap());
+        let source = Source::open(&linked).expect("model directory aliases must be supported");
+        assert_eq!(source.stamp, Source::open(&path).unwrap().stamp);
+        let declared = write_family(&linked, Some("anima")).unwrap();
+        assert_eq!(declared.detected_family.as_deref(), Some("sdxl"));
+        assert_eq!(declared.family_override.as_deref(), Some("anima"));
+        let reopened = scan(root.path()).unwrap();
+        assert_eq!(reopened.len(), 1);
+        let mut expected = declared.clone();
+        expected.path = reopened[0].path.clone();
+        assert_eq!(reopened, vec![expected]);
+        assert_eq!(
+            Source::open(Path::new(&reopened[0].path)).unwrap().stamp,
+            source.stamp
+        );
+        let fetched = fetch_fixture_reply(&linked, || {}, Some(r#"{"id":1,"modelId":2,"name":"v1","model":{"name":"Fixture","type":"Checkpoint"},"baseModel":"SDXL 1.0"}"#)).await.unwrap();
+        assert_eq!(fetched.category, "checkpoints");
+        assert_eq!(fetched.family_override.as_deref(), Some("anima"));
+        let reset = write_family(&linked, None).unwrap();
+        assert_eq!(reset.info, fetched.info);
+        assert_eq!(reset.family.as_deref(), Some("sdxl"));
+        assert_eq!(
+            scan_roots(&[root.path().into(), target.path().into()])
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(Source::open(&path).unwrap().stamp, source.stamp);
+        assert_no_owned_temps(path.parent().unwrap());
+        println!(
+            "{}",
+            serde_json::json!({
+                "acceptance": "swarm-model-junction", "os": std::env::consts::OS,
+                "category": reset.category, "detectedFamily": reset.detected_family,
+                "savedFamily": reopened[0].family_override, "resetFamily": reset.family_override,
+                "freshScanReadback": true, "providerMetadataPreserved": reset.info == fetched.info,
+                "sourceFingerprintUnchanged": true, "deduplicatedRows": 1
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn swarm_lora_nested_junction_readback_and_selected_validation() {
+        let (_target, path) = family_fixture("loras");
+        let root = tempfile::tempdir().unwrap();
+        let loras = root.path().join("Lora");
+        std::fs::create_dir(&loras).unwrap();
+        let alias = loras.join("nested models");
+        directory_alias(path.parent().unwrap(), &alias);
+        let linked = alias.join(path.file_name().unwrap());
+        let declared = write_family(&linked, Some("sdxl")).unwrap();
+        assert_eq!(declared.category, "loras");
+        assert_eq!(declared.detected_family.as_deref(), Some("sdxl"));
+        let reopened = scan(root.path()).unwrap();
+        assert_eq!(reopened.len(), 1);
+        assert_eq!(reopened[0].family_override.as_deref(), Some("sdxl"));
+        assert_eq!(
+            reopened[0].name,
+            Path::new("nested models")
+                .join("unknown.safetensors")
+                .to_str()
+                .unwrap()
+        );
+        let fetched = fetch_fixture_reply(&linked, || {}, Some(r#"{"id":1,"modelId":2,"name":"v1","model":{"name":"Fixture","type":"LORA"},"baseModel":"SDXL 1.0"}"#)).await.unwrap();
+        assert_eq!(fetched.category, "loras");
+        assert_eq!(fetched.family_override.as_deref(), Some("sdxl"));
+        let reset = write_family(&linked, None).unwrap();
+        assert_eq!(reset.info, fetched.info);
+        assert!(scan(root.path()).unwrap()[0].family_override.is_none());
+        write_cache_bytes(&sidecar(&path), b"{broken");
+        assert!(validate_selected(&[root.path().into()], "loras", &reopened[0].name).is_err());
+    }
+
+    #[test]
+    fn swarm_distinct_nested_alias_names_keep_both_backend_ids() {
+        let (_target, path) = family_fixture("loras");
+        let root = tempfile::tempdir().unwrap();
+        let loras = root.path().join("loras");
+        std::fs::create_dir(&loras).unwrap();
+        for name in ["a", "b"] {
+            directory_alias(path.parent().unwrap(), &loras.join(name));
+        }
+        let models = scan(root.path()).unwrap();
+        assert_eq!(models.len(), 2);
+        for (model, alias) in models.iter().zip(["a", "b"]) {
+            assert_eq!(
+                model.name,
+                Path::new(alias)
+                    .join("unknown.safetensors")
+                    .to_string_lossy()
+            );
+            assert_eq!(model.category, "loras");
+        }
+    }
+
+    #[test]
+    fn swarm_chained_junctions_track_every_alias_and_reject_loops() {
+        let (_target, path) = family_fixture("loras");
+        let root = tempfile::tempdir().unwrap();
+        let intermediate = root.path().join("intermediate");
+        std::fs::create_dir(&intermediate).unwrap();
+        let inner = intermediate.join("nested");
+        directory_alias(path.parent().unwrap(), &inner);
+        let outer = root.path().join("loras");
+        directory_alias(&intermediate, &outer);
+        let linked = outer.join("nested").join(path.file_name().unwrap());
+        let source = Source::open(&linked).unwrap();
+        assert_eq!(source.stamp, Source::open(&path).unwrap().stamp);
+        assert_eq!(scan(root.path()).unwrap().len(), 1);
+        std::fs::rename(&inner, intermediate.join("old")).unwrap();
+        directory_alias(path.parent().unwrap(), &inner);
+        assert!(source.verify().unwrap_err().contains("alias changed"));
+        let cycle = root.path().join("cycle");
+        directory_alias(root.path(), &cycle);
+        let loop_path = (0..41).fold(root.path().to_owned(), |path, _| path.join("cycle"));
+        assert!(CacheDir::open(&loop_path).is_err());
+    }
+
+    #[test]
+    fn swarm_junction_replacement_same_target_is_rejected() {
+        let (_target, path) = family_fixture("checkpoints");
+        let root = tempfile::tempdir().unwrap();
+        let alias = root.path().join("checkpoints");
+        directory_alias(path.parent().unwrap(), &alias);
+        let linked = alias.join(path.file_name().unwrap());
+        let source = Source::open(&linked).unwrap();
+        std::fs::rename(&alias, root.path().join("previous-link")).unwrap();
+        directory_alias(path.parent().unwrap(), &alias);
+        assert!(source.verify().unwrap_err().contains("alias changed"));
+        assert!(!sidecar(&path).exists());
+    }
+
+    #[tokio::test]
+    async fn swarm_junction_retarget_during_fetch_does_not_publish() {
+        let (_first, path) = family_fixture("checkpoints");
+        let (_second, other) = family_fixture("checkpoints");
+        let root = tempfile::tempdir().unwrap();
+        let alias = root.path().join("Stable-Diffusion");
+        directory_alias(path.parent().unwrap(), &alias);
+        let linked = alias.join(path.file_name().unwrap());
+        write_family(&linked, Some("anima")).unwrap();
+        let before = std::fs::read(sidecar(&path)).unwrap();
+        let other_dir = other.parent().unwrap().to_owned();
+        let result = fetch_fixture(&linked, move || {
+            remove_alias(&alias);
+            directory_alias(&other_dir, &alias);
+        })
+        .await;
+        assert!(result.unwrap_err().contains("alias changed"));
+        assert_eq!(std::fs::read(sidecar(&path)).unwrap(), before);
+        assert!(!sidecar(&other).exists());
+        assert_no_owned_temps(path.parent().unwrap());
+    }
+
+    #[test]
+    fn swarm_directory_resolution_never_follows_final_model_or_cache_links() {
+        let (_target, path) = family_fixture("checkpoints");
+        let root = tempfile::tempdir().unwrap();
+        let alias = root.path().join("checkpoints");
+        directory_alias(path.parent().unwrap(), &alias);
+        let linked = alias.join(path.file_name().unwrap());
+        let before = std::fs::read(&path).unwrap();
+        let victim = root.path().join("victim");
+        std::fs::create_dir(&victim).unwrap();
+        std::fs::write(victim.join("keep"), b"unchanged").unwrap();
+        directory_alias(&victim, &path.parent().unwrap().join("linked.safetensors"));
+        assert!(Source::open(&alias.join("linked.safetensors")).is_err());
+        directory_alias(&victim, &sidecar(&path));
+        assert!(write_family(&linked, Some("anima")).is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        assert_eq!(std::fs::read(victim.join("keep")).unwrap(), b"unchanged");
+        assert_eq!(std::fs::read_dir(&victim).unwrap().count(), 1);
+        assert_no_owned_temps(path.parent().unwrap());
+    }
+
+    #[test]
+    fn swarm_junction_final_hard_linked_cache_remains_rejected() {
+        let (_target, path) = family_fixture("checkpoints");
+        let root = tempfile::tempdir().unwrap();
+        let alias = root.path().join("checkpoints");
+        directory_alias(path.parent().unwrap(), &alias);
+        let linked = alias.join(path.file_name().unwrap());
+        write_family(&linked, Some("anima")).unwrap();
+        let before = std::fs::read(sidecar(&path)).unwrap();
+        let victim = root.path().join("foreign-cache");
+        std::fs::hard_link(sidecar(&path), &victim).unwrap();
+        assert!(write_family(&linked, None).is_err());
+        assert_eq!(std::fs::read(victim).unwrap(), before);
+        assert_eq!(std::fs::read(sidecar(&path)).unwrap(), before);
+        assert!(scan(root.path()).unwrap()[0].metadata_error.is_some());
+    }
+
+    #[test]
+    fn swarm_junction_retarget_during_publication_preserves_both_targets() {
+        let (first, path) = family_fixture("checkpoints");
+        let (_second, other) = family_fixture("checkpoints");
+        let root = tempfile::tempdir().unwrap();
+        let alias = root.path().join("checkpoints");
+        directory_alias(path.parent().unwrap(), &alias);
+        let linked = alias.join(path.file_name().unwrap());
+        let source = Source::open(&linked).expect("open directory alias");
+        let info = fixture_info(&linked);
+        let result = publish_info(&source, &None, &info, || {
+            remove_alias(&alias);
+            directory_alias(other.parent().unwrap(), &alias);
+        });
+        assert!(result.is_err());
+        assert!(!sidecar(&path).exists());
+        assert!(!sidecar(&other).exists());
+        assert_eq!(
+            std::fs::read(&path).unwrap(),
+            std::fs::read(&other).unwrap()
+        );
+        drop(source);
+        // Cleanup is allowed only through the still-verified target, not the retargeted alias.
+        assert_no_owned_temps(&first.path().join("checkpoints"));
+    }
 
     fn family_fixture(category: &str) -> (tempfile::TempDir, PathBuf) {
         let root = tempfile::tempdir().unwrap();
@@ -1244,7 +1675,7 @@ mod tests {
     fn fixture_info(path: &Path) -> ModelInfo {
         ModelInfo {
             sha256: sha256_file(path).unwrap(),
-            size: std::fs::metadata(path).unwrap().len(),
+            size: Source::open(path).unwrap().stamp.size,
             fetched_at: 1,
             civitai: None,
             source: Some(Source::open(path).unwrap().stamp),

@@ -28,5 +28,14 @@
   "wildcards.baseNotice": "Prompt de base ; les règles wildcard actives sont ajoutées à la génération.",
   "wildcards.wildcards": "Wildcards",
   "wildcards.presets": "Préréglages",
-  "wildcards.preview": "Aperçu"
+  "wildcards.preview": "Aperçu",
+  "wildcards.insert": "Insérer ${name} dans le prompt positif",
+  "wildcards.varsTitle": "Variables de prompt",
+  "wildcards.varsHelp": "Tapez $name dans les prompts (${name} délimite, $$ est un $ littéral). Les catégories wildcard sont des variables — cliquez + sur une catégorie. Même seed = même choix ; les épingles gagnent sur le seed.",
+  "wildcards.varsNone": "Aucune variable $ dans les prompts.",
+  "wildcards.custom": "Variables personnalisées (JSON)",
+  "wildcards.customInvalid": "JSON des variables personnalisées invalide : {message}",
+  "wildcards.varPick": "Épingler {key}",
+  "wildcards.varRandom": "Aléatoire (seed)",
+  "wildcards.varUnknown": "Variable inconnue {name}"
 }

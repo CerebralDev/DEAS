@@ -150,6 +150,7 @@
   "settings.title": "Settings",
   "settings.help": "Folders used by the owned backend. Empty = default inside the environment. Saved beside the environment; a running backend restarts to apply them.",
   "settings.noRoot": "Settings belong to an environment; set the storage directory first.",
+  "settings.modelsHelp": "Choose a models root containing category folders (checkpoints / Stable-Diffusion, loras / Lora), not a category or model subfolder. Additional roots use the same layout. Existing directory links are followed; files are not moved.",
   "settings.models": "Models folder",
   "settings.input": "Input folder",
   "settings.output": "Output folder",

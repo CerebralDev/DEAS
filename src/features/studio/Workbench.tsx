@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { backendErrorText } from '../../lib/backendErrors';
 import { type DownloadStatus } from '../../lib/downloads';
-import { convertFileSrc, isTauri } from '@tauri-apps/api/core';
+import { convertFileSrc, invoke, isTauri } from '@tauri-apps/api/core';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { useI18n } from '../../i18n/I18nProvider';
 import { isGguf, clipLoaderName, nativeImageReferenceEncoders, type DiagnosticImageIntentV1, type RecipeAllowlist } from '../../lib/execution';
@@ -51,7 +51,7 @@ import { applyRefPrefill, nextShot, promptStructure, refPrefill } from '../../li
 import { dialectOf, labelCharacters, nativeTarget } from '../../lib/forge';
 import { PresetPanel } from '../presets/PresetPanel';
 import { WildcardPanel } from '../wildcards/WildcardPanel';
-import { defaultWildcard, isWildcardRules, wildcardNode } from '../../lib/wildcard';
+import { defaultWildcard, isWildcardRules, wildcardNode, parseWildcardLibrary, flattenCategories, mergeVariableLibrary, parsePins, parseVariableLibrary, prunePins, scanVariables, variablePick, type WildcardLibrary } from '../../lib/wildcard';
 import { containedImageHit, flattenLayer, visibleImages, type ImageLayer } from './imageEditor';
 import './workbench.css';
 import { NativeVideo, nativeVideo } from './NativeVideo';
@@ -154,6 +154,29 @@ function WorkbenchContent({endpoint,roots={},root,incoming,onCanvasContext,onOpe
  const [musicSource,setMusicSource]=useState<MediaItem|null>(null);
  const [wildcard,setWildcard]=usePref('studio.run.wildcard',defaultWildcard,isWildcardRules);
  const [wildcardEnabled,setWildcardEnabled]=usePref('studio.run.wildcardEnabled',false,isBoolean);
+ const [wildcardLibrary,setWildcardLibrary]=useState<WildcardLibrary|null>(null);
+ const [wildcardLoading,setWildcardLoading]=useState(false);
+ const [wildcardLibraryError,setWildcardLibraryError]=useState('');
+ const [wildcardRevision,setWildcardRevision]=useState(0);
+ const [customVariables]=usePref('studio.run.customVariables','{}',isString);
+ useEffect(()=>{setWildcardLibrary(null);setWildcardLibraryError('');
+  if(!native||!endpoint.trim()){setWildcardLibraryError(t('wildcards.noBackend'));return;}
+  let live=true;setWildcardLoading(true);
+  invoke<string>('native_wildcard_library',{baseUrl:endpoint}).then(text=>{const next=parseWildcardLibrary(text);if(live){setWildcardLibrary(next);setWildcardLoading(false);}}).catch(e=>{if(live){setWildcardLibrary(null);setWildcardLibraryError(String(e));setWildcardLoading(false);}});
+  return()=>{live=false;};
+ },[native,endpoint,wildcardRevision]);
+ const wildcardVars=useMemo(()=>{
+  const categories=wildcardLibrary?flattenCategories(wildcardLibrary,wildcard.style):{};
+  let custom:Record<string,string[]>={};try{custom=JSON.parse(customVariables||'{}');}catch{custom={};}
+  let customLibrary:Record<string,string[]>={};try{customLibrary=parseVariableLibrary(custom);}catch{customLibrary={};}
+  const names=new Set([...scanVariables(positive,{}).map(x=>x.name),...scanVariables(negative,{}).map(x=>x.name)]);
+  const lib=mergeVariableLibrary(categories,customLibrary,names);
+  const pins=parsePins(wildcard.variable_selections);
+  return {lib,pins,
+   positive:scanVariables(positive,lib).map(tok=>({...tok,pick:variablePick(tok.name,tok.key,lib,pins,wildcard.seed)})),
+   negative:scanVariables(negative,lib).map(tok=>({...tok,pick:variablePick(tok.name,tok.key,lib,pins,wildcard.seed)}))};
+ },[wildcardLibrary,wildcard.style,wildcard.seed,wildcard.variable_selections,customVariables,positive,negative]);
+ const wildcardVarChips=wildcardEnabled&&wildcardVars.positive.length+wildcardVars.negative.length>0?wildcardVars.positive.concat(wildcardVars.negative):[];
  const [checkpointPref,setCheckpoint]=usePref('studio.run.checkpoint','',isString);
  const [modelIdentity,setModelIdentity]=useState('');
  const identity=(m:LocalModel)=>JSON.stringify([m.category,m.path,m.name]);
@@ -362,6 +385,8 @@ const loadChoices=()=>{if(native&&!choices&&endpoint.trim())void refreshChoices(
  const usable=allModels.filter(m=>!blocked(m,pipeline));
  const model=checkpointPref?(modelIdentity?usable.find(m=>m.name===checkpointPref&&identity(m)===modelIdentity):usable.find(m=>m.name===checkpointPref)):usable[0];
  const checkpoint=model?.name??'';
+ const savedModel=allModels.find(m=>m.name===checkpointPref&&(!modelIdentity||identity(m)===modelIdentity));
+ const unavailableModelReason=checkpointPref&&!model?(savedModel?t(blocked(savedModel,pipeline)):t('studio.quick.unavailable',{names:checkpointPref})):'';
  const family=familyOf(model);
  const resolution=resolutionPref==='model'&&!family?.defaults?'fixed':resolutionPref;
  const split=parts(family);
@@ -595,7 +620,8 @@ const loadChoices=()=>{if(native&&!choices&&endpoint.trim())void refreshChoices(
   const refinePass=post&&!h3Image;
   const inputLayers=visibleImages(layers);
   const refineSigmas=only?.upscaleOnly?[]:tail(refineDenoise); // Upscale alone: no diffusion tail, the pass is resize + model upscale.
-  const common={recipeId:'checkpoint-text-to-image-diagnostic',version:1,positivePrompt:positive,negativePrompt:negative,checkpoint,seed,cfg,sampler,scheduler,outputPrefix:naming,...(wildcardEnabled?{wildcard:structuredClone(wildcard)}:{}),...(activeLoras.length?{loras:activeLoras}:{}),...(split&&family?.clipType?{diffusion:{textEncoder,...(dualClip&&textEncoder2?{textEncoder2}:{}),clipType:family.clipType,vae,family:family.id}}:{}),...(family?{family:family.id}:{}),...(h3Image?{h3Edit:{shiftVideo:video.shiftVideo,shiftAudio:video.shiftAudio}}:{}),...(imageRefs.length&&referenceMethod?(referenceMethod==='revision'?{imageReference:{visionModel:refVision,images:imageRefs.map(r=>({image:comfyName(r.item)||r.item.path!,strength:r.strength}))}}:{nativeImageReference:{method:referenceMethod,images:imageRefs.map(r=>comfyName(r.item)||r.item.path!)}}):{}),...(options?{options}:{}),...(out.imageFormat!=='png'||out.imageCompression!==44?{imageFormat:out.imageFormat,imageCompression:out.imageCompression}:{})} as const;
+  const wiredWildcard:typeof wildcard=wildcardEnabled?{...wildcard,...(Object.keys(wildcardVars.lib).length?{variables_json:JSON.stringify(wildcardVars.lib),variable_selections:JSON.stringify(prunePins(negative,wildcardVars.lib,prunePins(positive,wildcardVars.lib,parsePins(wildcard.variable_selections))))}:{})}:wildcard;
+  const common={recipeId:'checkpoint-text-to-image-diagnostic',version:1,positivePrompt:positive,negativePrompt:negative,checkpoint,seed,cfg,sampler,scheduler,outputPrefix:naming,...(wildcardEnabled?{wildcard:wiredWildcard}:{}),...(activeLoras.length?{loras:activeLoras}:{}),...(split&&family?.clipType?{diffusion:{textEncoder,...(dualClip&&textEncoder2?{textEncoder2}:{}),clipType:family.clipType,vae,family:family.id}}:{}),...(family?{family:family.id}:{}),...(h3Image?{h3Edit:{shiftVideo:video.shiftVideo,shiftAudio:video.shiftAudio}}:{}),...(imageRefs.length&&referenceMethod?(referenceMethod==='revision'?{imageReference:{visionModel:refVision,images:imageRefs.map(r=>({image:comfyName(r.item)||r.item.path!,strength:r.strength}))}}:{nativeImageReference:{method:referenceMethod,images:imageRefs.map(r=>comfyName(r.item)||r.item.path!)}}):{}),...(options?{options}:{}),...(out.imageFormat!=='png'||out.imageCompression!==44?{imageFormat:out.imageFormat,imageCompression:out.imageCompression}:{})} as const;
   const resized=!!upscaleModel||target.width!==only?.size.width||target.height!==only?.size.height;
   return Object.freeze(only
    ?{...common,width:target.width,height:target.height,steps:refineSigmas?refineSigmas.length-1:steps,...(refineSigmas?{sigmas:refineSigmas}:{}),inputImage:only.image,denoise:only.upscaleOnly?0:refineDenoise,...(resized?{inputResize:{...target,crop:'disabled' as const}}:{}),...(upscaleModel?{upscaleModel}:{})}
@@ -1300,10 +1326,10 @@ const promptTools=forgeContext&&<>
    <aside id="studio-settings" className="wb-side" hidden={settingsHidden} style={{flexBasis:sideSize}}>
     <section className="wb-settings" aria-label={t('studio.run.settings')}>
      <label className="wb-field wb-pipeline"><span>{t('studio.run.pipeline')}</span><select data-pipeline value={pipeline} onChange={e=>{pickPipeline(e.target.value as Pipeline);}}>{pipelines.map(id=>{const reason=why(id);return <option key={id} value={id} disabled={!!reason} title={reason?t(reason):undefined}>{t(`studio.run.pipe.${id}`)}</option>;})}</select></label>
-     <div className="wb-checkpoint"><label className="wb-field"><span>{t('studio.run.checkpoint')}{family&&<> · {family.name}</>}</span><select data-model-picker aria-label={t('studio.run.checkpoint')} title={checkpointPref||checkpoint} value={model?modelValue(model):checkpointPref||checkpoint} onChange={e=>{const next=allModels.find(m=>modelValue(m)===e.target.value&&!blocked(m,pipeline));if(next)pickModel(next);}}>
+     <div className="wb-checkpoint"><label className="wb-field"><span>{t('studio.run.checkpoint')}{family&&<> · {family.name}</>}</span><select data-model-picker aria-label={t('studio.run.checkpoint')} title={unavailableModelReason||checkpointPref||checkpoint} value={model?modelValue(model):checkpointPref||checkpoint} onChange={e=>{const next=allModels.find(m=>modelValue(m)===e.target.value&&!blocked(m,pipeline));if(next)pickModel(next);}}>
       {!checkpointPref&&!checkpoint&&<option value="" disabled>{t('studio.run.noModels')}</option>}
-      {checkpointPref&&!allModels.some(m=>m.name===checkpointPref)&&<option value={checkpointPref} disabled>{checkpointPref}</option>}
-      {allModels.map(m=>{const reason=blocked(m,pipeline);return <option key={identity(m)} value={modelValue(m)} disabled={!!reason} title={reason?t(reason):m.name}>{m.name}</option>;})}
+      {unavailableModelReason&&<option value={checkpointPref} disabled title={unavailableModelReason}>{checkpointPref} — {unavailableModelReason}</option>}
+      {usable.map(m=><option key={identity(m)} value={modelValue(m)} title={m.name}>{m.name}</option>)}
      </select></label><small>{t('studio.run.loras')} {activeLoras.length}</small></div>
      {pipeline==='i2i'&&<p className="wb-active"><span>{t('studio.run.pipe.input')} · {t(`studio.run.edit.${edit}`)}</span><strong title={inputImage}>{fileName(inputImage)}</strong></p>}
     {pipeline==='i2v'&&!lastOnly&&<p className="wb-active"><span>{t('studio.run.pipe.input')}</span><strong title={inputImage}>{fileName(inputImage)}</strong></p>}
@@ -1399,6 +1425,7 @@ const promptTools=forgeContext&&<>
      {isMusic?<MusicPrompts endpoint={endpoint} root={root} style={musicStyle} lyrics={musicLyrics} onStyle={setMusicStyle} onLyrics={setMusicLyrics} actions={promptActions}/>:<>
      <div className="wb-prompt" onDragOver={e=>{if(e.dataTransfer.types.includes(MEDIA_DRAG)||e.dataTransfer.types.includes('Files')){e.preventDefault();const item=promptImage(e.dataTransfer);e.dataTransfer.dropEffect=referenceMethod&&imageRefs.length<4&&(e.dataTransfer.types.includes(MEDIA_IMAGE_DRAG)||validReference(item))?'copy':'none';}}} onDrop={e=>{if(e.dataTransfer.types.includes(MEDIA_DRAG)||e.dataTransfer.types.includes('Files'))e.preventDefault();const item=promptImage(e.dataTransfer);if(referenceMethod&&validReference(item)&&imageRefs.length<4){setImageRefs(v=>v.length>=4?v:[...v,{item:{...item},strength:0.6}]);if(revisionOk&&native&&!(choices?.visionModels?.length??0))setVisionDownload(true);}}}><div className="wb-prompt-label"><label htmlFor="run-positive">{t('studio.run.positive')}</label><small data-prompt-count="positive">{positive.length} / {16384}</small></div><PromptTextarea root={root} target={nativeTarget(dialectOf(model?.family))??'generic'} id="run-positive" data-run-positive value={positive} maxLength={16384} placeholder={t('studio.run.positiveHint')} onChange={e=>setPositive(e.target.value)}/><button type="button" className="wb-prompt-expand" data-prompt-expand="positive" aria-label={t('studio.run.prompt.expand',{name:t('studio.run.positive')})} title={t('studio.run.prompt.expand',{name:t('studio.run.positive')})} aria-pressed={detached==='positive'} onClick={()=>setDetached(detached==='positive'?null:'positive')}>⤢</button>{promptActions('positive',positive,setPositive)}{forgeContext&&onOpenPromptForge?<button type="button" className="forge-anchor forge-hammer forge-link" data-forge-open aria-label={t('forge.button')} title={t('studio.tab.forge')} onClick={onOpenPromptForge}><HammerIcon/></button>:<ForgeButton endpoint={endpoint} root={root} dialect={dialectOf(model?.family)} value={positive} image={pipeline==='i2i'?inputImage||undefined:undefined} onApply={setPositive} onWildcards={openWildcards} wildcard={wildcardEnabled?wildcard:undefined} h3={forgeContext} tools={promptTools}/>}</div>
      <div className="wb-prompt wb-negative"><div className="wb-prompt-label"><label htmlFor="run-negative">{t('studio.run.negative')}</label><small data-prompt-count="negative">{negative.length} / {16384}</small></div><PromptTextarea root={root} target={nativeTarget(dialectOf(model?.family))??'generic'} id="run-negative" data-run-negative value={negative} maxLength={16384} placeholder={t('studio.run.negativeHint')} onChange={e=>setNegative(e.target.value)}/><button type="button" className="wb-prompt-expand" data-prompt-expand="negative" aria-label={t('studio.run.prompt.expand',{name:t('studio.run.negative')})} title={t('studio.run.prompt.expand',{name:t('studio.run.negative')})} aria-pressed={detached==='negative'} onClick={()=>setDetached(detached==='negative'?null:'negative')}>⤢</button>{promptActions('negative',negative,setNegative)}</div></>}
+     {wildcardVarChips.length>0&&<div className="wb-var-chips wb-wide" data-var-chips aria-label={t('wildcards.varsTitle')}>{wildcardVarChips.map((tok,i)=><button key={`${tok.key}:${i}`} type="button" className="wb-var-chip" data-var-chip={tok.name} aria-label={`$${tok.name}`} title={tok.known?`$${tok.name} → ${tok.pick}`:t('wildcards.varUnknown',{name:tok.name})} onClick={()=>{setDockHidden(false);setDockTab('wildcards');}}>{`$${tok.name}`}{tok.known?` → ${tok.pick}`:' ?'}</button>)}</div>}
      {!isMusic&&imageRefs.length>0&&<p className="wb-active wb-wide" data-reference-chip><span>{t('studio.run.reference.max',{count:imageRefs.length,max:4})}{!referenceMethod&&<> · {t('studio.run.reference.inactive')}</>}</span>{revisionOk&&<>{pick('studio.run.reference.vision',refVision,choices?.visionModels??[],setRefVision,loadChoices)}{!(choices?.visionModels?.length??0)&&<span>{t('studio.run.reference.needs')}</span>}</>}</p>}
      {!isMusic&&imageRefs.length>0&&<div className="wb-reference-strip wb-wide">
       {imageRefs.map((r,i)=><div key={`${i}:${r.item.path}`} className="wb-reference-card" data-reference-controls data-history-reference-unresolved={historyDraft&&!r.item.path?true:undefined} data-reference-position={i+1} role="group" aria-label={t('studio.run.reference.position',{position:i+1})} draggable onDragStart={e=>{e.stopPropagation();e.dataTransfer.clearData();e.dataTransfer.setData(referenceDrag,String(i));e.dataTransfer.effectAllowed='move';draggedReference.current=r;}} onDragEnd={()=>{draggedReference.current=null;}} onDragOver={e=>{if(e.dataTransfer.types.includes(referenceDrag)&&draggedReference.current){e.preventDefault();e.stopPropagation();e.dataTransfer.dropEffect='move';}else if(historyDraft&&(e.dataTransfer.types.includes(MEDIA_DRAG)||e.dataTransfer.types.includes('Files'))){e.preventDefault();e.stopPropagation();e.dataTransfer.dropEffect=historyReferenceCompatible&&(e.dataTransfer.types.includes(MEDIA_IMAGE_DRAG)||validReference(promptImage(e.dataTransfer)))?'copy':'none';}}} onDrop={e=>{if(e.dataTransfer.types.includes(referenceDrag)){e.preventDefault();e.stopPropagation();moveReference(imageRefs.indexOf(draggedReference.current!),i);draggedReference.current=null;}else if(historyDraft&&(e.dataTransfer.types.includes(MEDIA_DRAG)||e.dataTransfer.types.includes('Files'))){e.preventDefault();e.stopPropagation();replaceHistoryReference(i,promptImage(e.dataTransfer));}}}>
@@ -1431,7 +1458,7 @@ const promptTools=forgeContext&&<>
     {(dockTab==='models'||dockTab==='loras')&&<><MediaControls query={query} onQuery={setQuery} sort={sort} onSort={setSort} view={dockView} onView={setDockView} sorts={sorts}/><button type="button" className="wb-dock-action" data-run-load disabled={!native||busy||(!modelsDir&&!endpoint.trim())} onClick={()=>void load()}>{t(models?'studio.run.reload':'studio.run.load')}</button></>}
    </div>}
    {dockTab==='presets'&&<div className="wb-dock-panel"><PresetPanel disabled={busy||!!current||autoPlan||resolving}/></div>}
-    {dockTab==='wildcards'&&<div className="wb-dock-panel"><WildcardPanel endpoint={endpoint} value={wildcard} onChange={setWildcard} enabled={wildcardEnabled} onEnabled={setWildcardEnabled}/></div>}
+    {dockTab==='wildcards'&&<div className="wb-dock-panel"><WildcardPanel library={wildcardLibrary} loading={wildcardLoading} error={wildcardLibraryError} onReload={()=>setWildcardRevision(v=>v+1)} value={wildcard} onChange={setWildcard} enabled={wildcardEnabled} onEnabled={setWildcardEnabled} positive={positive} negative={negative} onInsert={name=>setPositive(p=>`${p.trim()?`${p} `:''}$${name}`)}/></div>}
 {dockTab==='post'&&<section className="wb-dock-panel wb-post" aria-label={t('studio.run.dock.post')}>
     {latent&&<fieldset className="wb-group" data-post-group="latent"><legend>{t('studio.run.post.group.latent')}</legend><div className="wb-options">
      <div className="wb-option"><label className="wb-option-row"><input data-latent-upscale-enabled type="checkbox" checked={latentPref.enabled} onChange={e=>{setLatentPref({...latentPref,enabled:e.target.checked,model:latentPref.model||latentModel});if(e.target.checked&&choices&&!latentChoices.includes(latentModel))setLatentDownload(videoFamily!);}}/>{t('studio.run.latent.enabled')}</label><small>{t('studio.run.latent.hint',{width:String(latentSize.width),height:String(latentSize.height)})}</small></div>
