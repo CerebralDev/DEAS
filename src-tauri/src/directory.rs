@@ -78,8 +78,10 @@ fn read_json(path: &std::path::Path) -> Result<String, String> {
         return Err("JSON file exceeds 1 MiB".into());
     }
     let text = std::fs::read_to_string(path).map_err(|e| format!("Cannot read JSON file: {e}"))?;
-    checked_json(&text)?;
-    Ok(text)
+    // Returned stripped: the frontend parses this text and JSON.parse rejects a BOM too.
+    let text = crate::strip_bom(&text);
+    checked_json(text)?;
+    Ok(text.to_string())
 }
 
 /// Open dialog for one JSON document; returns its text (validated JSON, ≤ 1 MiB) or `None` on cancel.
@@ -107,6 +109,14 @@ mod tests {
         let ok = dir.path().join("pack.json");
         std::fs::write(&ok, r#"{"items":[]}"#).unwrap();
         assert_eq!(read_json(&ok).unwrap(), r#"{"items":[]}"#);
+        // Editors that write a UTF-8 BOM (issue #27): reads are BOM-tolerant and return stripped text.
+        let bom = dir.path().join("bom.json");
+        std::fs::write(
+            &bom,
+            [b"\xef\xbb\xbf".as_slice(), br#"{"items":[]}"#].concat(),
+        )
+        .unwrap();
+        assert_eq!(read_json(&bom).unwrap(), r#"{"items":[]}"#);
         let bad = dir.path().join("bad.json");
         std::fs::write(&bad, "not json").unwrap();
         assert!(read_json(&bad).is_err());

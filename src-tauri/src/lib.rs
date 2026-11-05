@@ -106,6 +106,16 @@ pub use logs::{
 
 use reqwest::Url;
 
+// Windows editors (PowerShell `Out-File`, VS Code "UTF-8 with BOM") prefix saved config files
+// with a UTF-8 BOM, which `serde_json` rejects; strip it at every user-file parse boundary.
+pub(crate) fn strip_bom(text: &str) -> &str {
+    text.trim_start_matches('\u{feff}')
+}
+
+pub(crate) fn bom_free(bytes: &[u8]) -> &[u8] {
+    bytes.strip_prefix(b"\xef\xbb\xbf").unwrap_or(bytes)
+}
+
 fn validate_base_url(input: &str) -> Result<Url, String> {
     let mut url = Url::parse(input.trim())
         .map_err(|_| "Enter an absolute HTTP or HTTPS backend URL".to_string())?;

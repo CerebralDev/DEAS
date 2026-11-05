@@ -142,7 +142,8 @@ fn root_dir(root: &str) -> Result<PathBuf, String> {
 
 pub fn read(root: &Path) -> Result<Folders, String> {
     match std::fs::read(root.join(FILE)) {
-        Ok(bytes) => serde_json::from_slice(&bytes).map_err(|e| format!("Invalid {FILE}: {e}")),
+        Ok(bytes) => serde_json::from_slice(crate::bom_free(&bytes))
+            .map_err(|e| format!("Invalid {FILE}: {e}")),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Folders::default()),
         Err(e) => Err(format!("{FILE}: {e}")),
     }
@@ -243,6 +244,21 @@ pub fn native_files_present(paths: Vec<String>) -> Result<Vec<bool>, String> {
 mod tests {
     use super::*;
     use tempfile::TempDir;
+
+    #[test]
+    fn bom_prefixed_settings_file_still_reads() {
+        let tmp = TempDir::new().unwrap();
+        std::fs::create_dir(tmp.path().join("models")).unwrap();
+        let folders = Folders {
+            models: Some(tmp.path().join("models").to_str().unwrap().into()),
+            ..Folders::default()
+        };
+        write(tmp.path(), folders.clone()).unwrap();
+        let file = tmp.path().join(FILE);
+        let bytes = std::fs::read(&file).unwrap();
+        std::fs::write(&file, [b"\xef\xbb\xbf".as_slice(), &bytes].concat()).unwrap();
+        assert_eq!(read(tmp.path()).unwrap(), folders);
+    }
     #[test]
     fn swarm_backend_yaml_maps_aliases_inside_category_containing_roots() {
         let tmp = TempDir::new().unwrap();

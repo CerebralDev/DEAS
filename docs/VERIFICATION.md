@@ -1,5 +1,11 @@
 # DEAS verification — native baseline, optional capabilities and languages
 
+## UTF-8 BOM tolerance in config reads (0.2.14, unreleased)
+
+- Contributor advice from issue #27 (@NicerDicerPlus): `serde_json` and JS `JSON.parse` reject a leading UTF-8 BOM, which Windows editors (PowerShell 5.1 `Out-File`, VS Code "UTF-8 with BOM") write into hand-saved files. Added `strip_bom`/`bom_free` helpers in `src-tauri/src/lib.rs` and applied them at every user-file parse boundary: `deas-startup.json` (`startup.rs`), `deas-settings.json` (`settings.rs`), Studio presets (`presets.rs`), wildcard library body (`wildcard.rs`), and `native_json_open` (`directory.rs`, text returned stripped so the frontend parse is clean too).
+- Regressions: `startup::tests::bom_prefixed_startup_file_still_reads`, `settings::tests::bom_prefixed_settings_file_still_reads`, `presets::tests::bom_prefixed_preset_file_still_reads`, and the extended `directory::tests::json_files_are_size_capped_and_must_parse` (BOM round trip returns stripped text). Gates 2026-11-05: `cargo test --lib` 728 passed / 0 failed; `cargo clippy --release --lib --bins -- -D warnings` clean; `rustfmt --edition 2021 --check` adds no violations in the touched hunks (two pre-existing HEAD flags in `wildcard.rs:32/80` are outside this change); no UI files touched, so frontend gates not run.
+- Not exercised: the wildcard-library strip against a live owned backend (the fetch needs a running node; the strip is one line at the decode boundary), Windows runtime, live-app relaunch.
+
 ## SwarmUI model folders and pipeline picker (0.2.14, unreleased)
 
 Working-tree follow-up to `97de7a4`, retaining the existing unreleased version. Scope: SwarmUI category aliases, existing directory links and model-family sidecar round-trips; separately, filtering the native checkpoint selector through the existing pipeline compatibility gate. No model downloads, weight edits, SwarmUI configuration changes, live service restarts, commit or publication.

@@ -77,8 +77,8 @@ fn read(root: &Path) -> Result<Vec<Preset>, String> {
         return Err("Preset JSON exceeds 2 MiB".into());
     }
     // Never include parser errors: they can contain private preference values.
-    let presets: Vec<Preset> =
-        serde_json::from_slice(&bytes).map_err(|_| "Invalid Studio preset JSON")?;
+    let presets: Vec<Preset> = serde_json::from_slice(crate::bom_free(&bytes))
+        .map_err(|_| "Invalid Studio preset JSON")?;
     validate(&presets)?;
     Ok(presets)
 }
@@ -164,6 +164,18 @@ mod tests {
             }))
             .unwrap(),
         }
+    }
+
+    #[test]
+    fn bom_prefixed_preset_file_still_reads() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let presets = vec![preset("Portrait")];
+        write(&root, &presets).unwrap();
+        let file = root.join(FILE);
+        let bytes = std::fs::read(&file).unwrap();
+        std::fs::write(&file, [b"\xef\xbb\xbf".as_slice(), &bytes].concat()).unwrap();
+        assert_eq!(read(&root).unwrap(), presets);
     }
 
     #[test]

@@ -162,7 +162,8 @@ pub fn packages(root: &Path) -> Vec<&'static str> {
 
 pub fn read(root: &Path) -> Result<Startup, String> {
     match std::fs::read(root.join(FILE)) {
-        Ok(bytes) => serde_json::from_slice(&bytes).map_err(|e| format!("Invalid {FILE}: {e}")),
+        Ok(bytes) => serde_json::from_slice(crate::bom_free(&bytes))
+            .map_err(|e| format!("Invalid {FILE}: {e}")),
         // No saved choice: Speed+ is the default.
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Startup {
             preset: Some("speed".into()),
@@ -272,6 +273,17 @@ mod tests {
             fast: fast.iter().map(|f| f.to_string()).collect(),
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn bom_prefixed_startup_file_still_reads() {
+        let root = tempfile::tempdir().unwrap();
+        let saved = s(&["--highvram"], &[]);
+        write(root.path(), saved.clone()).unwrap();
+        let file = root.path().join(FILE);
+        let bytes = std::fs::read(&file).unwrap();
+        std::fs::write(&file, [b"\xef\xbb\xbf".as_slice(), &bytes].concat()).unwrap();
+        assert_eq!(read(root.path()).unwrap(), saved);
     }
 
     #[test]

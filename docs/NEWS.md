@@ -4,6 +4,8 @@
 
 - Reuse SwarmUI `Stable-Diffusion` and `Lora` folders through the existing model-root settings, including existing directory links. Model-family sidecars are saved beside the actual file without moving weights. The checkpoint dropdown filters candidates for the current pipeline and keeps an unavailable saved selection explicit.
 
+- Hand-edited config files saved with a UTF-8 BOM (PowerShell, VS Code "UTF-8 with BOM") now read correctly: startup settings, model folders, Studio presets, wildcard libraries and opened JSON documents.
+
 - Output-naming failures preserve originals and roll back incomplete publications. Temporal tiled-refine restrictions now also apply to direct native requests. Old guided-setup-only code is removed without changing automatic installation.
 
 - Paste clipboard pictures into the active Forge editor; ordinary text paste still works. Chat can read later guide pages, including Music, App updates and TVE documentation, within its existing tool budget.

@@ -135,6 +135,7 @@ pub async fn native_wildcard_library(base_url: String) -> Result<String, String>
             bytes.extend_from_slice(&chunk);
         }
         let text = String::from_utf8(bytes).map_err(|_| "Invalid wildcard library encoding")?;
+        let text = crate::strip_bom(&text).to_string();
         let value: Value =
             serde_json::from_str(&text).map_err(|_| "Invalid wildcard library JSON")?;
         if !value["categories"].is_object() {
