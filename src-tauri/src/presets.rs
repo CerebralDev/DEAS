@@ -171,11 +171,11 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
         let presets = vec![preset("Portrait")];
-        write(&root, &presets).unwrap();
+        write(root, &presets).unwrap();
         let file = root.join(FILE);
         let bytes = std::fs::read(&file).unwrap();
         std::fs::write(&file, [b"\xef\xbb\xbf".as_slice(), &bytes].concat()).unwrap();
-        assert_eq!(read(&root).unwrap(), presets);
+        assert_eq!(read(root).unwrap(), presets);
     }
 
     #[test]

@@ -1,6 +1,6 @@
 # DEAS verification — native baseline, optional capabilities and languages
 
-## Drop-in theme packs (0.2.14, unreleased)
+## Drop-in theme packs (0.2.14, shipped in 0.2.14)
 
 Theme-only adoption of `DEAS-0.2.13-THEME-PLUGIN-UPDATE.zip` (SHA-256 `48ef7537…f934e97`, verified against its MANIFEST embedded hashes) into the current application. The separate Beginner interface and its executable were not imported; all 0.2.13 native/frontend files were ported by hand onto current sources, not copied wholesale.
 
@@ -10,13 +10,13 @@ Theme-only adoption of `DEAS-0.2.13-THEME-PLUGIN-UPDATE.zip` (SHA-256 `48ef7537�
 - Tests: Rust `cargo test themes` 18 passed / 0 failed (771 filtered out, 2 suites; schema, BOM, traversal, symlink, caps, dedup, fallback); Vitest 1378 passed / 75 files; typecheck + `tsc -p src/tsconfig.json` + production build; `tools/verify_theme_packs.py` and `tools/verify_theme_editor.py` pass in real Chromium against a strict directory-handle fixture; packs self-check (11 unique IDs, manifest hashes, PNG/WebP magic, 0.2.14 palette byte-identical to shipped themes.css).
 - Not exercised: native GTK/WebKitGTK click-through, OS folder opener, real browser folder-permission prompts, Windows WebView2, idle resource budgets in native runs — open gates in `docs/PLAN.md` §4.10.
 
-## UTF-8 BOM tolerance in config reads (0.2.14, unreleased)
+## UTF-8 BOM tolerance in config reads (0.2.14, shipped in 0.2.14)
 
 - Contributor advice from issue #27 (@NicerDicerPlus): `serde_json` and JS `JSON.parse` reject a leading UTF-8 BOM, which Windows editors (PowerShell 5.1 `Out-File`, VS Code "UTF-8 with BOM") write into hand-saved files. Added `strip_bom`/`bom_free` helpers in `src-tauri/src/lib.rs` and applied them at every user-file parse boundary: `deas-startup.json` (`startup.rs`), `deas-settings.json` (`settings.rs`), Studio presets (`presets.rs`), wildcard library body (`wildcard.rs`), and `native_json_open` (`directory.rs`, text returned stripped so the frontend parse is clean too).
 - Regressions: `startup::tests::bom_prefixed_startup_file_still_reads`, `settings::tests::bom_prefixed_settings_file_still_reads`, `presets::tests::bom_prefixed_preset_file_still_reads`, and the extended `directory::tests::json_files_are_size_capped_and_must_parse` (BOM round trip returns stripped text). Gates 2026-11-05: `cargo test --lib` 728 passed / 0 failed; `cargo clippy --release --lib --bins -- -D warnings` clean; `rustfmt --edition 2021 --check` adds no violations in the touched hunks (two pre-existing HEAD flags in `wildcard.rs:32/80` are outside this change); no UI files touched, so frontend gates not run.
 - Not exercised: the wildcard-library strip against a live owned backend (the fetch needs a running node; the strip is one line at the decode boundary), Windows runtime, live-app relaunch.
 
-## SwarmUI model folders and pipeline picker (0.2.14, unreleased)
+## SwarmUI model folders and pipeline picker (0.2.14, shipped in 0.2.14)
 
 Working-tree follow-up to `97de7a4`, retaining the existing unreleased version. Scope: SwarmUI category aliases, existing directory links and model-family sidecar round-trips; separately, filtering the native checkpoint selector through the existing pipeline compatibility gate. No model downloads, weight edits, SwarmUI configuration changes, live service restarts, commit or publication.
 
@@ -38,7 +38,7 @@ Original report (lordinario, not a matched reproduction of the exact files): sel
 - Final staged working-tree artifacts (unsigned, not a release or publication): `artifacts/deas-linux-amd64`, SHA-256 `bf9dd5601c3300b381a8fee63dcab404774dfd64f24b93c43cd1e79e630fd3c1`; `artifacts/test/deas-swarm-0.2.14-windows.exe`, SHA-256 `2219556f766e6b2a19791a50096a4853f2d4a6a52f4bb155a271f170f3dbd0ae`. App relaunch and a new owned-backend start are required to use the new embedded UI and regenerated model paths; the user’s live app/backend was not restarted by this work. The final Windows artifact’s hash was verified after SCP and its real WebView2 native scan/save/read/reset path passed again; backend state was stopped and the queue empty before exact test-PID cleanup. Full process-restart persistence was separately verified above on the preceding build of the same metadata implementation.
 - Direct category/model-subfolder registration is deliberately not added: configured model roots continue to contain category folders, preserving the existing download destination and folder-relocation contract. Six localized folder hints explain this. Detection, declared metadata, backend loader namespace and actual inference remain separate acceptance levels.
 
-## Known defects and audits (0.2.14, unreleased)
+## Known defects and audits (0.2.14, shipped in 0.2.14)
 
 Working-tree batch based on `eecd8c8`; no commit, push, release, model download or service restart is implied. Version 0.2.14 is aligned in package.json, both package-lock fields, Cargo.toml/Cargo.lock and tauri.conf.json.
 

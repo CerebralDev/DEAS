@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.14 BETA (unreleased)
+## 0.2.14 BETA
 
 - **Drop-in theme packs.** Quick Settings discovers validated local packs from the selected environment, opens their folder explicitly and refreshes edits without a backend restart. Nine exported palettes, optional French/Paris presentations and an offline colour/image editor are supplied under `theme-packs/`. Existing theme IDs remain stable; removed packs recover to Default without erasing the selection. Runtime packs are data-only, with bounded PNG/static WebP decoding, traversal/link rejection and shared diagnostics. The theme-only update is adapted from the separate 0.2.13 delivery; its Beginner interface and executable are not imported. [Guide](THEME-PACKS.md).
 
@@ -44,12 +44,12 @@
 - **Mage-Flow works.** Family-declared `encodeNode` (`TextEncodeMageFlowEdit`) carries prompt, negative and the latent in one node; no EmptyLatentImage. 30 steps / CFG 5 / euler (Turbo 4/1).
 - **PixelDiT works (unverified).** Gemma-2 with type `pixeldit`, pixel latent `EmptyChromaRadianceLatentImage` (the PixelDiTPixel format), no patch.
 
-## 0.2.12 BETA (unreleased)
+## 0.2.12 BETA (untagged; shipped in 0.2.14)
 
 - **Flux.1 works.** Flux.1 dev/schnell/Krea is a detected family with two encoders: the Model files panel gains a **Second text encoder** picker, the recipe compiles `DualCLIPLoader` (`clip_l` + `t5xxl`, type `flux`), uses the SD3 latent, zeroes the negative and starts on the blueprint values (20 steps, CFG 1, `euler`, `simple`). A GGUF encoder switches to `DualCLIPLoaderGGUF`. Flux.1 Fill is not covered.
 - **Dual encoders are recipe data, not a compiler branch.** `diffusion.textEncoder2` is optional in both compilers (TS and Rust); the backend prerequisites now list `dualTextEncoders`/`dualClipTypes` from `DualCLIPLoader`, and the second encoder is a filename hint (`componentFilesNamed`) that never claims header compatibility.
 
-## 0.2.11 BETA (unreleased)
+## 0.2.11 BETA (untagged; shipped in 0.2.14)
 
 - **Z-Image works.** Z-Image Turbo is now a detected model family: pick the diffusion file in Checkpoint, its Qwen3-4B text encoder (`lumina2` loader type) and the Flux VAE (`ae`) under Model files. The recipe creates the SD3 latent, chains `ModelSamplingAuraFlow` (shift 3) after the model patches, zeroes the negative conditioning and starts on the Comfy-Org values (8 steps, CFG 1, `res_multistep`, `simple`). Canvas edges stay multiples of 16; Z-Image Base needs 25–30 steps at CFG 3–5 and an encoded negative, which this entry does not cover.
 - **Image recipe points come from family data.** The latent node, the zeroed negative and the sampling patch are declared in `src/families/builtin.json` and read by both compilers; MOSS's Flux2 latent moved from a hardcoded branch into the same data. An unknown architecture keeps the plain graph.

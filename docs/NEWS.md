@@ -1,6 +1,6 @@
 # News
 
-## 0.2.14 BETA (unreleased)
+## 0.2.14 BETA
 
 - Install local colour/image themes from `theme-packs/`, customize them with the offline editor and apply changes through Quick Settings → Refresh themes. French and Paris remain optional; existing packs and saved selections are not overwritten. [Theme packs](THEME-PACKS.md).
 
@@ -13,7 +13,11 @@
 - Paste clipboard pictures into the active Forge editor; ordinary text paste still works. Chat can read later guide pages, including Music, App updates and TVE documentation, within its existing tool budget.
 
 - Reuse image/video settings from the media context menu, preview toolbar or a preview drop. Queue prompt reuse is separate and never starts generation. Embedded metadata is explicitly partial; exact queued intents take precedence.
-- Restoring compatible Qwen Image 2.1 Turbo LoRAs no longer reports the base family as incompatible; missing models remain blocked.
+- Restoring compatible Qwen Image 2.1 Turbo LoRAs no longer reports the base model family as incompatible; missing models remain blocked.
+
+- Wildcard categories and your own JSON variables now work as `$name` prompt variables: same seed = same pick, per-occurrence pins win over the seed, the Wildcards live pane shows the exact resolved prompt, chips under the prompts show picks and remove a token with ×. [Prompting guide](PROMPTING.md#wildcards).
+
+- Default sampler is euler everywhere (Illustrious CFG 3.5); family defaults follow the current official recommendations.
 
 ## 0.2.13 BETA
 
@@ -32,12 +36,12 @@
 - **Mage-Flow is selectable.** Qwen3-VL-4B encoder and Mage-Flow VAE; prompt, negative and latent come from one encode node, 30 steps at CFG 5.
 - **PixelDiT is selectable (unverified).** Gemma-2 encoder, pixel latent, no sampling patch.
 
-## 0.2.12 BETA
+## 0.2.12 BETA (untagged; shipped in 0.2.14)
 
 - **Flux.1 is selectable.** Pick the Flux.1 diffusion file, its `clip_l` and `t5xxl` encoders (the second one in the new **Second text encoder** picker) and the Flux VAE, then run Text to Image or Image to Image. The recipe uses the dual CLIP loader, the SD3 latent, a zeroed negative and the blueprint's 20 steps at CFG 1.
 - **Two-encoder families no longer need compiler code.** A family declares its dual loader and the second encoder slot; both compilers read the same optional field.
 
-## 0.2.11 BETA
+## 0.2.11 BETA (untagged; shipped in 0.2.14)
 
 - **Z-Image is selectable.** Choose the Z-Image Turbo diffusion file, its Qwen3-4B text encoder and the Flux VAE, then run Text to Image or Image to Image. The family brings its own SD3 latent, sampling shift and zeroed negative, so the numbers are the model's, not generic ones.
 - **New image families are data, not code.** A family now declares its latent node, negative handling and sampling patch in the bundled family file; unknown models keep the plain recipe.
