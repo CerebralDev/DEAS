@@ -1653,9 +1653,11 @@ mod tests {
                 .await
                 .is_err()
         );
-        assert!(native_model_family_write(secret.into(), None)
-            .await
-            .is_err());
+        assert!(
+            native_model_family_write(secret.into(), None)
+                .await
+                .is_err()
+        );
         let logs = crate::logs::native_logs(0);
         for operation in ["write", "reset"] {
             let expected = format!("models operation=family-{operation} outcome=failed");
@@ -2331,7 +2333,9 @@ mod tests {
         #[cfg(windows)]
         if let Err(e) = std::os::windows::fs::symlink_file(&victim, sidecar(&path)) {
             if e.raw_os_error() == Some(1314) {
-                eprintln!("Windows symlink subcase unavailable: privilege not held (1314); portable regular/hard-link fixtures remain enabled");
+                eprintln!(
+                    "Windows symlink subcase unavailable: privilege not held (1314); portable regular/hard-link fixtures remain enabled"
+                );
                 return;
             }
             panic!("Cannot create scratch symlink: {e}");
@@ -2340,10 +2344,12 @@ mod tests {
         let source = Source::open(&path).unwrap();
         assert!(publish_info(&source, &None, &info, || {}).is_err());
         assert_eq!(std::fs::read(&victim).unwrap(), json);
-        assert!(std::fs::symlink_metadata(sidecar(&path))
-            .unwrap()
-            .file_type()
-            .is_symlink());
+        assert!(
+            std::fs::symlink_metadata(sidecar(&path))
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
         assert_eq!(std::fs::read(&path).unwrap(), b"model");
         assert_no_owned_temps(root.path());
     }

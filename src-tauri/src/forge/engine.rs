@@ -3,16 +3,16 @@
 //! the tag-search and guidance tools, the segment contract, then the
 //! mechanical clean-up. Ported from PromptForge's handleGenerate.
 
-use super::canon::{character_block, CanonTable, Corrections};
+use super::canon::{CanonTable, Corrections, character_block};
 use super::character::{self, Resolved};
 use super::message::{self, Controls};
-use super::pack::{segment_tail, Keys, Pack, PackModel, SEPARATOR};
+use super::pack::{Keys, Pack, PackModel, SEPARATOR, segment_tail};
 use super::refs;
 use super::segments::{self, Segment};
 use super::{chat, clean, tools};
 use crate::llm::{LlmConfig, Provider};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -926,9 +926,18 @@ fn rewrite_messages(base: &str, r: &LayoutRewrite) -> Result<(String, String), S
     }
     .validate(true)?;
     let only = match r.task.as_str() {
-        "item" => "Rewrite ONLY the selected element prompt; do not rewrite other elements or the scene.",
-        "scene" => "Rewrite ONLY the global scene prompt; individual element prompts are context and must not be rewritten.",
-        _ => return Err("Only prompt rewriting is supported. Geometry cannot be generated or changed.".into()),
+        "item" => {
+            "Rewrite ONLY the selected element prompt; do not rewrite other elements or the scene."
+        }
+        "scene" => {
+            "Rewrite ONLY the global scene prompt; individual element prompts are context and must not be rewritten."
+        }
+        _ => {
+            return Err(
+                "Only prompt rewriting is supported. Geometry cannot be generated or changed."
+                    .into(),
+            );
+        }
     };
     let items = r
         .layout
@@ -1001,7 +1010,10 @@ fn canvas_line(model: &PackModel, mode: Option<&str>, controls: &Controls) -> Op
     let (w, h) = (w as i64, h as i64);
     let mut line = format!(
         "Canvas: {w}×{h} — measure every Layout JSON bbox on this canvas: x from -{} to {}, y from -{} to {}, origin at the centre.",
-        w / 2, w / 2, h / 2, h / 2
+        w / 2,
+        w / 2,
+        h / 2,
+        h / 2
     );
     let drawn = drawn_items((w as f64, h as f64), controls);
     if !drawn.is_empty() {
@@ -1564,14 +1576,16 @@ mod tests {
         assert_eq!(u["section_to_rewrite"], "a fire");
         assert_eq!(u["selected_element"]["name"], "Fire");
         assert_eq!(u["canvas_size"]["width"], 1024.0);
-        assert!(rewrite_messages(
-            "x",
-            &LayoutRewrite {
-                task: "move".into(),
-                ..r
-            }
-        )
-        .is_err());
+        assert!(
+            rewrite_messages(
+                "x",
+                &LayoutRewrite {
+                    task: "move".into(),
+                    ..r
+                }
+            )
+            .is_err()
+        );
     }
 
     /// Boxes drawn in the Layout Studio: the canvas and the boxes reach the model, and the

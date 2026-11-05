@@ -34,21 +34,24 @@ mod bundle_tests {
         for model in ["illustrious", "anima", "krea2", "moss"] {
             assert!(data.pack.models.contains_key(model), "{model}");
         }
-        assert!(data
-            .pack
-            .shared
-            .chat
-            .as_ref()
-            .is_some_and(|s| !s.is_empty()));
+        assert!(
+            data.pack
+                .shared
+                .chat
+                .as_ref()
+                .is_some_and(|s| !s.is_empty())
+        );
         assert!(data.tags.is_some());
         assert!(data.canon.is_some());
         assert!(super::randomizer::Randomizer::load(&dir).is_ok());
         let hits = super::picker::search(&dir, "illustrious", "frier").unwrap();
         assert!(hits.iter().any(|hit| hit.tag == "frieren"));
-        assert!(super::picker::traits(&dir, "illustrious", "frieren")
-            .unwrap()
-            .iter()
-            .any(|t| t == "pointy ears"));
+        assert!(
+            super::picker::traits(&dir, "illustrious", "frieren")
+                .unwrap()
+                .iter()
+                .any(|t| t == "pointy ears")
+        );
         assert!(
             !dir.exists(),
             "discovery must not write into an environment"

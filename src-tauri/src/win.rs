@@ -16,15 +16,15 @@ use windows_sys::Win32::{
     },
     Networking::WinSock::{AF_INET, AF_INET6},
     Storage::FileSystem::{
-        GetFileInformationByHandle, MoveFileExW, BY_HANDLE_FILE_INFORMATION,
-        FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_REPARSE_POINT, FILE_FLAG_BACKUP_SEMANTICS,
-        FILE_FLAG_OPEN_REPARSE_POINT,
+        BY_HANDLE_FILE_INFORMATION, FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_REPARSE_POINT,
+        FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT, GetFileInformationByHandle,
+        MoveFileExW,
     },
     System::{
         JobObjects::{
             AssignProcessToJobObject, CreateJobObjectW, IsProcessInJob,
+            JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
             JobObjectExtendedLimitInformation, SetInformationJobObject, TerminateJobObject,
-            JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
         },
         Threading::{GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION},
     },
@@ -50,7 +50,7 @@ pub fn identity(file: &File) -> Result<(u64, u64), String> {
 /// Full (including ReFS) file identity and link count for advisory model caches.
 pub fn cache_file_identity(file: &File) -> Result<(u64, [u8; 16], u64), String> {
     use windows_sys::Win32::Storage::FileSystem::{
-        FileIdInfo, GetFileInformationByHandleEx, FILE_ID_INFO,
+        FILE_ID_INFO, FileIdInfo, GetFileInformationByHandleEx,
     };
     let mut id: FILE_ID_INFO = unsafe { std::mem::zeroed() };
     if unsafe {
@@ -132,8 +132,8 @@ impl Job {
     }
     pub fn empty(&self) -> Result<bool, String> {
         use windows_sys::Win32::System::JobObjects::{
-            JobObjectBasicAccountingInformation, QueryInformationJobObject,
-            JOBOBJECT_BASIC_ACCOUNTING_INFORMATION,
+            JOBOBJECT_BASIC_ACCOUNTING_INFORMATION, JobObjectBasicAccountingInformation,
+            QueryInformationJobObject,
         };
         let mut info: JOBOBJECT_BASIC_ACCOUNTING_INFORMATION = unsafe { std::mem::zeroed() };
         if unsafe {

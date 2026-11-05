@@ -5,7 +5,7 @@
 
 use super::canon::{CanonTable, Corrections};
 use super::engine::data_dir;
-use super::tags::{category_name, TagStore};
+use super::tags::{TagStore, category_name};
 use serde::Serialize;
 use std::path::Path;
 
@@ -142,8 +142,10 @@ mod tests {
         let t = traits(&dir, "illustrious", "frieren").unwrap();
         println!("frieren: {t:?}");
         assert!(t.iter().any(|x| x == "pointy ears"));
-        assert!(traits(&dir, "illustrious", "silver hair")
-            .unwrap()
-            .is_empty());
+        assert!(
+            traits(&dir, "illustrious", "silver hair")
+                .unwrap()
+                .is_empty()
+        );
     }
 }

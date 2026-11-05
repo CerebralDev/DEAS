@@ -456,12 +456,14 @@ mod tests {
             serde_json::from_value(serde_json::json!({"kind":"crop","start":1.0,"end":3.0}))
                 .unwrap();
         assert!(crop.validate().is_ok());
-        assert!(Action::Crop {
-            start: 0.0,
-            end: 86400.0
-        }
-        .validate()
-        .is_ok());
+        assert!(
+            Action::Crop {
+                start: 0.0,
+                end: 86400.0
+            }
+            .validate()
+            .is_ok()
+        );
         let bounds = serde_json::json!({"kind":"bounds","x":0,"y":0,"width":100,"height":100,"visible":true});
         assert!(matches!(
             serde_json::from_value::<Action>(bounds.clone()).unwrap(),
@@ -489,29 +491,35 @@ mod tests {
         ] {
             assert!(Action::Crop { start, end }.validate().is_err());
         }
-        assert!(serde_json::from_value::<Action>(
-            serde_json::json!({"kind":"crop","start":1,"end":2,"command":"quit"})
-        )
-        .is_err());
+        assert!(
+            serde_json::from_value::<Action>(
+                serde_json::json!({"kind":"crop","start":1,"end":2,"command":"quit"})
+            )
+            .is_err()
+        );
     }
     #[test]
     fn playback_boundary_rejects_commands_urls_and_invalid_values() {
-        assert!(serde_json::from_value::<Action>(
-            serde_json::json!({"kind":"command","args":["run","sh"]})
-        )
-        .is_err());
+        assert!(
+            serde_json::from_value::<Action>(
+                serde_json::json!({"kind":"command","args":["run","sh"]})
+            )
+            .is_err()
+        );
         assert!(Action::Seek { seconds: f64::NAN }.validate().is_err());
         assert!(Action::Volume { volume: 101.0 }.validate().is_err());
-        assert!(Action::Bounds {
-            x: 0,
-            y: 0,
-            width: 20000,
-            height: 10,
-            visible: true,
-            audio_only: false,
-        }
-        .validate()
-        .is_err());
+        assert!(
+            Action::Bounds {
+                x: 0,
+                y: 0,
+                width: 20000,
+                height: 10,
+                visible: true,
+                audio_only: false,
+            }
+            .validate()
+            .is_err()
+        );
         assert!(local_path("https://example.org/a.mp4").is_err());
         assert!(local_path("/etc/passwd").is_err());
         assert!(output_url("file:///etc/", "x.mp4", "", "output").is_err());

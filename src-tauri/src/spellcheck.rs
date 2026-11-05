@@ -63,7 +63,9 @@ fn failure(code: &str) -> String {
     if last.is_none_or(|at| at.elapsed() >= Duration::from_secs(60)) {
         crate::logs::push(
             crate::logs::Source::Deas,
-            &format!("{level}: PromptSpellcheck operation=spellcheck: {code}: {message} (repeats limited to once per minute)"),
+            &format!(
+                "{level}: PromptSpellcheck operation=spellcheck: {code}: {message} (repeats limited to once per minute)"
+            ),
         );
         *last = Some(Instant::now());
     }

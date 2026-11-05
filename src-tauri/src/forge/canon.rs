@@ -5,7 +5,7 @@
 
 use super::appearance::canon_traits;
 use super::character::{Ambiguous, Resolved};
-use super::tags::{key_of, TagStore};
+use super::tags::{TagStore, key_of};
 use rusqlite::{Connection, OptionalExtension};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;

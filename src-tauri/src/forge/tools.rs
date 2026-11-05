@@ -4,7 +4,7 @@
 //! never give orders, and they never fail the write: a bad call is answered.
 
 use super::pack::PackModel;
-use super::tags::{category_name, TagStore, CATEGORIES};
+use super::tags::{CATEGORIES, TagStore, category_name};
 use serde_json::Value;
 
 const MAX_QUERIES: usize = 24;
@@ -53,11 +53,7 @@ fn grouped(n: i64) -> String {
         }
         out.push(c);
     }
-    if n < 0 {
-        format!("-{out}")
-    } else {
-        out
-    }
+    if n < 0 { format!("-{out}") } else { out }
 }
 
 pub fn search_tags(store: &TagStore, raw: &Value, spaced: bool) -> Outcome {
@@ -97,7 +93,10 @@ pub fn search_tags(store: &TagStore, raw: &Value, spaced: bool) -> Outcome {
             Some((_, code)) => Some(*code),
             None => {
                 let names: Vec<&str> = CATEGORIES.iter().map(|(n, _)| *n).collect();
-                return fail(format!("Unknown category \"{c}\". Valid categories are: {}. Omit it to search all of them.", names.join(", ")));
+                return fail(format!(
+                    "Unknown category \"{c}\". Valid categories are: {}. Omit it to search all of them.",
+                    names.join(", ")
+                ));
             }
         },
         None => None,
@@ -183,12 +182,21 @@ pub fn read_guidance(model: &PackModel, raw: &Value) -> Outcome {
         });
     }
     match model.guidance_docs.get(&wanted) {
-        None => fail(if have.is_empty() { "This model has no reference documents.".into() } else { format!("No document called \"{wanted}\". Available: {have}.") }),
+        None => fail(if have.is_empty() {
+            "This model has no reference documents.".into()
+        } else {
+            format!("No document called \"{wanted}\". Available: {have}.")
+        }),
         Some(text) if text.chars().count() > MAX_DOC_CHARS => fail(format!(
             "\"{wanted}\" is {} characters, over the {MAX_DOC_CHARS} limit, and was not read. Work from the system prompt.",
             text.chars().count()
         )),
-        Some(text) => Outcome { ok: true, content: text.trim().to_string(), queries: vec![], document: Some(wanted) },
+        Some(text) => Outcome {
+            ok: true,
+            content: text.trim().to_string(),
+            queries: vec![],
+            document: Some(wanted),
+        },
     }
 }
 
@@ -206,12 +214,14 @@ mod tests {
             true,
         );
         assert!(out.ok);
-        assert!(out
-            .content
-            .starts_with("3 tags matching \"boots\":\nboots — 600,000 posts (general)"));
-        assert!(out
-            .content
-            .contains("No danbooru tag contains \"wet boots\""));
+        assert!(
+            out.content
+                .starts_with("3 tags matching \"boots\":\nboots — 600,000 posts (general)")
+        );
+        assert!(
+            out.content
+                .contains("No danbooru tag contains \"wet boots\"")
+        );
         let bare = search_tags(&store, &Value::String("boots".into()), false);
         assert_eq!(bare.queries, ["boots"]);
         assert!(

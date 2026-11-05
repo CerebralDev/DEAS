@@ -152,10 +152,13 @@ impl History {
         {
             state.last_error_log = Some(std::time::Instant::now());
             // Fixed messages only. Never forward OS paths, backend bodies, prompts or tokens.
-            crate::logs::push(crate::logs::Source::Deas, &format!(
-                "ERROR: Generation history operation={operation} job={} {message}; persistence degraded (repeats limited to once per minute)",
-                id.filter(|id| canonical_uuid(id)).unwrap_or("unknown")
-            ));
+            crate::logs::push(
+                crate::logs::Source::Deas,
+                &format!(
+                    "ERROR: Generation history operation={operation} job={} {message}; persistence degraded (repeats limited to once per minute)",
+                    id.filter(|id| canonical_uuid(id)).unwrap_or("unknown")
+                ),
+            );
         }
     }
     pub(super) fn unavailable(&self) {

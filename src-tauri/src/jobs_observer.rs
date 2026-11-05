@@ -1,5 +1,5 @@
 //! Optional display observation belongs to the native job's shared live state.
-use super::{canonical_uuid, preview_frame, Live, RESPONSE_LIMIT};
+use super::{Live, RESPONSE_LIMIT, canonical_uuid, preview_frame};
 use futures_util::{SinkExt, StreamExt};
 use serde_json::Value;
 use std::{
@@ -7,7 +7,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::sync::watch;
-use tokio_tungstenite::tungstenite::{protocol::WebSocketConfig, Error, Message};
+use tokio_tungstenite::tungstenite::{Error, Message, protocol::WebSocketConfig};
 
 #[derive(Clone, Copy)]
 enum Failure {
@@ -49,7 +49,9 @@ impl FailureLog {
         };
         crate::logs::push(
             crate::logs::Source::Deas,
-            &format!("WARN: preview-observer operation={operation} client={client}: optional preview transport failed; authoritative job state is unchanged (suppressed={suppressed}, repeats limited to once per minute per operation)"),
+            &format!(
+                "WARN: preview-observer operation={operation} client={client}: optional preview transport failed; authoritative job state is unchanged (suppressed={suppressed}, repeats limited to once per minute per operation)"
+            ),
         );
     }
 }
@@ -339,13 +341,17 @@ mod tests {
             .collect();
         assert_eq!(own.len(), 1);
         assert_eq!(own[0].source, crate::logs::Source::Deas);
-        assert!(own[0]
-            .text
-            .starts_with("WARN: preview-observer operation=connect "));
+        assert!(
+            own[0]
+                .text
+                .starts_with("WARN: preview-observer operation=connect ")
+        );
         assert!(own[0].text.contains("suppressed=0"));
-        assert!(entries.iter().any(|entry| entry
-            .text
-            .starts_with("WARN: preview-observer operation=receive client=withheld:")));
+        assert!(entries.iter().any(|entry| {
+            entry
+                .text
+                .starts_with("WARN: preview-observer operation=receive client=withheld:")
+        }));
         assert!(
             entries
                 .iter()

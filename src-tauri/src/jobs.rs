@@ -1,5 +1,5 @@
 //! Native-owned classic diagnostic execution; never accepts a frontend graph.
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::{
     sync::{Arc, Mutex, MutexGuard},
     time::Duration,
@@ -8,7 +8,7 @@ use std::{
 #[path = "jobs_outputs.rs"]
 mod job_outputs;
 pub(crate) use job_outputs::validate_envelope as validate_png_envelope;
-pub use job_outputs::{native_job_export, native_job_output, OutputPreview};
+pub use job_outputs::{OutputPreview, native_job_export, native_job_output};
 #[path = "jobs_cancel.rs"]
 mod cancel;
 #[path = "jobs_history.rs"]
@@ -2508,7 +2508,9 @@ fn h3_session_failure(session: &str, cause: H3SessionFailure) {
     };
     crate::logs::push(
         crate::logs::Source::Deas,
-        &format!("{diagnostic}{correlation}; repeated={repeats} (further repeats limited to once per minute)"),
+        &format!(
+            "{diagnostic}{correlation}; repeated={repeats} (further repeats limited to once per minute)"
+        ),
     );
     if !recurring {
         *repeats = 0;

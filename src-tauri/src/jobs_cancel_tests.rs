@@ -139,10 +139,12 @@ async fn standalone_status_abort_releases_polling_for_retry_and_pending_cancel()
 #[tokio::test]
 async fn whole_stop_confirmation_empty_pending_and_repeat() {
     let empty = Jobs::default();
-    assert!(empty
-        .workbench_stop(false, owner(), interrupt_owner())
-        .await
-        .is_err());
+    assert!(
+        empty
+            .workbench_stop(false, owner(), interrupt_owner())
+            .await
+            .is_err()
+    );
     assert_eq!(
         empty
             .workbench_stop(true, owner(), interrupt_owner())
@@ -151,10 +153,11 @@ async fn whole_stop_confirmation_empty_pending_and_repeat() {
         "empty"
     );
     let (jobs, id, f, task) = cancel_fixture("ok", 200).await;
-    assert!(jobs
-        .workbench_stop(false, owner(), interrupt_owner())
-        .await
-        .is_err());
+    assert!(
+        jobs.workbench_stop(false, owner(), interrupt_owner())
+            .await
+            .is_err()
+    );
     assert!(jobs.lock().unwrap().stop.is_none());
     assert_eq!(f.lock().unwrap().posts, 0);
     let stopped = jobs
@@ -166,11 +169,12 @@ async fn whole_stop_confirmation_empty_pending_and_repeat() {
         .filter(|entry| entry.text.contains(&format!("Workbench stop: job={id}")))
         .collect();
     assert!(!logs.is_empty());
-    assert!(logs
-        .iter()
-        .all(|entry| entry.source == crate::logs::Source::Deas
-            && !entry.text.contains("fixture-private-authority")
-            && !entry.text.contains("http://")));
+    assert!(
+        logs.iter()
+            .all(|entry| entry.source == crate::logs::Source::Deas
+                && !entry.text.contains("fixture-private-authority")
+                && !entry.text.contains("http://"))
+    );
     assert_eq!(stopped["outcome"], "settled");
     assert_eq!(stopped["jobs"][0]["state"], "cancelled");
     assert_eq!(stopped["stopAvailable"], true);
@@ -227,10 +231,11 @@ async fn running_interrupt_exact_target_terminal_proof_and_readonly_states() {
         assert!(result["pendingCancellationAttempted"].is_null());
         assert_eq!(f.lock().unwrap().posts, posts, "{mode}");
         if posts == 1 && !matches!(expected, "succeeded" | "cancelled") {
-            assert!(jobs
-                .interrupt_running(id.clone(), true, interrupt_owner())
-                .await
-                .is_err());
+            assert!(
+                jobs.interrupt_running(id.clone(), true, interrupt_owner())
+                    .await
+                    .is_err()
+            );
         }
         if expected == "succeeded" {
             assert_eq!(result["outputs"][0]["filename"], "out.png");
@@ -294,10 +299,11 @@ async fn running_interrupt_rejected_lost_invalid_reply_never_retries_and_preserv
         assert_eq!(result["outputs"][0]["filename"], "retained.png");
         assert_eq!(result["interruptCancellationAttempted"], true);
         let _ = jobs.status_for(id.clone()).await.unwrap();
-        assert!(jobs
-            .interrupt_running(id, true, interrupt_owner())
-            .await
-            .is_err());
+        assert!(
+            jobs.interrupt_running(id, true, interrupt_owner())
+                .await
+                .is_err()
+        );
         assert_eq!(f.lock().unwrap().posts, 1);
         assert!(!result.to_string().contains("fixture-private-authority"));
         task.abort();
@@ -307,22 +313,25 @@ async fn running_interrupt_rejected_lost_invalid_reply_never_retries_and_preserv
 #[tokio::test]
 async fn running_interrupt_requires_authority_confirmation_idle_known_identity_and_lifecycle() {
     let (jobs, id, f, task) = cancel_fixture("interrupt-still-running", 200).await;
-    assert!(jobs
-        .interrupt_running(id.clone(), false, interrupt_owner())
-        .await
-        .is_err());
-    assert!(jobs
-        .interrupt_running(PROMPT.into(), true, interrupt_owner())
-        .await
-        .is_err());
-    assert!(jobs
-        .interrupt_running(
+    assert!(
+        jobs.interrupt_running(id.clone(), false, interrupt_owner())
+            .await
+            .is_err()
+    );
+    assert!(
+        jobs.interrupt_running(PROMPT.into(), true, interrupt_owner())
+            .await
+            .is_err()
+    );
+    assert!(
+        jobs.interrupt_running(
             id.clone(),
             true,
             Arc::new(crate::backend::Lifecycle::default().interruption_owner())
         )
         .await
-        .is_err());
+        .is_err()
+    );
     let held = jobs.workbench_job(&id).unwrap().unwrap();
     for busy in [true, false] {
         {
@@ -331,10 +340,11 @@ async fn running_interrupt_requires_authority_confirmation_idle_known_identity_a
             j.submitting = busy;
             j.polling = !busy;
         }
-        assert!(jobs
-            .interrupt_running(id.clone(), true, interrupt_owner())
-            .await
-            .is_err());
+        assert!(
+            jobs.interrupt_running(id.clone(), true, interrupt_owner())
+                .await
+                .is_err()
+        );
     }
     {
         let mut s = held.lock().unwrap();
@@ -401,10 +411,11 @@ async fn running_interrupt_dropped_waiter_keeps_busy_guard_until_owned_task_fini
         .unwrap();
     waiter.abort();
     assert!(waiter.await.unwrap_err().is_cancelled());
-    assert!(jobs
-        .interrupt_running(id.clone(), true, interrupt_owner())
-        .await
-        .is_err());
+    assert!(
+        jobs.interrupt_running(id.clone(), true, interrupt_owner())
+            .await
+            .is_err()
+    );
     assert_eq!(
         jobs.status_for(id.clone()).await.unwrap()["state"],
         "queued"
@@ -427,10 +438,11 @@ async fn running_interrupt_dropped_waiter_keeps_busy_guard_until_owned_task_fini
         held.current().unwrap()["interruptCancellationAttempted"],
         true
     );
-    assert!(jobs
-        .interrupt_running(id, true, interrupt_owner())
-        .await
-        .is_err());
+    assert!(
+        jobs.interrupt_running(id, true, interrupt_owner())
+            .await
+            .is_err()
+    );
     assert_eq!(f.lock().unwrap().posts, 1);
     task.abort();
 }
@@ -530,30 +542,34 @@ async fn pending_cancel_refuses_foreign_and_preserves_observed_running_completed
 #[tokio::test]
 async fn pending_cancel_requires_confirmation_held_id_owned_backend_and_idle_submission() {
     let (jobs, id, f, task) = cancel_fixture("pending", 200).await;
-    assert!(jobs
-        .cancel_pending(id.clone(), false, owner())
-        .await
-        .is_err());
-    assert!(jobs
-        .cancel_pending(PROMPT.into(), true, owner())
-        .await
-        .is_err());
+    assert!(
+        jobs.cancel_pending(id.clone(), false, owner())
+            .await
+            .is_err()
+    );
+    assert!(
+        jobs.cancel_pending(PROMPT.into(), true, owner())
+            .await
+            .is_err()
+    );
     let diagnostic = jobs.prepare("http://127.0.0.1:9".into(), intent()).await;
     assert!(diagnostic.is_err()); // Active Workbench ownership excludes diagnostic preparation.
-    assert!(jobs
-        .cancel_pending(
+    assert!(
+        jobs.cancel_pending(
             id.clone(),
             true,
             Arc::new(crate::backend::Lifecycle::default().cancellation_owner())
         )
         .await
-        .is_err());
+        .is_err()
+    );
     let held = jobs.workbench_job(&id).unwrap().unwrap();
     held.lock().unwrap().job.as_mut().unwrap().submitting = true;
-    assert!(jobs
-        .cancel_pending(id.clone(), true, owner())
-        .await
-        .is_err());
+    assert!(
+        jobs.cancel_pending(id.clone(), true, owner())
+            .await
+            .is_err()
+    );
     held.lock().unwrap().job.as_mut().unwrap().submitting = false;
     held.lock().unwrap().job.as_mut().unwrap().prompt_id = None;
     held.lock().unwrap().job.as_mut().unwrap().state = "unknown";
@@ -589,10 +605,11 @@ async fn pending_cancel_lost_rejected_redirect_oversized_are_unknown_without_sec
         assert_eq!(result["state"], "unknown", "{mode}/{code}: {result}");
         assert_eq!(result["outputs"][0]["filename"], "retained.png");
         assert_eq!(result["pendingCancellationAttempted"], true);
-        assert!(jobs
-            .cancel_pending(id.clone(), true, owner())
-            .await
-            .is_err());
+        assert!(
+            jobs.cancel_pending(id.clone(), true, owner())
+                .await
+                .is_err()
+        );
         let _ = jobs.status_for(id.clone()).await.unwrap();
         assert!(jobs.cancel_pending(id, true, owner()).await.is_err());
         assert_eq!(f.lock().unwrap().posts, 1);
@@ -642,14 +659,16 @@ async fn pending_cancel_readback_preserves_running_and_completed_races() {
         assert_eq!(result["state"], state);
         if state == "succeeded" {
             assert_eq!(result["outputs"][0]["filename"], "out.png");
-            assert!(!jobs
-                .workbench_job(&id)
-                .unwrap()
-                .unwrap()
-                .lock()
-                .unwrap()
-                .completed
-                .is_empty());
+            assert!(
+                !jobs
+                    .workbench_job(&id)
+                    .unwrap()
+                    .unwrap()
+                    .lock()
+                    .unwrap()
+                    .completed
+                    .is_empty()
+            );
             assert_eq!(
                 jobs.cancel_pending(id, true, owner()).await.unwrap()["state"],
                 "succeeded"
@@ -699,10 +718,11 @@ async fn pending_cancel_poll_overlap_and_dropped_waiter_do_not_duplicate_or_stra
         .await
         .unwrap();
     waiter.abort();
-    assert!(jobs
-        .cancel_pending(id.clone(), true, owner())
-        .await
-        .is_err());
+    assert!(
+        jobs.cancel_pending(id.clone(), true, owner())
+            .await
+            .is_err()
+    );
     assert_eq!(
         jobs.workbench_poll().await.unwrap()["jobs"][0]["state"],
         "queued"
@@ -743,10 +763,11 @@ async fn pending_cancel_poll_overlap_and_dropped_waiter_do_not_duplicate_or_stra
     tokio::time::timeout(Duration::from_secs(2), entered.notified())
         .await
         .unwrap();
-    assert!(jobs
-        .cancel_pending(id.clone(), true, owner())
-        .await
-        .is_err());
+    assert!(
+        jobs.cancel_pending(id.clone(), true, owner())
+            .await
+            .is_err()
+    );
     let release = f.lock().unwrap().release.clone();
     *release.0.lock().unwrap() = true;
     release.1.notify_one();

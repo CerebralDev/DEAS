@@ -1,6 +1,6 @@
 //! Read-only recommendations; never authorizes or writes an installation.
-use crate::install::torch_profile::{self, Hardware};
 use crate::install::Backend;
+use crate::install::torch_profile::{self, Hardware};
 use serde::Serialize;
 use std::path::Path;
 
@@ -70,7 +70,9 @@ mod tests {
     #[test]
     fn defaults_command_is_registered_and_scoped_to_local_install_permission() {
         assert!(include_str!("main.rs").contains("deas::native_install_defaults,"));
-        assert!(include_str!("../permissions/install.toml").contains("\"native_install_defaults\""));
+        assert!(
+            include_str!("../permissions/install.toml").contains("\"native_install_defaults\"")
+        );
         let capability: serde_json::Value =
             serde_json::from_str(include_str!("../capabilities/main.json")).unwrap();
         assert_eq!(capability["local"], true);
@@ -123,10 +125,12 @@ mod tests {
         let fallback = recommend(&executable, Ok(old_driver)).unwrap();
         assert!(matches!(fallback.backend, Backend::Cpu));
         assert!(fallback.hardware.is_some());
-        assert!(fallback
-            .warnings
-            .iter()
-            .any(|w| w.contains("NVIDIA_DRIVER")));
+        assert!(
+            fallback
+                .warnings
+                .iter()
+                .any(|w| w.contains("NVIDIA_DRIVER"))
+        );
     }
 
     #[test]

@@ -7,10 +7,11 @@ async fn whole_stop_admission_epoch_snapshot_contract() {
     assert_eq!(initial["admissionEpoch"], 0);
     assert_eq!(initial["stopping"], false);
     assert_eq!(initial["stopAvailable"], true);
-    assert!(jobs
-        .workbench_stop(false, owner(), interrupt_owner())
-        .await
-        .is_err());
+    assert!(
+        jobs.workbench_stop(false, owner(), interrupt_owner())
+            .await
+            .is_err()
+    );
     assert_eq!(jobs.workbench_current().unwrap(), initial);
     for epoch in 1..=2 {
         let result = jobs
@@ -51,15 +52,17 @@ async fn whole_stop_fences_run_first_polled_after_stop_completion_then_accepts_c
     let old_epoch = jobs.workbench_current().unwrap()["admissionEpoch"]
         .as_u64()
         .unwrap();
-    assert!(jobs
-        .workbench_run(base.clone(), intent(), false, old_epoch, None)
-        .await
-        .is_err());
-    assert!(jobs
-        .workbench_run(base.clone(), intent(), true, old_epoch + 1, None)
-        .await
-        .unwrap_err()
-        .contains("Stale"));
+    assert!(
+        jobs.workbench_run(base.clone(), intent(), false, old_epoch, None)
+            .await
+            .is_err()
+    );
+    assert!(
+        jobs.workbench_run(base.clone(), intent(), true, old_epoch + 1, None)
+            .await
+            .unwrap_err()
+            .contains("Stale")
+    );
     assert_eq!(
         jobs.workbench_current().unwrap()["admissionEpoch"],
         old_epoch
@@ -108,11 +111,12 @@ async fn whole_stop_admission_epoch_exhaustion_refuses_before_invalidating_plans
     held.lock().unwrap().preparing = Some("must-survive-refusal".into());
     jobs.lock().unwrap().workbench.push(held.clone());
     let before = jobs.workbench_current().unwrap();
-    assert!(jobs
-        .workbench_stop(true, owner(), interrupt_owner())
-        .await
-        .unwrap_err()
-        .contains("exhausted"));
+    assert!(
+        jobs.workbench_stop(true, owner(), interrupt_owner())
+            .await
+            .unwrap_err()
+            .contains("exhausted")
+    );
     assert_eq!(jobs.workbench_current().unwrap(), before);
     assert!(!held.lock().unwrap().stop_requested);
     assert_eq!(
@@ -120,11 +124,12 @@ async fn whole_stop_admission_epoch_exhaustion_refuses_before_invalidating_plans
         Some("must-survive-refusal")
     );
     for epoch in [workbench::MAX_ADMISSION_EPOCH + 1, u64::MAX] {
-        assert!(jobs
-            .workbench_run("http://127.0.0.1:9".into(), intent(), true, epoch, None)
-            .await
-            .unwrap_err()
-            .contains("safe integer"));
+        assert!(
+            jobs.workbench_run("http://127.0.0.1:9".into(), intent(), true, epoch, None)
+                .await
+                .unwrap_err()
+                .contains("safe integer")
+        );
         assert_eq!(jobs.workbench_current().unwrap(), before);
     }
 }
@@ -367,19 +372,22 @@ async fn whole_stop_coalesces_survives_waiter_loss_blocks_admission_and_finishes
     tokio::time::timeout(Duration::from_secs(2), entered.notified())
         .await
         .unwrap();
-    assert!(jobs
-        .workbench_run("http://127.0.0.1:9".into(), intent(), true, 0, None)
-        .await
-        .unwrap_err()
-        .contains("Stop"));
+    assert!(
+        jobs.workbench_run("http://127.0.0.1:9".into(), intent(), true, 0, None)
+            .await
+            .unwrap_err()
+            .contains("Stop")
+    );
     let clone = jobs.clone();
     let second = clone.workbench_stop(true, owner(), interrupt_owner());
     tokio::pin!(second);
-    assert!(std::future::Future::poll(
-        second.as_mut(),
-        &mut std::task::Context::from_waker(std::task::Waker::noop()),
-    )
-    .is_pending());
+    assert!(
+        std::future::Future::poll(
+            second.as_mut(),
+            &mut std::task::Context::from_waker(std::task::Waker::noop()),
+        )
+        .is_pending()
+    );
     let ongoing = jobs.workbench_current().unwrap();
     assert_eq!(ongoing["admissionEpoch"], 1);
     assert_eq!(ongoing["stopping"], true);
@@ -397,10 +405,11 @@ async fn whole_stop_coalesces_survives_waiter_loss_blocks_admission_and_finishes
     assert_eq!(f.lock().unwrap().posts, 1);
     assert_eq!(pf.lock().unwrap().posts, 1);
     assert!(jobs.lock().unwrap().stop.is_none());
-    assert!(jobs
-        .workbench_run("http://127.0.0.1:9".into(), intent(), true, 1, None)
-        .await
-        .is_err());
+    assert!(
+        jobs.workbench_run("http://127.0.0.1:9".into(), intent(), true, 1, None)
+            .await
+            .is_err()
+    );
     assert_eq!(jobs.workbench_current().unwrap()["preparing"], 0);
     task.abort();
     pt.abort();
@@ -491,16 +500,18 @@ async fn whole_stop_waits_for_poll_or_existing_targeted_cancellation_without_dup
             .unwrap()
             .to_owned();
         jobs.status_for(id.clone()).await.unwrap();
-        assert!(jobs
-            .cancel_pending(id.clone(), true, owner())
-            .await
-            .unwrap_err()
-            .contains("Stop"));
-        assert!(jobs
-            .interrupt_running(id, true, interrupt_owner())
-            .await
-            .unwrap_err()
-            .contains("Stop"));
+        assert!(
+            jobs.cancel_pending(id.clone(), true, owner())
+                .await
+                .unwrap_err()
+                .contains("Stop")
+        );
+        assert!(
+            jobs.interrupt_running(id, true, interrupt_owner())
+                .await
+                .unwrap_err()
+                .contains("Stop")
+        );
         assert_eq!(f.lock().unwrap().reads, reads);
         release(&f);
         first.await.unwrap().unwrap();
@@ -664,10 +675,11 @@ async fn whole_stop_submission_race_survives_lost_run_waiter_without_resubmit_or
                 async move { clone.workbench_stop(true, owner(), interrupt_owner()).await },
             );
         stopping(&jobs).await;
-        assert!(jobs
-            .workbench_run("http://127.0.0.1:9".into(), intent(), true, 0, None)
-            .await
-            .is_err());
+        assert!(
+            jobs.workbench_run("http://127.0.0.1:9".into(), intent(), true, 0, None)
+                .await
+                .is_err()
+        );
         *release.0.lock().unwrap() = true;
         release.1.notify_all();
         let result = stop.await.unwrap().unwrap();

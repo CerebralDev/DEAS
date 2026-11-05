@@ -98,7 +98,9 @@ pub(crate) fn report_canvas_failure(operation: &str) {
     last[index] = Some(Instant::now());
     crate::logs::push(
         crate::logs::Source::Deas,
-        &format!("ERROR: origin=prompt-forge operation={operation} canvas validation failed before inference; inspect the operation result (repeats limited to once per minute)"),
+        &format!(
+            "ERROR: origin=prompt-forge operation={operation} canvas validation failed before inference; inspect the operation result (repeats limited to once per minute)"
+        ),
     );
 }
 

@@ -5,7 +5,7 @@
 //! same round through the managed GGUF worker instead.
 
 use crate::llm::{LlmConfig, LocalRunner, Provider};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
@@ -645,7 +645,10 @@ pub(super) mod tests {
         assert_eq!(reply.calls[1].name, "read_guidance");
         assert!(!reply.truncated);
         // Qwen 3.8's XML and Gemma 4's own shape are the same call.
-        let xml = local_reply("<tool_call>\n<function=search_tags>\n<parameter=query>\nred kimono\n</parameter>\n<parameter=limit>\n3\n</parameter>\n</function>\n</tool_call>", None);
+        let xml = local_reply(
+            "<tool_call>\n<function=search_tags>\n<parameter=query>\nred kimono\n</parameter>\n<parameter=limit>\n3\n</parameter>\n</function>\n</tool_call>",
+            None,
+        );
         let gemma = local_reply(
             "<|tool_call>call:search_tags{query:<|\"|>red: kimono, {x}<|\"|>,limit:3}<tool_call|>",
             None,
@@ -685,10 +688,12 @@ pub(super) mod tests {
         let picture = user_with_images("look", &["data:image/png;base64,AA".into()], false);
         assert!(round(vec![picture]).await.unwrap_err().contains("pictures"));
         let text = json!({ "role": "user", "content": "write" });
-        assert!(round(vec![text])
-            .await
-            .unwrap_err()
-            .contains("not available"));
+        assert!(
+            round(vec![text])
+                .await
+                .unwrap_err()
+                .contains("not available")
+        );
     }
 
     #[tokio::test]

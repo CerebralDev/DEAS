@@ -349,11 +349,13 @@ pub(crate) mod tests {
         assert_eq!(tags, ["boots", "thigh boots", "rubber boots"]);
         let feet = store.lookup("black foot", false, None, 10).unwrap();
         assert!(feet[0].deprecated);
-        assert!(store
-            .lookup("frieren", false, Some(4), 10)
-            .unwrap()
-            .iter()
-            .all(|h| h.category == 4));
+        assert!(
+            store
+                .lookup("frieren", false, Some(4), 10)
+                .unwrap()
+                .iter()
+                .all(|h| h.category == 4)
+        );
     }
 
     #[test]

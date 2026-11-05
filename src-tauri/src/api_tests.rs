@@ -23,7 +23,10 @@ async fn serve(
             let request = String::from_utf8_lossy(&bytes[..n]);
             assert!(!request.to_lowercase().contains("authorization:"));
             requests.push(request.lines().next().unwrap().to_owned());
-            let headers = format!("HTTP/1.1 {status} Fixture\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\nLocation: http://127.0.0.1:9/forbidden\r\n\r\n", body.len());
+            let headers = format!(
+                "HTTP/1.1 {status} Fixture\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\nLocation: http://127.0.0.1:9/forbidden\r\n\r\n",
+                body.len()
+            );
             stream.write_all(headers.as_bytes()).await.unwrap();
             let _ = stream.write_all(body.as_bytes()).await;
         }

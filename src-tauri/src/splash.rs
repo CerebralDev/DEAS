@@ -1,7 +1,7 @@
 //! Native startup splash: shows real startup phases while the main window initializes hidden,
 //! then hands off once the UI state is restored. It never starts or probes the backend.
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 

@@ -138,7 +138,9 @@ mod tests {
         for name in ["native_video_post_upload", "native_video_post_inspect_path"] {
             assert!(include_str!("main.rs").contains(&format!("deas::{name},")));
             assert!(include_str!("lib.rs").contains(name));
-            assert!(include_str!("../permissions/video_post.toml").contains(&format!("\"{name}\"")));
+            assert!(
+                include_str!("../permissions/video_post.toml").contains(&format!("\"{name}\""))
+            );
         }
     }
 }

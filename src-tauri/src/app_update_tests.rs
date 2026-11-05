@@ -47,11 +47,13 @@ fn tauri_restart_launches_atomically_replaced_scratch_executable() {
                 old.metadata().unwrap().ino(),
                 std::fs::metadata(&cached).unwrap().ino()
             );
-            assert!(std::env::current_exe()
-                .unwrap()
-                .as_os_str()
-                .as_encoded_bytes()
-                .ends_with(b" (deleted)"));
+            assert!(
+                std::env::current_exe()
+                    .unwrap()
+                    .as_os_str()
+                    .as_encoded_bytes()
+                    .ends_with(b" (deleted)")
+            );
             assert_eq!(tauri::process::current_binary(&env).unwrap(), cached);
             std::env::set_var(PHASE, "restarted");
             tauri::process::restart(&env);
@@ -243,10 +245,12 @@ async fn denied_consent_is_logged_without_execution() {
         .await
         .unwrap_err();
     assert!(error.contains("confirmation"));
-    assert!(crate::logs::native_logs(0)
-        .iter()
-        .any(|entry| entry.text == format!("ERROR: app-update: {error}")
-            && entry.source == crate::logs::Source::Deas));
+    assert!(
+        crate::logs::native_logs(0)
+            .iter()
+            .any(|entry| entry.text == format!("ERROR: app-update: {error}")
+                && entry.source == crate::logs::Source::Deas)
+    );
 }
 
 #[test]
@@ -298,33 +302,45 @@ async fn streamed_transfer_checks_size_digest_status_and_redirects() {
         result
     }
     let bytes = binary();
-    assert!(attempt("200 OK", bytes.clone(), bytes.clone(), "")
-        .await
-        .is_ok());
+    assert!(
+        attempt("200 OK", bytes.clone(), bytes.clone(), "")
+            .await
+            .is_ok()
+    );
     let mut corrupt = bytes.clone();
     corrupt[100] = 5;
-    assert!(attempt("200 OK", corrupt, bytes.clone(), "")
+    assert!(
+        attempt("200 OK", corrupt, bytes.clone(), "")
+            .await
+            .unwrap_err()
+            .contains("SHA-256")
+    );
+    assert!(
+        attempt("200 OK", vec![0; 129], bytes.clone(), "")
+            .await
+            .is_err()
+    );
+    assert!(
+        attempt("200 OK", vec![0; 100], bytes.clone(), "")
+            .await
+            .is_err()
+    );
+    assert!(
+        attempt("403 Forbidden", vec![], bytes.clone(), "")
+            .await
+            .unwrap_err()
+            .contains("403")
+    );
+    assert!(
+        attempt(
+            "302 Found",
+            vec![],
+            bytes.clone(),
+            "Location: http://127.0.0.1:9/secret\r\n"
+        )
         .await
-        .unwrap_err()
-        .contains("SHA-256"));
-    assert!(attempt("200 OK", vec![0; 129], bytes.clone(), "")
-        .await
-        .is_err());
-    assert!(attempt("200 OK", vec![0; 100], bytes.clone(), "")
-        .await
-        .is_err());
-    assert!(attempt("403 Forbidden", vec![], bytes.clone(), "")
-        .await
-        .unwrap_err()
-        .contains("403"));
-    assert!(attempt(
-        "302 Found",
-        vec![],
-        bytes.clone(),
-        "Location: http://127.0.0.1:9/secret\r\n"
-    )
-    .await
-    .is_err());
+        .is_err()
+    );
 }
 
 #[tokio::test]

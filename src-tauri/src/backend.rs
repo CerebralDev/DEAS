@@ -571,7 +571,9 @@ fn terminate(inner: &mut Inner, grace: Duration) {
             if graceful {
                 log("Owned backend shut down gracefully");
             } else {
-                log("Owned backend graceful shutdown timed out; escalating to forced owned-group cleanup");
+                log(
+                    "Owned backend graceful shutdown timed out; escalating to forced owned-group cleanup",
+                );
             }
         }
         if !graceful {

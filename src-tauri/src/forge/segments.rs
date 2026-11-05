@@ -27,9 +27,30 @@ impl std::fmt::Display for ParseError {
                 .join(", ")
         };
         match self {
-            Self::NoSegments => write!(f, "The model returned no ===SEGMENT: markers. Its instructions define an exact output format that it did not follow."),
-            Self::Unknown(l) => write!(f, "The model wrote {} not in its format: {}.", if l.len() == 1 { "a segment" } else { "segments" }, quoted(l)),
-            Self::Missing(l) => write!(f, "The model left out {}: {}. Retrying usually fixes it.", if l.len() == 1 { "a segment" } else { "segments" }, quoted(l)),
+            Self::NoSegments => write!(
+                f,
+                "The model returned no ===SEGMENT: markers. Its instructions define an exact output format that it did not follow."
+            ),
+            Self::Unknown(l) => write!(
+                f,
+                "The model wrote {} not in its format: {}.",
+                if l.len() == 1 {
+                    "a segment"
+                } else {
+                    "segments"
+                },
+                quoted(l)
+            ),
+            Self::Missing(l) => write!(
+                f,
+                "The model left out {}: {}. Retrying usually fixes it.",
+                if l.len() == 1 {
+                    "a segment"
+                } else {
+                    "segments"
+                },
+                quoted(l)
+            ),
         }
     }
 }

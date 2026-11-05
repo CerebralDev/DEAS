@@ -304,11 +304,13 @@ fn history_competing_writer_and_failed_publication_preserve_good_file_and_owned_
         b"foreign writer"
     );
     assert!(!original.is_empty());
-    assert!(!std::fs::read_dir(temp.path()).unwrap().any(|e| e
-        .unwrap()
-        .file_name()
-        .to_string_lossy()
-        .ends_with(".tmp")));
+    assert!(
+        !std::fs::read_dir(temp.path()).unwrap().any(|e| e
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .ends_with(".tmp"))
+    );
 }
 
 #[test]
@@ -316,21 +318,25 @@ fn history_failed_first_publication_does_not_clobber_a_competing_target() {
     let temp = tempfile::tempdir().unwrap();
     let mut writer = Writer::open(temp.path()).unwrap();
     std::fs::write(temp.path().join(FILE), b"competing target").unwrap();
-    assert!(writer
-        .save(&Document {
-            schema_version: 1,
-            records: vec![],
-        })
-        .is_err());
+    assert!(
+        writer
+            .save(&Document {
+                schema_version: 1,
+                records: vec![],
+            })
+            .is_err()
+    );
     assert_eq!(
         std::fs::read(temp.path().join(FILE)).unwrap(),
         b"competing target"
     );
-    assert!(!std::fs::read_dir(temp.path()).unwrap().any(|e| e
-        .unwrap()
-        .file_name()
-        .to_string_lossy()
-        .ends_with(".tmp")));
+    assert!(
+        !std::fs::read_dir(temp.path()).unwrap().any(|e| e
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .ends_with(".tmp"))
+    );
 }
 
 #[test]

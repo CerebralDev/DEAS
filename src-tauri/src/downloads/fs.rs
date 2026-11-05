@@ -78,9 +78,9 @@ impl Anchor {
                 Component::Prefix(_) => current.push(part),
                 Component::RootDir | Component::Normal(_) => {
                     current.push(part);
-                    let file = crate::win::open_no_follow(&current).map_err(|_| {
-                        "Parent components must be existing non-symlink directories"
-                    })?;
+                    let file = crate::win::open_no_follow(&current).map_err(
+                        |_| "Parent components must be existing non-symlink directories",
+                    )?;
                     if !crate::win::is_directory(&file)? {
                         return Err("Parent components must be directories".into());
                     }

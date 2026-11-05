@@ -175,9 +175,11 @@ fn diagnostics_deliver_failure_and_cancel_without_sensitive_values() {
         .find(|e| e.text.contains(&failure_id.to_string()))
         .unwrap();
     assert_eq!(failure.source, crate::logs::Source::Deas);
-    assert!(failure
-        .text
-        .starts_with("ERROR: video-post operation=inspect operationId="));
+    assert!(
+        failure
+            .text
+            .starts_with("ERROR: video-post operation=inspect operationId=")
+    );
     assert!(!failure.text.contains("private") && !failure.text.contains("secret"));
     let cancel = entries
         .iter()
@@ -193,9 +195,11 @@ async fn invalid_title_reaches_shared_log_without_opening_chooser() {
         .unwrap_err();
     assert!(error.starts_with("VIDEO_TITLE:"));
     assert!(!error.contains("secret"));
-    assert!(crate::native_logs(start)
-        .iter()
-        .any(|e| e.text.starts_with("ERROR: video-post operation=inspect")));
+    assert!(
+        crate::native_logs(start)
+            .iter()
+            .any(|e| e.text.starts_with("ERROR: video-post operation=inspect"))
+    );
 }
 #[tokio::test]
 async fn admission_refuses_concurrent_ipc_before_chooser() {
@@ -213,9 +217,11 @@ fn source_rejects_paths_signatures_and_replacements() {
     fs::write(&path, b"not a video signature").unwrap();
     let original = open_source(&path).unwrap();
     let before = identity(&original).unwrap();
-    assert!(inspect_source(&path)
-        .unwrap_err()
-        .starts_with("VIDEO_TYPE:"));
+    assert!(
+        inspect_source(&path)
+            .unwrap_err()
+            .starts_with("VIDEO_TYPE:")
+    );
     fs::remove_file(&path).unwrap();
     fs::write(&path, b"different file bytes").unwrap();
     assert_ne!(identity(&open_source(&path).unwrap()).unwrap(), before);
@@ -275,9 +281,11 @@ fn real_ffmpeg_clip_inspected_by_production_native_helper() {
         (inspected.fps_numerator, inspected.fps_denominator),
         (30000, 1001)
     );
-    assert!(inspected
-        .duration_seconds
-        .is_some_and(|d| d > 0.09 && d < 0.2));
+    assert!(
+        inspected
+            .duration_seconds
+            .is_some_and(|d| d > 0.09 && d < 0.2)
+    );
     assert!(inspected.blockers.is_empty(), "{:?}", inspected.blockers);
     assert!(!inspected.processing_ready && !inspected.timing_verified);
     // The Windows exit-status race failed about two in three inspections; one pass proves little.

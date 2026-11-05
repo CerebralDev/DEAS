@@ -72,7 +72,11 @@ fn http_fixture(
             .unwrap_or(0);
         let mut data = vec![0; length];
         stream.read_exact(&mut data).unwrap();
-        let _ = write!(stream, "HTTP/1.1 {status} Fixture\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n{extra}\r\n", body.len());
+        let _ = write!(
+            stream,
+            "HTTP/1.1 {status} Fixture\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n{extra}\r\n",
+            body.len()
+        );
         let _ = stream.write_all(&body);
         assert!(end > 0);
         (
@@ -131,11 +135,13 @@ fn config_roundtrip_defaults_and_boundary_validation() {
     let mut raw = serde_json::to_value(&expected).unwrap();
     raw["apiKey"] = json!("secret");
     // A key is accepted in the shape but only for the OpenAI-compatible provider.
-    assert!(write(
-        root.path(),
-        serde_json::from_value::<LlmConfig>(raw).unwrap()
-    )
-    .is_err());
+    assert!(
+        write(
+            root.path(),
+            serde_json::from_value::<LlmConfig>(raw).unwrap()
+        )
+        .is_err()
+    );
     assert!(read(Path::new("relative")).is_err());
     std::fs::write(root.path().join(FILE), vec![b' '; 16385]).unwrap();
     assert!(read(root.path()).is_err());
@@ -145,7 +151,7 @@ fn config_roundtrip_defaults_and_boundary_validation() {
 #[cfg(unix)]
 #[test]
 fn refuses_symlink_settings_roots_and_unsafe_permissions() {
-    use std::os::unix::{fs::symlink, fs::PermissionsExt};
+    use std::os::unix::{fs::PermissionsExt, fs::symlink};
     let root = tempfile::tempdir().unwrap();
     let other = tempfile::tempdir().unwrap();
     std::fs::write(other.path().join("victim"), "untouched").unwrap();
@@ -334,11 +340,13 @@ async fn remote_errors_are_redacted_without_fallback_policy() {
     .err()
     .unwrap();
     assert!(error.contains("unavailable"));
-    assert!(response_text(
-        &json!({"message":{"role":"assistant","content":"partial"},"done":false}),
-        Provider::Ollama
-    )
-    .is_err());
+    assert!(
+        response_text(
+            &json!({"message":{"role":"assistant","content":"partial"},"done":false}),
+            Provider::Ollama
+        )
+        .is_err()
+    );
 }
 #[tokio::test]
 async fn bounds_total_http_time_and_chunked_response_bytes() {
@@ -568,7 +576,9 @@ async fn managed_worker_subprocess_mock_fixtures_bound_logs_time_and_errors() {
     std::fs::write(&model, "GGUF fixture only").unwrap();
     let input = serde_json::to_vec(&json!({"modelPath":model,"request":request()})).unwrap();
     let fixture = |action: &str| {
-        format!("import os, time\ndef llama_supports_gpu_offload(): return False\nclass Llama:\n def __init__(self, **kwargs): pass\n def close(self): pass\n def create_chat_completion(self, **kwargs):\n  {action}\n  return {{'choices':[{{'message':{{'content':'subprocess fixture'}}}}]}}\n")
+        format!(
+            "import os, time\ndef llama_supports_gpu_offload(): return False\nclass Llama:\n def __init__(self, **kwargs): pass\n def close(self): pass\n def create_chat_completion(self, **kwargs):\n  {action}\n  return {{'choices':[{{'message':{{'content':'subprocess fixture'}}}}]}}\n"
+        )
     };
     std::fs::write(&module, fixture("os.write(1, b'native stdout fixture\\n')")).unwrap();
     assert_eq!(
@@ -957,25 +967,31 @@ async fn generation_exact_selection_no_fallback_and_local_is_independent() {
     assert_eq!(result.backend, Provider::Local);
     assert_eq!(result.text, "local selected");
     let permit = RUNS.try_acquire().unwrap();
-    assert!(generate(root.path(), &cfg, &req)
-        .await
-        .unwrap_err()
-        .contains("already running"));
+    assert!(
+        generate(root.path(), &cfg, &req)
+            .await
+            .unwrap_err()
+            .contains("already running")
+    );
     drop(permit);
     req.model = ModelRef {
         id: "fixture-model".into(),
         provider: Provider::Ollama,
     };
-    assert!(generate(root.path(), &cfg, &req)
-        .await
-        .unwrap_err()
-        .contains("not configured"));
+    assert!(
+        generate(root.path(), &cfg, &req)
+            .await
+            .unwrap_err()
+            .contains("not configured")
+    );
     req.model.provider = Provider::Openai;
     let (url, server) = http_sequence(vec![(200, json!({"data":[{"id":"other-model"}]}))]);
-    assert!(generate(root.path(), &config(Provider::Openai, url), &req)
-        .await
-        .unwrap_err()
-        .contains("no longer available"));
+    assert!(
+        generate(root.path(), &config(Provider::Openai, url), &req)
+            .await
+            .unwrap_err()
+            .contains("no longer available")
+    );
     assert_eq!(server.join().unwrap().len(), 1);
     for status in [200, 401, 503] {
         let (url, server) = http_sequence(vec![

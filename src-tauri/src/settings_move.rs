@@ -67,7 +67,7 @@ mod platform {
         let target = root.join(super::super::FILE);
         match std::fs::symlink_metadata(&target) {
             Ok(m) if !m.is_file() || m.file_type().is_symlink() => {
-                return Err("Settings target must be a regular file".into())
+                return Err("Settings target must be a regular file".into());
             }
             Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e.to_string()),
             _ => (),

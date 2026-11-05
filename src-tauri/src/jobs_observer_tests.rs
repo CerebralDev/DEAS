@@ -39,10 +39,12 @@ impl Peer {
     pub(super) async fn send(&self, frame: Message) {
         let (sent, received) = oneshot::channel();
         self.commands.send(SendFrame { frame, sent }).unwrap();
-        assert!(tokio::time::timeout(WATCHDOG, received)
-            .await
-            .unwrap()
-            .unwrap());
+        assert!(
+            tokio::time::timeout(WATCHDOG, received)
+                .await
+                .unwrap()
+                .unwrap()
+        );
     }
 
     pub(super) async fn ping(&mut self) {
@@ -341,7 +343,10 @@ async fn fixture() -> Fixture {
                         panic!("observer must not send a backend mutation: {path}");
                     }
                 }.to_string();
-                let head = format!("HTTP/1.1 200 Fixture\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len());
+                let head = format!(
+                    "HTTP/1.1 200 Fixture\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    body.len()
+                );
                 stream.write_all(head.as_bytes()).await.unwrap();
                 stream.write_all(body.as_bytes()).await.unwrap();
             });
@@ -632,10 +637,12 @@ async fn watch_job_clones_independence_and_late_old_cleanup_preserve_new_observe
         .current()
         .unwrap();
     assert_eq!(state_b["progress"], json!({"value":7,"max":10}));
-    assert!(state_b["preview"]
-        .as_str()
-        .unwrap()
-        .starts_with("data:image/jpeg;base64,"));
+    assert!(
+        state_b["preview"]
+            .as_str()
+            .unwrap()
+            .starts_with("data:image/jpeg;base64,")
+    );
     assert!(!peer_b.is_finished() && !peer_c.is_finished());
     for (result, seed) in [(b, 2), (c, 3)] {
         fixture
@@ -791,10 +798,11 @@ async fn watch_repeated_admission_terminal_eviction_quiesces_without_losing_hist
         completed.iter().all(|receiver| *receiver.borrow()),
         "zero surviving observers after bounded cleanup"
     );
-    assert!(jobs
-        .workbench_job(first.as_deref().unwrap())
-        .unwrap()
-        .is_none());
+    assert!(
+        jobs.workbench_job(first.as_deref().unwrap())
+            .unwrap()
+            .is_none()
+    );
     let queue = jobs.workbench_current().unwrap();
     assert_eq!(queue["jobs"].as_array().unwrap().len(), 20);
     assert_eq!(queue["jobs"][0]["intent"]["seed"], 5);
@@ -802,12 +810,14 @@ async fn watch_repeated_admission_terminal_eviction_quiesces_without_losing_hist
     assert_eq!(history["records"].as_array().unwrap().len(), 10);
     assert_eq!(history["records"][0]["intent"]["seed"], 24);
     assert_eq!(history["records"][9]["intent"]["seed"], 15);
-    assert!(history["records"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .all(|record| record["state"] == "succeeded"
-            && record["outputs"].as_array().unwrap().len() == 1));
+    assert!(
+        history["records"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|record| record["state"] == "succeeded"
+                && record["outputs"].as_array().unwrap().len() == 1)
+    );
     assert_eq!(fixture.evidence.lock().unwrap().posts, 25);
     assert_eq!(fixture.evidence.lock().unwrap().mutations, 0);
 }

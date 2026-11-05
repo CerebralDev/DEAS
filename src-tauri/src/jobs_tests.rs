@@ -92,11 +92,12 @@ async fn watch_ignores_foreign_completion_and_progress_but_answers_pings() {
         {
             let live = observed.lock().unwrap();
             assert_eq!((live.value, live.max), (2, 10));
-            assert!(live
-                .preview
-                .as_ref()
-                .unwrap()
-                .starts_with("data:image/jpeg;base64,"));
+            assert!(
+                live.preview
+                    .as_ref()
+                    .unwrap()
+                    .starts_with("data:image/jpeg;base64,")
+            );
         }
         socket
             .send(Message::Text(
@@ -480,19 +481,23 @@ fn h3_video_prepare_is_exported_and_uses_existing_local_permission() {
         .iter()
         .find(|p| p["identifier"].as_str() == Some("allow-native-diagnostic-jobs"))
         .unwrap();
-    assert!(jobs["commands"]["allow"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|c| c.as_str() == Some("native_h3_video_prepare")));
+    assert!(
+        jobs["commands"]["allow"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|c| c.as_str() == Some("native_h3_video_prepare"))
+    );
     let capability: Value =
         serde_json::from_str(include_str!("../capabilities/main.json")).unwrap();
     assert_eq!(capability["local"], true);
     assert_eq!(capability["windows"], json!(["main"]));
-    assert!(capability["permissions"]
-        .as_array()
-        .unwrap()
-        .contains(&json!("allow-native-diagnostic-jobs")));
+    assert!(
+        capability["permissions"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("allow-native-diagnostic-jobs"))
+    );
     let _ = crate::native_h3_video_prepare;
 }
 
@@ -555,11 +560,13 @@ fn windows_model_identifiers_survive_compilation_without_relaxing_input_paths() 
     i["loras"] = json!([{"name":r"styles\detail.safetensors","strength":0.5}]);
     let graph = compile(&i).unwrap();
     assert_eq!(graph["1"]["inputs"]["ckpt_name"], i["checkpoint"]);
-    assert!(graph
-        .as_object()
-        .unwrap()
-        .values()
-        .any(|n| n["inputs"]["lora_name"] == i["loras"][0]["name"]));
+    assert!(
+        graph
+            .as_object()
+            .unwrap()
+            .values()
+            .any(|n| n["inputs"]["lora_name"] == i["loras"][0]["name"])
+    );
     for bad in [
         r"..\model.safetensors",
         r"a\..\model.safetensors",
@@ -645,9 +652,11 @@ async fn wildcard_library_is_bounded_read_only_and_preserves_category_order() {
         (200, "x".repeat(2 * 1024 * 1024 + 1)),
     ] {
         let (base, task) = server(move |_, _| (status, body.clone())).await;
-        assert!(crate::wildcard::native_wildcard_library(base)
-            .await
-            .is_err());
+        assert!(
+            crate::wildcard::native_wildcard_library(base)
+                .await
+                .is_err()
+        );
         task.abort();
     }
 }
@@ -748,7 +757,10 @@ where
             if code == 0 {
                 continue;
             } // Simulate a lost POST reply after receipt.
-            let head = format!("HTTP/1.1 {code} Fixture\r\nContent-Type: application/json\r\nLocation: http://127.0.0.1:9/forbidden\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",body.len());
+            let head = format!(
+                "HTTP/1.1 {code} Fixture\r\nContent-Type: application/json\r\nLocation: http://127.0.0.1:9/forbidden\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            );
             let _ = socket.write_all(head.as_bytes()).await;
             let _ = socket.write_all(body.as_bytes()).await;
         }
@@ -842,10 +854,12 @@ async fn workbench_poll_isolates_errors_preserves_intents_and_never_resubmits() 
         assert!(session.plan.as_ref().unwrap().consumed);
     }
     assert_eq!(refreshed["jobs"][1]["outputs"][0]["filename"], "out.png");
-    assert!(refreshed["jobs"][0]["error"]
-        .as_str()
-        .unwrap()
-        .contains("request failed"));
+    assert!(
+        refreshed["jobs"][0]["error"]
+            .as_str()
+            .unwrap()
+            .contains("request failed")
+    );
     assert_eq!(reads.load(std::sync::atomic::Ordering::SeqCst), 6);
     let again = jobs.workbench_poll().await.unwrap();
     assert_eq!(
@@ -1040,10 +1054,11 @@ async fn workbench_failed_preparation_releases_reservation_and_diagnostic_exclus
     assert_eq!(job["state"], "queued");
     task.abort();
     let jobs = Jobs::default();
-    assert!(jobs
-        .workbench_run("http://127.0.0.1:9".into(), json!({}), true, 0, None)
-        .await
-        .is_err());
+    assert!(
+        jobs.workbench_run("http://127.0.0.1:9".into(), json!({}), true, 0, None)
+            .await
+            .is_err()
+    );
     assert_eq!(jobs.workbench_current().unwrap()["preparing"], 0);
     assert!(jobs.lock().unwrap().workbench.is_empty());
 }
@@ -1063,10 +1078,11 @@ async fn workbench_capacity_keeps_active_unknown_and_consumed_plans() {
         _ => panic!("unexpected {path}"),
     }).await;
     let jobs = Jobs::default();
-    assert!(jobs
-        .workbench_run(base.clone(), intent(), false, 0, None)
-        .await
-        .is_err());
+    assert!(
+        jobs.workbench_run(base.clone(), intent(), false, 0, None)
+            .await
+            .is_err()
+    );
     assert_eq!(posts.load(std::sync::atomic::Ordering::SeqCst), 0);
     let mut ids = vec![];
     for _ in 0..20 {
@@ -1083,11 +1099,12 @@ async fn workbench_capacity_keeps_active_unknown_and_consumed_plans() {
     assert_eq!(unknown.current().unwrap()["state"], "unknown");
     let plan_id = unknown.lock().unwrap().plan.as_ref().unwrap().id.clone();
     assert!(unknown.submit(plan_id, true).await.is_err());
-    assert!(jobs
-        .workbench_run(base.clone(), intent(), true, 0, None)
-        .await
-        .unwrap_err()
-        .contains("capacity"));
+    assert!(
+        jobs.workbench_run(base.clone(), intent(), true, 0, None)
+            .await
+            .unwrap_err()
+            .contains("capacity")
+    );
     for id in &ids {
         assert!(jobs.workbench_job(id).unwrap().is_some());
     }
@@ -1125,8 +1142,8 @@ async fn workbench_failures_reach_shared_logs_without_private_intent() {
     let start = crate::logs::native_logs(0).last().map_or(0, |e| e.seq);
     let mut draft = intent();
     draft["positivePrompt"] = json!("secret-queue-prompt");
-    assert!(jobs
-        .workbench_run(
+    assert!(
+        jobs.workbench_run(
             "http://127.0.0.1:9/private-endpoint".into(),
             draft.clone(),
             true,
@@ -1134,9 +1151,10 @@ async fn workbench_failures_reach_shared_logs_without_private_intent() {
             None
         )
         .await
-        .is_err());
-    assert!(jobs
-        .workbench_run(
+        .is_err()
+    );
+    assert!(
+        jobs.workbench_run(
             "http://127.0.0.1:9/private-endpoint".into(),
             draft,
             true,
@@ -1144,7 +1162,8 @@ async fn workbench_failures_reach_shared_logs_without_private_intent() {
             None
         )
         .await
-        .is_err());
+        .is_err()
+    );
     let reports: Vec<_> = crate::logs::native_logs(start)
         .into_iter()
         .filter(|e| e.text.starts_with("ERROR: Workbench run:"))
@@ -1157,12 +1176,16 @@ async fn workbench_failures_reach_shared_logs_without_private_intent() {
         .collect();
     assert_eq!(notices.len(), 1, "start={start}; reports={reports:?}");
     assert!(!reports.is_empty(), "start={start}; reports={reports:?}");
-    assert!(reports
-        .iter()
-        .all(|e| e.source == crate::logs::Source::Deas));
-    assert!(reports
-        .iter()
-        .all(|e| !e.text.contains("secret-queue-prompt")));
+    assert!(
+        reports
+            .iter()
+            .all(|e| e.source == crate::logs::Source::Deas)
+    );
+    assert!(
+        reports
+            .iter()
+            .all(|e| !e.text.contains("secret-queue-prompt"))
+    );
     assert!(reports.iter().all(|e| !e.text.contains("private-endpoint")));
 }
 
@@ -1185,20 +1208,24 @@ fn workbench_commands_are_registered_exported_and_local_only() {
         "native_workbench_stop",
     ] {
         assert!(main.contains(&format!("deas::{command},")));
-        assert!(jobs["commands"]["allow"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|c| c.as_str() == Some(command)));
+        assert!(
+            jobs["commands"]["allow"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|c| c.as_str() == Some(command))
+        );
     }
     let capability: Value =
         serde_json::from_str(include_str!("../capabilities/main.json")).unwrap();
     assert_eq!(capability["local"], true);
     assert_eq!(capability["windows"], json!(["main"]));
-    assert!(capability["permissions"]
-        .as_array()
-        .unwrap()
-        .contains(&json!("allow-native-diagnostic-jobs")));
+    assert!(
+        capability["permissions"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("allow-native-diagnostic-jobs"))
+    );
     let _ = crate::native_workbench_run;
     let _ = crate::native_workbench_current;
     let _ = crate::native_workbench_poll;
@@ -1248,9 +1275,11 @@ async fn workbench_runs_keep_three_immutable_correlated_jobs() {
     assert!(jobs.prepare(base.clone(), intent()).await.is_err());
     for (index, job) in submitted.iter().enumerate() {
         let id = job["id"].as_str().unwrap();
-        assert!(submitted[..index]
-            .iter()
-            .all(|other| other["id"] != job["id"]));
+        assert!(
+            submitted[..index]
+                .iter()
+                .all(|other| other["id"] != job["id"])
+        );
         let held = jobs.workbench_job(id).unwrap().unwrap();
         assert_eq!(
             jobs.status_for(id.into()).await.unwrap()["state"],
@@ -1453,11 +1482,13 @@ async fn music_prepare_dispatches_without_image_fallbacks_and_reads_audio_output
         serde_json::from_str(include_str!("../../tests/fixtures/music/cover.intent.json")).unwrap();
     let graph = compile(&t2m).unwrap();
     assert_eq!(graph["7"]["class_type"], "SaveAudioAdvanced");
-    assert!(graph
-        .as_object()
-        .unwrap()
-        .values()
-        .all(|n| n["class_type"] != "SaveImage"));
+    assert!(
+        graph
+            .as_object()
+            .unwrap()
+            .values()
+            .all(|n| n["class_type"] != "SaveImage")
+    );
     // Captured from the installed core (A6 gate): V1 checkpoint combo, V3 encoder combo, DynamicCombo saver.
     let mut all = json!({"CheckpointLoaderSimple":{"input":{"required":{"ckpt_name":[["yue2.safetensors","sd/model.safetensors"]]}}},
         "AudioEncoderLoader":{"input":{"required":{"audio_encoder_name":["COMBO",{"multiselect":false,"options":["sheetsage2_bf16.safetensors","../x.safetensors"]}]}}},
@@ -1510,11 +1541,12 @@ async fn music_prepare_dispatches_without_image_fallbacks_and_reads_audio_output
     );
     let mut other = t2m.clone();
     other["checkpoint"] = json!("sd/other.safetensors");
-    assert!(jobs
-        .prepare(base, other)
-        .await
-        .unwrap_err()
-        .contains("checkpoints"));
+    assert!(
+        jobs.prepare(base, other)
+            .await
+            .unwrap_err()
+            .contains("checkpoints")
+    );
     assert!(calls.load(std::sync::atomic::Ordering::SeqCst) >= 5);
     server.abort();
     // History: SaveAudioAdvanced lists FLAC descriptors under `audio` (A6-captured shape).
@@ -2162,9 +2194,11 @@ async fn h3_session_logs_endpoint_http_and_shape_failures_without_secrets_or_flo
         .filter(|e| e.text.contains(&format!("session={endpoint_session};")))
         .collect();
     assert_eq!(endpoint_logs.len(), 1);
-    assert!(endpoint_logs[0]
-        .text
-        .starts_with("WARN: H3 continuity session-list: invalid backend endpoint"));
+    assert!(
+        endpoint_logs[0]
+            .text
+            .starts_with("WARN: H3 continuity session-list: invalid backend endpoint")
+    );
 
     let (base, task) = server(|path, _| {
         assert_eq!(path, "GET /comfy/df_h3_continuity/session/log-http-session HTTP/1.1");
@@ -2189,9 +2223,11 @@ async fn h3_session_logs_endpoint_http_and_shape_failures_without_secrets_or_flo
         2,
         "only first cause and first recurrence are immediate"
     );
-    assert!(request_logs[0]
-        .text
-        .starts_with("ERROR: H3 continuity session-list: backend request failed"));
+    assert!(
+        request_logs[0]
+            .text
+            .starts_with("ERROR: H3 continuity session-list: backend request failed")
+    );
     assert!(request_logs[0].text.contains("repeated=0"));
     assert!(request_logs[1].text.contains("repeated=1"));
 
@@ -2216,9 +2252,11 @@ async fn h3_session_logs_endpoint_http_and_shape_failures_without_secrets_or_flo
         .filter(|e| e.text.contains("session=log-shape-session;"))
         .collect();
     assert_eq!(shape_logs.len(), 2);
-    assert!(shape_logs[0]
-        .text
-        .starts_with("ERROR: H3 continuity session-list: malformed response"));
+    assert!(
+        shape_logs[0]
+            .text
+            .starts_with("ERROR: H3 continuity session-list: malformed response")
+    );
     assert!(shape_logs[1].text.contains("repeated=1"));
 
     for entry in endpoint_logs.iter().chain(&request_logs).chain(&shape_logs) {
@@ -2260,12 +2298,14 @@ async fn h3_session_is_read_only_bounded_and_input_upload_checks_magic_bytes() {
             .await
             .is_err()
     );
-    assert!(native_input_upload(
-        "http://127.0.0.1:1/".into(),
-        dir.path().to_str().unwrap().into()
-    )
-    .await
-    .is_err());
+    assert!(
+        native_input_upload(
+            "http://127.0.0.1:1/".into(),
+            dir.path().to_str().unwrap().into()
+        )
+        .await
+        .is_err()
+    );
 }
 
 #[tokio::test]
@@ -2286,16 +2326,20 @@ async fn local_video_upload_cancel_validation_and_logs() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("secret-local-video.mp4");
     std::fs::write(&path, b"\x89PNG\r\n\x1a\n").unwrap();
-    assert!(selected_video_upload(base, Some(path.clone()))
-        .await
-        .unwrap_err()
-        .contains("video"));
+    assert!(
+        selected_video_upload(base, Some(path.clone()))
+            .await
+            .unwrap_err()
+            .contains("video")
+    );
     std::fs::write(&path, b"\0\0\0\x18ftypisom").unwrap();
     let before = std::fs::read(&path).unwrap();
     for _ in 0..5 {
-        assert!(selected_video_upload(base, Some(path.clone()))
-            .await
-            .is_err());
+        assert!(
+            selected_video_upload(base, Some(path.clone()))
+                .await
+                .is_err()
+        );
     }
     assert_eq!(std::fs::read(&path).unwrap(), before);
     let logs: Vec<_> = crate::logs::native_logs(0)
@@ -2378,10 +2422,12 @@ async fn local_video_upload_posts_video_only_and_preserves_source() {
         .unwrap()
         .set_len((512 << 20) + 1)
         .unwrap();
-    assert!(selected_video_upload("http://127.0.0.1:1/", Some(path))
-        .await
-        .unwrap_err()
-        .contains("512 MiB"));
+    assert!(
+        selected_video_upload("http://127.0.0.1:1/", Some(path))
+            .await
+            .unwrap_err()
+            .contains("512 MiB")
+    );
 }
 
 #[test]
@@ -2597,9 +2643,11 @@ fn temporal_latent_tiled_refine_direct_intents_are_rejected() {
     i["inputImage"] = json!("ref.png");
     i["denoise"] = json!(0.5);
     i["h3Edit"] = json!({"shiftVideo":3,"shiftAudio":3});
-    assert!(compile(&i)
-        .unwrap_err()
-        .contains("refine pass are not supported"));
+    assert!(
+        compile(&i)
+            .unwrap_err()
+            .contains("refine pass are not supported")
+    );
 }
 
 #[tokio::test]
@@ -2752,10 +2800,11 @@ async fn prepare_requires_fresh_native_prerequisites_and_replaces_only_unsubmitt
     let first = jobs.prepare(base.clone(), intent()).await.unwrap();
     let second = jobs.prepare(base.clone(), intent()).await.unwrap();
     assert_ne!(first["id"], second["id"]);
-    assert!(jobs
-        .submit(first["id"].as_str().unwrap().into(), true)
-        .await
-        .is_err());
+    assert!(
+        jobs.submit(first["id"].as_str().unwrap().into(), true)
+            .await
+            .is_err()
+    );
     assert_eq!(count.load(std::sync::atomic::Ordering::SeqCst), 2);
     task.abort();
     for field in ["node", "model", "sampler", "scheduler"] {
@@ -3017,9 +3066,11 @@ fn paired_video_outputs_keep_processed_video_primary_and_validate_both_paths() {
         2
     );
     assert_eq!(parsed.iter().filter(|o| o["role"] == "original").count(), 2);
-    assert!(parsed
-        .iter()
-        .any(|o| o["filename"] == "B7.webm" && o["role"] == "original"));
+    assert!(
+        parsed
+            .iter()
+            .any(|o| o["filename"] == "B7.webm" && o["role"] == "original")
+    );
     // An unpaired legacy combine must retain its existing frame-first indices.
     let legacy = job_outputs(&entry, &json!({"7":graph["7"]})).unwrap();
     assert_eq!(legacy, outputs(&entry).unwrap());
@@ -3207,7 +3258,10 @@ async fn history_and_queue_refuse_foreign_identity_and_unsafe_outputs() {
         }
         if case == "error_newline" {
             let text = job["error"].as_str().unwrap();
-            assert_eq!(text, "node 5 (KSampler): RuntimeError: Missing checkpoint Select a compatible dependency.");
+            assert_eq!(
+                text,
+                "node 5 (KSampler): RuntimeError: Missing checkpoint Select a compatible dependency."
+            );
             assert!(!text.contains("\\n"));
         }
         if case == "loader_error" {
@@ -3219,10 +3273,11 @@ async fn history_and_queue_refuse_foreign_identity_and_unsafe_outputs() {
         if case == "error" {
             assert!(job["error"].as_str().unwrap().contains("KSampler"));
         }
-        assert!(jobs
-            .submit(plan["id"].as_str().unwrap().into(), true)
-            .await
-            .is_err());
+        assert!(
+            jobs.submit(plan["id"].as_str().unwrap().into(), true)
+                .await
+                .is_err()
+        );
         task.abort();
     }
 }
@@ -3747,8 +3802,9 @@ fn diffusion_intent_splits_model_text_encoder_and_vae() {
 fn fixed_sigmas_compile_to_manual_sigmas_and_custom_sampler() {
     let mut value = intent();
     value["steps"] = json!(8);
-    value["sigmas"] =
-        json!([1.0, 0.978453, 0.95418, 0.926626, 0.89508, 0.845148, 0.704534, 0.414568, 0]);
+    value["sigmas"] = json!([
+        1.0, 0.978453, 0.95418, 0.926626, 0.89508, 0.845148, 0.704534, 0.414568, 0
+    ]);
     let g = compile(&value).unwrap();
     assert_eq!(
         g["Z"]["inputs"]["sigmas"],
@@ -3808,9 +3864,11 @@ fn preview_frames_need_known_format_and_magic() {
         "data:image/jpeg;base64,/9j/4A=="
     );
     let png = [&[0, 0, 0, 1, 0, 0, 0, 2][..], b"\x89PNG\r\n\x1a\n"].concat();
-    assert!(preview_frame(&png)
-        .unwrap()
-        .starts_with("data:image/png;base64,"));
+    assert!(
+        preview_frame(&png)
+            .unwrap()
+            .starts_with("data:image/png;base64,")
+    );
     assert!(preview_frame(&[0, 0, 0, 1, 0, 0, 0, 2, 0xFF, 0xD8, 0xFF]).is_none());
     assert!(preview_frame(&[0, 0, 0, 4, 0, 0, 0, 1, 0xFF, 0xD8, 0xFF]).is_none());
     assert!(preview_frame(&[0, 0, 0, 1]).is_none());

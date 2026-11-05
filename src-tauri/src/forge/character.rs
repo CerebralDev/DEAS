@@ -4,7 +4,7 @@
 //! any doubt is an abstention, never a guess — a wrong character puts somebody
 //! else's hair colour in the prompt, which is the bug this exists to stop.
 
-use super::tags::{name_part, TagStore};
+use super::tags::{TagStore, name_part};
 
 const STOPWORDS: &[&str] = &[
     "a",

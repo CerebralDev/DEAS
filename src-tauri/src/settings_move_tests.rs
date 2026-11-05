@@ -2,7 +2,7 @@ use super::platform::relocate;
 use super::*;
 use std::{
     fs,
-    os::unix::fs::{symlink, PermissionsExt},
+    os::unix::fs::{PermissionsExt, symlink},
     path::PathBuf,
 };
 
@@ -77,9 +77,11 @@ fn collisions_across_categories_abort_everything_even_identical_bytes() {
     fs::write(input.join("collision"), b"same").unwrap();
     let mut folders = f.folders();
     folders.input = Some(input.to_str().unwrap().into());
-    assert!(move_folders(&f.root, folders)
-        .unwrap_err()
-        .contains("conflict"));
+    assert!(
+        move_folders(&f.root, folders)
+            .unwrap_err()
+            .contains("conflict")
+    );
     assert!(!f.dest.join("a").exists());
     assert!(f.source().join("a").exists());
     assert!(!f.root.join(super::super::FILE).exists());
@@ -140,15 +142,19 @@ fn overlapping_paths_rejected() {
     ] {
         let mut folders = f.folders();
         folders.models = Some(path.to_str().unwrap().into());
-        assert!(move_folders(&f.root, folders)
-            .unwrap_err()
-            .contains("overlap"));
+        assert!(
+            move_folders(&f.root, folders)
+                .unwrap_err()
+                .contains("overlap")
+        );
     }
     let mut folders = f.folders();
     folders.input = folders.models.clone();
-    assert!(move_folders(&f.root, folders)
-        .unwrap_err()
-        .contains("overlap"));
+    assert!(
+        move_folders(&f.root, folders)
+            .unwrap_err()
+            .contains("overlap")
+    );
 }
 
 #[test]

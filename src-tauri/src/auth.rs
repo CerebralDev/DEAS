@@ -1,7 +1,7 @@
 //! Origin-bound credentials and fixed read-only provider identity checks.
 //! The desktop restores saved official-provider tokens once at startup.
 //! Native consumers must disable redirects and never log returned credential strings.
-use reqwest::{header::HeaderValue, Url};
+use reqwest::{Url, header::HeaderValue};
 use serde::Serialize;
 use std::{collections::BTreeMap, sync::Mutex};
 
@@ -153,7 +153,9 @@ impl AuthState {
     pub fn restore_saved(self) -> Self {
         for (id, _) in PROVIDERS {
             if self.restore(id).is_err() {
-                eprintln!("DEAS: saved authorization unavailable for {id}; retry Restore in Provider authorization");
+                eprintln!(
+                    "DEAS: saved authorization unavailable for {id}; retry Restore in Provider authorization"
+                );
             }
         }
         self
@@ -384,11 +386,7 @@ async fn probe_identity(id: &str, url: Url, authorization: HeaderValue) -> &'sta
         }
         _ => false,
     };
-    if valid {
-        "verified"
-    } else {
-        "unavailable"
-    }
+    if valid { "verified" } else { "unavailable" }
 }
 
 #[tauri::command]
@@ -404,7 +402,7 @@ pub async fn native_auth_verify(
             return Ok(AuthVerification {
                 provider_id,
                 status: "unsupported",
-            })
+            });
         }
     };
     let origin = PROVIDERS

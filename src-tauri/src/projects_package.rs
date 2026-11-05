@@ -1,7 +1,7 @@
 //! Portable draft packages: exact allowlist, bounded decode, no arbitrary extraction.
 use super::*;
 use std::{collections::BTreeMap, io::Cursor};
-use zip::{write::SimpleFileOptions, CompressionMethod, ZipArchive, ZipWriter};
+use zip::{CompressionMethod, ZipArchive, ZipWriter, write::SimpleFileOptions};
 
 const MAX_PACKAGE: u64 = MAX_PNG + MAX_MANIFEST + 8192;
 

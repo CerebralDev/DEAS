@@ -1,11 +1,11 @@
 //! GTK-owned render contexts; only nonblocking libmpv commands/events on the UI thread.
 use super::Action;
 use gtk::prelude::*;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::{
     cell::{Cell, RefCell},
     collections::HashMap,
-    ffi::{c_char, c_int, c_void, CStr, CString},
+    ffi::{CStr, CString, c_char, c_int, c_void},
     path::PathBuf,
     rc::Rc,
     sync::atomic::{AtomicBool, Ordering},

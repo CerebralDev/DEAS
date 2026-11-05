@@ -86,7 +86,7 @@ impl Jobs {
         owner: Owner,
         interrupt_owner: InterruptOwner,
     ) -> Result<Value, String> {
-        use futures_util::{stream, StreamExt};
+        use futures_util::{StreamExt, stream};
         let results = stream::iter(held)
             .map(|(held, epoch)| {
                 let owner = owner.clone();
@@ -142,10 +142,14 @@ impl Jobs {
         snapshot["outcome"] = json!(outcome);
         snapshot["discarded"] = json!(discarded);
         snapshot["issues"] = json!(issues);
-        crate::logs::push(crate::logs::Source::Deas, &format!(
-            "{}: Workbench stop: outcome={outcome} discarded={discarded} issues={}; no global interrupt",
-            if outcome == "partial" { "WARN" } else { "INFO" }, json!(issues)
-        ));
+        crate::logs::push(
+            crate::logs::Source::Deas,
+            &format!(
+                "{}: Workbench stop: outcome={outcome} discarded={discarded} issues={}; no global interrupt",
+                if outcome == "partial" { "WARN" } else { "INFO" },
+                json!(issues)
+            ),
+        );
         Ok(snapshot)
     }
 

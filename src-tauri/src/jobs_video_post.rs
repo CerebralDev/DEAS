@@ -4,7 +4,7 @@
 //! `video-enhance` recipe of the TVE tab (LoadVideo → chain → combine).
 use crate::jobs::{comfy_model_name, model_name, safe_output_prefix};
 use crate::jobs_video::{combine, valid_output};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 pub(crate) const RTX_QUALITIES: [&str; 4] = ["Low", "Medium", "High", "Ultra"];
 pub(crate) const RTX_UPSCALE_MODES: [&str; 4] =

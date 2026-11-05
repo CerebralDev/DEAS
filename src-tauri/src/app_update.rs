@@ -489,7 +489,9 @@ async fn run(confirmed: bool, _auth: &crate::auth::AuthState) -> Result<bool, St
 fn unsupported(newer: Option<String>) -> Result<bool, String> {
     match newer {
         None => Ok(false),
-        Some(tag) => Err(format!("DEAS {tag} is available, but application self-update is unsupported on this platform (including Windows locked executables); download the latest release and replace it after quitting DEAS")),
+        Some(tag) => Err(format!(
+            "DEAS {tag} is available, but application self-update is unsupported on this platform (including Windows locked executables); download the latest release and replace it after quitting DEAS"
+        )),
     }
 }
 

@@ -5,8 +5,8 @@ use std::{
     collections::HashMap,
     path::{Component, Path, PathBuf},
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
     },
     time::Duration,
 };
@@ -229,7 +229,7 @@ pub(crate) fn validate_target(input: &str) -> Result<PathBuf, String> {
         current.push(component);
         match std::fs::symlink_metadata(&current) {
             Ok(meta) if meta.file_type().is_symlink() => {
-                return Err("Installation paths must not contain symlinks".into())
+                return Err("Installation paths must not contain symlinks".into());
             }
             Ok(_) => {}
             Err(e) if e.kind() == std::io::ErrorKind::NotFound && current == path => {}
@@ -266,7 +266,7 @@ fn validate_takeover(input: &str, creating: bool) -> Result<PathBuf, String> {
         current.push(component);
         match std::fs::symlink_metadata(&current) {
             Ok(meta) if meta.file_type().is_symlink() => {
-                return Err("Takeover paths must not contain symlinks".into())
+                return Err("Takeover paths must not contain symlinks".into());
             }
             Ok(_) => {}
             Err(e) => return Err(format!("Takeover parent must exist: {e}")),
@@ -277,13 +277,13 @@ fn validate_takeover(input: &str, creating: bool) -> Result<PathBuf, String> {
     }
     match std::fs::symlink_metadata(path.join("deas-plan.json")) {
         Ok(m) if m.file_type().is_symlink() => {
-            return Err("DEAS manifest must be a regular file".into())
+            return Err("DEAS manifest must be a regular file".into());
         }
         Ok(_) if creating && !path.join("deas-install.json").exists() => {
-            return Err(UNFINISHED_INSTALL.into())
+            return Err(UNFINISHED_INSTALL.into());
         }
         Ok(_) if creating => {
-            return Err("This folder is already DEAS-managed; reopen it from Setup instead".into())
+            return Err("This folder is already DEAS-managed; reopen it from Setup instead".into());
         }
         Ok(_) => {}
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
@@ -294,7 +294,7 @@ fn validate_takeover(input: &str, creating: bool) -> Result<PathBuf, String> {
         Ok(m) if m.is_dir() && !m.file_type().is_symlink() => {}
         Ok(_) => return Err("Takeover target must contain a regular ComfyUI folder".into()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            return Err("Takeover target must contain a ComfyUI folder".into())
+            return Err("Takeover target must contain a ComfyUI folder".into());
         }
         Err(e) => return Err(e.to_string()),
     }
@@ -585,7 +585,32 @@ impl Engine {
         } else {
             "Create isolated target/venv"
         };
-        for (id,detail) in [("uv","Download official uv 0.8.22 archive and verify embedded SHA-256 before extracting executable"),("python","Install managed Python 3.12 under target/runtime; no system Python or PATH changes"),("comfy",comfy_detail),("venv",venv_detail),("torch","Install torch 2.8.0 / torchvision 0.23.0 / torchaudio 2.8.0 from official CPU wheel index"),("requirements","Install ComfyUI requirements with Torch constraints")] { steps.push(Step{id:id.into(),label_key:format!("installer.steps.{id}"),detail:detail.into()}); }
+        for (id, detail) in [
+            (
+                "uv",
+                "Download official uv 0.8.22 archive and verify embedded SHA-256 before extracting executable",
+            ),
+            (
+                "python",
+                "Install managed Python 3.12 under target/runtime; no system Python or PATH changes",
+            ),
+            ("comfy", comfy_detail),
+            ("venv", venv_detail),
+            (
+                "torch",
+                "Install torch 2.8.0 / torchvision 0.23.0 / torchaudio 2.8.0 from official CPU wheel index",
+            ),
+            (
+                "requirements",
+                "Install ComfyUI requirements with Torch constraints",
+            ),
+        ] {
+            steps.push(Step {
+                id: id.into(),
+                label_key: format!("installer.steps.{id}"),
+                detail: detail.into(),
+            });
+        }
         if request.options.ffmpeg {
             steps.push(Step{id:"ffmpeg".into(),label_key:"installer.steps.ffmpeg".into(),detail:"Install imageio-ffmpeg; copy its static FFmpeg binary into the managed venv bin".into()});
         }
@@ -2132,10 +2157,11 @@ mod tests {
         #[cfg(not(all(any(target_os = "linux", windows), target_arch = "x86_64")))]
         {
             assert!(!plan.can_execute);
-            assert!(plan
-                .unsupported_options
-                .iter()
-                .any(|option| option.starts_with("platform:")));
+            assert!(
+                plan.unsupported_options
+                    .iter()
+                    .any(|option| option.starts_with("platform:"))
+            );
         }
     }
     #[cfg(target_os = "linux")]
@@ -2149,10 +2175,12 @@ mod tests {
         let py = tmp.path().join("venv/bin/python");
         std::os::unix::fs::symlink(&managed, &py).unwrap();
         own_interpreter(tmp.path(), &py).unwrap();
-        assert!(!std::fs::symlink_metadata(&py)
-            .unwrap()
-            .file_type()
-            .is_symlink());
+        assert!(
+            !std::fs::symlink_metadata(&py)
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
         assert_eq!(std::fs::read_to_string(&py).unwrap(), "owned interpreter");
         std::fs::remove_file(&py).unwrap();
         std::os::unix::fs::symlink("/usr/bin/python3", &py).unwrap();
@@ -2380,7 +2408,10 @@ mod tests {
         assert!(plan.reopen_id.is_some());
         let status = engine.open_existing(&plan.id, true).unwrap();
         assert!(!engine.backend.active());
-        println!("Existing environment checked/opened without writes or backend start: root={}, backend={:?}, features={:?}, state={}", plan.request.storage_path, plan.request.backend, plan.request.features, status.state);
+        println!(
+            "Existing environment checked/opened without writes or backend start: root={}, backend={:?}, features={:?}, state={}",
+            plan.request.storage_path, plan.request.backend, plan.request.features, status.state
+        );
     }
     #[test]
     fn backend_requires_current_successful_provision() {
@@ -2431,9 +2462,11 @@ mod tests {
         assert!(validate_target("/").is_err());
         assert!(validate_target(&format!("{}/../escape", tmp.path().display())).is_err());
         assert!(validate_ref("--upload-pack=evil").is_err());
-        assert!(extract_verified_uv(b"unverified", tmp.path())
-            .unwrap_err()
-            .contains("checksum"));
+        assert!(
+            extract_verified_uv(b"unverified", tmp.path())
+                .unwrap_err()
+                .contains("checksum")
+        );
         #[cfg(unix)]
         {
             std::os::unix::fs::symlink(tmp.path(), tmp.path().join("link")).unwrap();
@@ -2594,10 +2627,12 @@ mod tests {
             "user data"
         );
         cancel.store(true, Ordering::SeqCst);
-        assert!(run(&git, &["status"], &source, tmp.path(), &inner, &cancel)
-            .await
-            .unwrap_err()
-            .contains("Cancelled"));
+        assert!(
+            run(&git, &["status"], &source, tmp.path(), &inner, &cancel)
+                .await
+                .unwrap_err()
+                .contains("Cancelled")
+        );
     }
     #[cfg(target_os = "linux")]
     #[tokio::test]
@@ -2655,11 +2690,13 @@ mod tests {
             log(&inner, "bounded".repeat(1000));
         }
         assert_eq!(lock(&inner).status.logs.len(), MAX_LOGS);
-        assert!(lock(&inner)
-            .status
-            .logs
-            .iter()
-            .all(|line| line.len() <= 4096));
+        assert!(
+            lock(&inner)
+                .status
+                .logs
+                .iter()
+                .all(|line| line.len() <= 4096)
+        );
     }
 
     #[test]
@@ -2738,14 +2775,16 @@ mod tests {
         r.takeover = true;
         let plan = engine.plan(r).unwrap();
         assert!(plan.request.takeover);
-        assert!(plan
-            .warnings
-            .iter()
-            .any(|w| w.contains("not DEAS-managed") && w.contains("never deleted")));
-        assert!(plan
-            .steps
-            .iter()
-            .any(|s| s.id == "venv" && s.detail.contains("Delete the existing")));
+        assert!(
+            plan.warnings
+                .iter()
+                .any(|w| w.contains("not DEAS-managed") && w.contains("never deleted"))
+        );
+        assert!(
+            plan.steps
+                .iter()
+                .any(|s| s.id == "venv" && s.detail.contains("Delete the existing"))
+        );
     }
 
     #[test]
@@ -2753,17 +2792,21 @@ mod tests {
         let tmp = scratch();
         let engine = Engine::default();
         // Legacy manifests predate `takeover`: plain plans must serialize without the key so reopening stays byte-compatible.
-        assert!(serde_json::to_value(request(tmp.path()))
-            .unwrap()
-            .get("takeover")
-            .is_none());
+        assert!(
+            serde_json::to_value(request(tmp.path()))
+                .unwrap()
+                .get("takeover")
+                .is_none()
+        );
         let mut r = request(tmp.path());
         r.storage_path = tmp.path().to_str().unwrap().into();
         r.takeover = true;
-        assert!(engine
-            .plan(r.clone())
-            .unwrap_err()
-            .contains("ComfyUI folder"));
+        assert!(
+            engine
+                .plan(r.clone())
+                .unwrap_err()
+                .contains("ComfyUI folder")
+        );
         std::fs::create_dir_all(tmp.path().join("ComfyUI")).unwrap();
         std::fs::write(tmp.path().join("ComfyUI/main.py"), "").unwrap();
         assert!(engine.plan(r.clone()).is_ok());
@@ -2808,13 +2851,14 @@ mod tests {
         assert_baseline_platform_support(&plan);
         assert_eq!(serde_json::to_value(&plan.request).unwrap(), original);
         assert_eq!(plan.steps.iter().filter(|s| s.id == "nodes").count(), 1);
-        assert!(plan
-            .steps
-            .iter()
-            .find(|s| s.id == "nodes")
-            .unwrap()
-            .detail
-            .contains("main"));
+        assert!(
+            plan.steps
+                .iter()
+                .find(|s| s.id == "nodes")
+                .unwrap()
+                .detail
+                .contains("main")
+        );
         assert!(!Path::new(&plan.request.storage_path).exists());
         assert_eq!(
             plan.torch.unwrap().index_url,
@@ -3053,10 +3097,12 @@ mod tests {
         .unwrap();
         let python = venv.join("bin/python");
         own_interpreter(tmp.path(), &python).unwrap();
-        assert!(!std::fs::symlink_metadata(&python)
-            .unwrap()
-            .file_type()
-            .is_symlink());
+        assert!(
+            !std::fs::symlink_metadata(&python)
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
         run(
             &uv,
             &[

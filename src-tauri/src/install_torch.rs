@@ -174,7 +174,7 @@ fn probe_program(program: &str, timeout: Duration) -> Result<Hardware, String> {
             Ok(None) => {
                 break Err(
                     "NVIDIA_DRIVER: nvidia-smi timed out; repair driver and re-plan".to_owned(),
-                )
+                );
             }
             Err(e) => break Err(format!("NVIDIA_DRIVER: probe wait failed: {e}")),
         }

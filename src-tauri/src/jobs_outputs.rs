@@ -176,13 +176,15 @@ impl Jobs {
                     && target != source
                 {
                     output["filename"] = json!(target.file_name().unwrap().to_string_lossy());
-                    output["subfolder"] = json!(target
-                        .parent()
-                        .unwrap()
-                        .strip_prefix(root)
-                        .unwrap()
-                        .to_string_lossy()
-                        .replace(std::path::MAIN_SEPARATOR, "/"));
+                    output["subfolder"] = json!(
+                        target
+                            .parent()
+                            .unwrap()
+                            .strip_prefix(root)
+                            .unwrap()
+                            .to_string_lossy()
+                            .replace(std::path::MAIN_SEPARATOR, "/")
+                    );
                 }
             }
         };

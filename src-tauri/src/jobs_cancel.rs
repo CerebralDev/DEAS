@@ -199,9 +199,9 @@ async fn cancel_observed(
         .map_err(|_| "Job cancellation readback failed; outcome unknown; do not retry mutation")?;
     if !present {
         // History was read before queue: close the completion-between-reads window.
-        present = poll_present(job).await.map_err(|_| {
-            "Job cancellation final readback failed; outcome unknown; do not retry mutation"
-        })?;
+        present = poll_present(job).await.map_err(
+            |_| "Job cancellation final readback failed; outcome unknown; do not retry mutation",
+        )?;
     }
     if cancellation.authority(&job.plan.base)?.0 != epoch {
         return Err("Owned backend lifecycle changed during readback; outcome unknown".into());

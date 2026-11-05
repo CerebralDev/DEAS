@@ -130,10 +130,12 @@ mod tests {
         assert_eq!(capability["local"], true);
         assert_eq!(capability["windows"], serde_json::json!(["main"]));
         assert!(capability.get("remote").is_none());
-        assert!(capability["permissions"]
-            .as_array()
-            .unwrap()
-            .contains(&serde_json::json!("allow-native-detect-hardware")));
+        assert!(
+            capability["permissions"]
+                .as_array()
+                .unwrap()
+                .contains(&serde_json::json!("allow-native-detect-hardware"))
+        );
         assert!(include_str!("main.rs").contains("deas::native_detect_hardware,"));
         assert!(include_str!("main.rs").contains("deas::native_monitoring_sample,"));
     }
@@ -146,10 +148,12 @@ mod tests {
         let value = serde_json::to_value(result).unwrap();
         if value["backend"] == "nvidia" {
             assert_eq!(value["hardware"]["vendor"], "NVIDIA");
-            assert!(value["hardware"]["uuid"]
-                .as_str()
-                .unwrap()
-                .starts_with("GPU-"));
+            assert!(
+                value["hardware"]["uuid"]
+                    .as_str()
+                    .unwrap()
+                    .starts_with("GPU-")
+            );
         } else {
             assert!(value["backend"].is_null());
             assert!(value.get("hardware").is_none());

@@ -447,7 +447,11 @@ pub(crate) fn run_probe(command: Command, timeout: Duration) -> Result<Vec<u8>, 
             match owned.exited() {
                 Ok(true) => break Ok(()),
                 Err(_) => break Err("VIDEO_PROBE: Cannot monitor ffprobe."),
-                Ok(false) if Instant::now() >= deadline => break Err("VIDEO_PROBE_TIMEOUT: ffprobe exceeded the 10-second inspection deadline; try a smaller or repaired source."),
+                Ok(false) if Instant::now() >= deadline => {
+                    break Err(
+                        "VIDEO_PROBE_TIMEOUT: ffprobe exceeded the 10-second inspection deadline; try a smaller or repaired source.",
+                    );
+                }
                 Ok(false) => std::thread::sleep(Duration::from_millis(10)),
             }
         };

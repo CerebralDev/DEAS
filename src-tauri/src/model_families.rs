@@ -625,11 +625,13 @@ mod gguf_parser_tests {
         #[cfg(target_os = "linux")]
         {
             let fifo = dir.join(format!("deas-gguf-fifo-{}", std::process::id()));
-            assert!(std::process::Command::new("mkfifo")
-                .arg(&fifo)
-                .status()
-                .unwrap()
-                .success());
+            assert!(
+                std::process::Command::new("mkfifo")
+                    .arg(&fifo)
+                    .status()
+                    .unwrap()
+                    .success()
+            );
             assert_eq!(gguf_metadata(&fifo), None);
             std::fs::remove_file(fifo).unwrap();
             assert_eq!(gguf_metadata(Path::new("/dev/null")), None);

@@ -359,11 +359,7 @@ pub fn space_underscores(text: &str, protected: &[&str]) -> (String, usize) {
                     let after = chars.get(i + 1).copied();
                     let left = before.is_some_and(|b| b.is_alphanumeric() || b == ')' || b == '\\');
                     let right = after.is_some_and(|a| a.is_alphanumeric() || a == '(' || a == '\\');
-                    if c == '_' && left && right {
-                        ' '
-                    } else {
-                        c
-                    }
+                    if c == '_' && left && right { ' ' } else { c }
                 })
                 .collect();
             if spaced != piece {
@@ -694,8 +690,13 @@ mod tests {
 
     #[test]
     fn literal_parens_escaped_weights_kept() {
-        let (text, escaped) = escape_literal_parens("makima (chainsaw man), (chibi:2), (glitch:1.5), 2b (nier:automata), already \\(done\\)");
-        assert_eq!(text, "makima \\(chainsaw man\\), (chibi:2), (glitch:1.5), 2b \\(nier:automata\\), already \\(done\\)");
+        let (text, escaped) = escape_literal_parens(
+            "makima (chainsaw man), (chibi:2), (glitch:1.5), 2b (nier:automata), already \\(done\\)",
+        );
+        assert_eq!(
+            text,
+            "makima \\(chainsaw man\\), (chibi:2), (glitch:1.5), 2b \\(nier:automata\\), already \\(done\\)"
+        );
         assert_eq!(escaped, ["(chainsaw man)", "(nier:automata)"]);
         let (nested, _) = escape_literal_parens("(makima \\(chainsaw man\\):2)");
         assert_eq!(nested, "(makima \\(chainsaw man\\):2)");
@@ -707,7 +708,10 @@ mod tests {
             "best_quality, cat_ears, sousou no_frieren, o_o, ^_^, score_7_up, my_tag, makima_(chainsaw_man)",
             &["my_tag"],
         );
-        assert_eq!(text, "best quality, cat ears, sousou no frieren, o_o, ^_^, score_7_up, my_tag, makima (chainsaw man)");
+        assert_eq!(
+            text,
+            "best quality, cat ears, sousou no frieren, o_o, ^_^, score_7_up, my_tag, makima (chainsaw man)"
+        );
         assert_eq!(changed, 4);
     }
 

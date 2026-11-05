@@ -83,7 +83,10 @@ pub fn native_logs_people_image_error() {
         return;
     }
     *last = Some(std::time::Instant::now());
-    push(Source::Deas, "ERROR: Studio PeopleBoxes image-load: reference image could not be decoded; box editing disabled (repeats limited to once per minute)");
+    push(
+        Source::Deas,
+        "ERROR: Studio PeopleBoxes image-load: reference image could not be decoded; box editing disabled (repeats limited to once per minute)",
+    );
 }
 
 /// Fixed reference-preview diagnostic; no media paths or frontend text cross this boundary.
@@ -95,7 +98,10 @@ pub fn native_logs_reference_media_error() {
         return;
     }
     *last = Some(std::time::Instant::now());
-    push(Source::Deas, "ERROR: Studio ReferenceMedia preview/playback: reference media could not be decoded or played (repeats limited to once per minute)");
+    push(
+        Source::Deas,
+        "ERROR: Studio ReferenceMedia preview/playback: reference media could not be decoded or played (repeats limited to once per minute)",
+    );
 }
 
 /// Entries newer than `after` (0 = everything still retained).
@@ -167,9 +173,11 @@ mod tests {
         let seq = after(0).last().unwrap().seq;
         push(Source::Comfyui, "second");
         // Other tests share the global store: only assert on this test's own entries.
-        assert!(after(seq)
-            .iter()
-            .any(|e| e.text == "second" && e.source == Source::Comfyui));
+        assert!(
+            after(seq)
+                .iter()
+                .any(|e| e.text == "second" && e.source == Source::Comfyui)
+        );
         assert!(after(seq).iter().all(|e| e.text != "first"));
     }
 

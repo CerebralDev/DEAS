@@ -9,15 +9,15 @@ mod providers;
 #[path = "downloads_tests.rs"]
 mod tests;
 use crate::auth::AuthState;
-use reqwest::{header::HeaderValue, Url};
+use reqwest::{Url, header::HeaderValue};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
     collections::{HashMap, HashSet},
     path::PathBuf,
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
     },
     time::{Duration, Instant},
 };

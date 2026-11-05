@@ -61,7 +61,7 @@ impl Jobs {
     }
 
     pub(super) async fn workbench_poll(&self) -> Result<Value, String> {
-        use futures_util::{stream, StreamExt};
+        use futures_util::{StreamExt, stream};
         let Ok(guard) = self.2.clone().try_lock_owned() else {
             return self.workbench_current();
         };
@@ -130,7 +130,10 @@ impl Jobs {
                     .unwrap_or_else(|e| e.into_inner());
                 if last.is_none_or(|at| at.elapsed() >= Duration::from_secs(60)) {
                     *last = Some(std::time::Instant::now());
-                    crate::logs::push(crate::logs::Source::Deas, "ERROR: Workbench run: preparation or admission failed; see operation result (repeats limited to once per minute)");
+                    crate::logs::push(
+                        crate::logs::Source::Deas,
+                        "ERROR: Workbench run: preparation or admission failed; see operation result (repeats limited to once per minute)",
+                    );
                 }
             }
         }
