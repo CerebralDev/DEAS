@@ -1,5 +1,18 @@
 # DEAS verification — native baseline, optional capabilities and languages
 
+## Release 0.2.15 (built and staged locally, unsigned, not published)
+
+Source commit `2c092e54b5c22076d67bc2a476c5426d6dc3f8cd` (tag `v0.2.15`), built in a clean worktree at the tag with the shared `.target` cache; nothing was pushed and no GitHub release was created (owner request: local release only).
+
+Fresh gates on the release tree: `npm run typecheck`, `npm run test:core` and full `npm run test:ui` 1457/1457 green; `cargo fmt` re-run whole-crate (rustfmt 1.9 style-edition drift across 250 committed files, plus one duplicated `#[test]` attribute removed in `logs.rs`); `cargo clippy --locked --all-targets -- -D warnings` 0; `cargo test --locked -- --test-threads=1` 766 passed / 0 failed (the earlier 46 `jobs::tests` failures were load flakes of the parallel run and did not reproduce serially); `cargo xwin check` and `cargo xwin clippy --all-targets -- -D warnings` on the msvc target green.
+
+Assets in `artifacts/releases/v0.2.15/` (manifest `sourceCommit` matches the tag):
+- `deas-linux-amd64` SHA-256 `f41f83ff4e7fdabb98839a257069403ac347340308ccfed967f56dfad1a3b4d1` — glibc floor 2.39, `ldd` zero missing, embedded bundle `index-DPeueIy_.js` byte-present.
+- `deas.exe` SHA-256 `bfb100e4ecaa4ebc5998b6d0a22db284717a6d908085dc2769c4b4488a9c8ebf` — cross-compiled only; no Windows runtime acceptance.
+- `SHA256SUMS` and `BUILD-MANIFEST.json` verify with `sha256sum -c` in the staged folder.
+
+Users launch this release from `artifacts/releases/v0.2.15/deas-linux-amd64`; quit the running app first (a running process keeps the old inode).
+
 ## Beginner mode — adoption from the 0.2.13 Beginner delivery (0.2.15, shipped)
 
 Adoption basis: `DEAS-0.2.13-Beginner-SHARE.zip`, SHA-256 `b4adae309300e95224bf3ad5ecdf5c4d34162014b28a0d28117a23bf09c3f900`, built on tag `v0.2.13` (commit `662252b606ec7241e527f8c7b3a3d139dd001ab2`). Not merged as a patch: the feature was hand-ported onto the current 0.2.15 sources (Workbench, AiOSetup, App, logs). Not adopted: the fork's window-title rebranding, `sage` as the fresh-install theme fallback (Sage ships in the `classic` theme pack; `default` remains the fallback), the fork's hide-GlobalSearch-in-Beginner choice, and its Windows executable and source-zip build logs — those logs are not acceptance evidence for this checkout.
