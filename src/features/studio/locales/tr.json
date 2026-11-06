@@ -654,6 +654,7 @@
   "studio.run.video.trimInvalid": "Kırpılmış klip 2–15 sn sürmeli (bitiş başlangıçtan sonra).",
   "studio.run.video.refFull": "Director sınırına ulaşıldı: 9 görsel, 3 video, 3 ses klibi, 12 dosya.",
   "studio.run.video.refImagesOnly": "LTX referans olarak yalnızca görsel alır.",
+  "studio.run.video.refImagesOnlyHyperflow": "HyperFlow GGUF yalnızca görsel referansları kabul eder.",
   "studio.run.video.refSecond": "Saniye",
   "studio.run.video.refSecondOf": "{name} saniyesi",
   "studio.run.video.refStrength": "Güç",

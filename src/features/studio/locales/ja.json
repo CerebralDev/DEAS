@@ -654,6 +654,7 @@
   "studio.run.video.trimInvalid": "トリムしたクリップは 2〜15 秒にしてください（終了は開始より後）。",
   "studio.run.video.refFull": "Director の上限に達しました：画像 9、動画 3、音声 3、合計 12 ファイル。",
   "studio.run.video.refImagesOnly": "LTX の参照は画像のみです。",
+  "studio.run.video.refImagesOnlyHyperflow": "HyperFlow GGUF は画像参照のみ対応しています。",
   "studio.run.video.refSecond": "秒",
   "studio.run.video.refSecondOf": "{name} の秒",
   "studio.run.video.refStrength": "強さ",

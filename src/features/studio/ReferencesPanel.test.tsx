@@ -26,6 +26,16 @@ test.each([
  expect(context.references[0].path).toBe('sub/a.png');
  expect(fromPack(pack,inputRoot)!.adds[0].path).toBe(inputRoot.replace(/\\/g,'/').replace(/\/+$/,'')+'/sub/a.png');
 });
+test.each([
+ ['/env/in','/env/out','/env/out/sub/a.png'],
+ ['C:\\env\\in','C:\\env\\out','C:\\env\\out\\sub\\a.png'],
+])('Forge preserves output reference and first/last frame paths (%s)',(inputRoot,outputRoot,path)=>{
+ const image={...item('a.png','image'),path};
+ const base={media:image,lastFrame:image,refs:[ref('a.png','image',{item:image})],sourceAudio:false,seconds:5,canvas:{width:512,height:512},inputRoot,outputRoot};
+ expect(h3ForgeContext({...base,pipeline:'i2v'}).references.map(r=>r.path)).toEqual(['sub/a.png [output]','sub/a.png [output]']);
+ expect(h3ForgeContext({...base,pipeline:'ref2v'}).references[0].path).toBe('sub/a.png [output]');
+ expect(h3ForgeContext({...base,pipeline:'ref2v',refs:[ref('other.png','image',{item:{...image,path:'/outside/a.png'}})]}).references[0].path).toBeUndefined();
+});
 test('reference packs never rewrite Linux backslash filenames into different files',()=>{
  const refs=[ref('a\\b.png','image')];
  expect(toPack(refs,'/in').skipped).toEqual(['a\\b.png']);
@@ -46,6 +56,15 @@ test('limits and trims: too many sound tracks or a trim outside 2–15 s is a ru
  expect(refsProblem([ref('s.wav','audio',{trimStart:3,trimEnd:4})])).toBe('studio.run.video.trimInvalid');
  expect(refsProblem([ref('s.wav','audio',{trimStart:3,trimEnd:18.5})])).toBe('studio.run.video.trimInvalid');
  expect(refsProblem([ref('s.wav','audio',{trimStart:3})])).toBe(''); // the clip length is the node's to check
+});
+
+test('HyperFlow retains unsupported saved references for explicit removal',()=>{
+ const onChange=vi.fn();const refs=[ref('a.png','image'),ref('clip.mp4','video'),ref('voice.wav','audio')];
+ render(<I18nProvider><ReferencesPanel refs={refs} onChange={onChange} family="minimax-h3-hyperflow" seconds={5} label={()=>''} onAdd={vi.fn()} onInsert={vi.fn()}/></I18nProvider>);
+ expect(screen.getByRole('region',{name:'Videos'})).toBeTruthy();
+ expect(screen.getByRole('region',{name:'Audio'})).toBeTruthy();
+ fireEvent.click(screen.getByRole('button',{name:'Remove reference clip.mp4'}));
+ expect(onChange).toHaveBeenLastCalledWith([refs[0],refs[2]]);
 });
 
 test('the panel reorders inside a lane, edits trims, inserts the label and removes',()=>{
@@ -353,7 +372,7 @@ test('people-image decode errors reach shared native Logs once, without sending 
  expect(vi.mocked(invoke).mock.calls.filter(([c])=>c==='native_logs_people_image_error')).toEqual([['native_logs_people_image_error']]);
 });
 
-test('Find people preserves existing identities and boxes until explicit Apply',async()=>{
+test.each(['input','output'])('Find people on %s preserves existing identities and boxes until explicit Apply',async folder=>{
  vi.mocked(invoke).mockClear().mockImplementation(async(c,a)=>{
   if(c==='native_llm_read')return {provider:'ollama',baseUrl:'http://localhost:11434'};
   const route=(a as {route?:string})?.route;
@@ -361,8 +380,9 @@ test('Find people preserves existing identities and boxes until explicit Apply',
   if(c==='native_forge'&&route==='people')return {people:[{box:[0.1,0.1,0.4,0.9]},{box:[0.6,0.1,0.9,0.9]}]};
   return {cancelled:true};
  });
- const refs=[refAt('pair.png','image',{label:'character-4',who:[4,2]})],onChange=vi.fn();
- render(<I18nProvider><ReferencesPanel refs={refs} onChange={onChange} family="minimax-h3" seconds={5} label={()=>''} onAdd={vi.fn()} onInsert={vi.fn()} inputRoot="/env/in" endpoint="http://127.0.0.1:7801" root="/env"/></I18nProvider>);
+ const source=refAt('pair.png','image',{label:'character-4',who:[4,2]});
+ const refs=[{...source,item:{...source.item,path:`/env/${folder==='input'?'in':'out'}/pair.png`}}],onChange=vi.fn();
+ render(<I18nProvider><ReferencesPanel refs={refs} onChange={onChange} family="minimax-h3" seconds={5} label={()=>''} onAdd={vi.fn()} onInsert={vi.fn()} inputRoot="/env/in" outputRoot="/env/out" endpoint="http://127.0.0.1:7801" root="/env"/></I18nProvider>);
  expect(vi.mocked(invoke).mock.calls.filter(([c])=>c==='native_forge')).toHaveLength(0);
  fireEvent.click(screen.getByRole('button',{name:'Edit pair.png'}));fireEvent.click(screen.getByText('People & order'));
  await screen.findByRole('option',{name:'Vision fixture'});
@@ -370,7 +390,7 @@ test('Find people preserves existing identities and boxes until explicit Apply',
  const apply=await screen.findByRole('button',{name:'Use detected boxes (replace current)'});
  expect(onChange).not.toHaveBeenCalled();
  const call=vi.mocked(invoke).mock.calls.find(([,a])=>(a as {route?:string})?.route==='people')![1] as {body:Record<string,unknown>};
- expect(call.body).toMatchObject({model:'vision:model',path:'pair.png'});expect(call.body.request_id).toMatch(/^[a-f0-9-]{36}$/);
+ expect(call.body).toMatchObject({model:'vision:model',path:folder==='input'?'pair.png':'pair.png [output]'});expect(call.body.request_id).toMatch(/^[a-f0-9-]{36}$/);
  fireEvent.click(apply);
  expect(onChange.mock.lastCall![0][0].boxes).toEqual([{n:4,box:[0.1,0.1,0.4,0.9]},{n:2,box:[0.6,0.1,0.9,0.9]}]);
 });

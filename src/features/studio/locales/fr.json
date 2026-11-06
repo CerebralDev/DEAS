@@ -654,6 +654,7 @@
   "studio.run.video.trimInvalid": "Un clip découpé doit durer 2 à 15 s (fin après début).",
   "studio.run.video.refFull": "Limite du Director atteinte : 9 images, 3 vidéos, 3 clips audio, 12 fichiers.",
   "studio.run.video.refImagesOnly": "LTX n’accepte que des images comme références.",
+  "studio.run.video.refImagesOnlyHyperflow": "HyperFlow GGUF n’accepte que des images comme références.",
   "studio.run.video.refSecond": "Seconde",
   "studio.run.video.refSecondOf": "Seconde de {name}",
   "studio.run.video.refStrength": "Force",

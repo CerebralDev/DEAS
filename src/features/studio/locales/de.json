@@ -654,6 +654,7 @@
   "studio.run.video.trimInvalid": "Ein zugeschnittener Clip muss 2–15 s dauern (Ende nach Anfang).",
   "studio.run.video.refFull": "Director-Grenze erreicht: 9 Bilder, 3 Videos, 3 Audioclips, 12 Dateien.",
   "studio.run.video.refImagesOnly": "LTX nimmt nur Bilder als Referenzen.",
+  "studio.run.video.refImagesOnlyHyperflow": "HyperFlow GGUF akzeptiert nur Bilder als Referenzen.",
   "studio.run.video.refSecond": "Sekunde",
   "studio.run.video.refSecondOf": "Sekunde von {name}",
   "studio.run.video.refStrength": "Stärke",

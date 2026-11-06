@@ -41,6 +41,7 @@ export function PromptForge({ endpoint, root, inputDir, outputDir, canvasContext
   const [customHeight, setCustomHeight] = usePref('forge.h3.customHeight', 1, isNumber);
   const [brief, setBrief] = usePref('forge.brief', '', isString);
   const [pictures, setPictures] = useState<Picture[]>([]);
+  useLayoutEffect(() => { setPictures([]); }, [endpoint, root, inputDir, outputDir]);
   const [query, setQuery] = useState('');
   const [sort, setSort] = usePref<MediaSort>('forge.media.sort', 'date', oneOf('date', 'name', 'size'));
   const [view, setView] = usePref<MediaView>('forge.media.view', 'tiles', oneOf(...mediaViews));
@@ -62,7 +63,7 @@ export function PromptForge({ endpoint, root, inputDir, outputDir, canvasContext
   const resolved = resolveForgeCanvas(h3 ? aspect : 'N/A', { width: customWidth, height: customHeight }, canvasContext);
   // Result geometry comes from the consumed request. A -> B -> A still creates
   // a new identity, so a previous request/result cannot regain Send authority.
-  const scopeKey = JSON.stringify([endpoint, root, inputDir, target, native, active, mode, forge.model, forge.rev,
+  const scopeKey = JSON.stringify([endpoint, root, inputDir, outputDir, target, native, active, mode, forge.model, forge.rev,
     brief, duration, shots, detail, creativity, see, shown, h3 ? aspect : 'N/A', customWidth, customHeight,
     canvasContext?.key, resolved.canvas, resolved.error]);
   const scope = useMemo(() => ({}), [scopeKey]);
@@ -81,9 +82,11 @@ export function PromptForge({ endpoint, root, inputDir, outputDir, canvasContext
     if (association?.canvas) onSend(result, negative, { canvas: { ...association.canvas }, contextKey: association.contextKey });
     else onSend(result, negative);
   };
-  // ComfyUI and the node pack read pictures from the input folder only.
   const add = (item: MediaItem) => {
-    const path = item.media === 'image' && inputDir && item.path ? relativeMediaPath(item.path, inputDir) : '';
+    if (item.media !== 'image' || !item.path) return;
+    const input = inputDir ? relativeMediaPath(item.path, inputDir) : '';
+    const output = outputDir ? relativeMediaPath(item.path, outputDir) : '';
+    const path = input || (output ? `${output} [output]` : '');
     if (path && shown.length < limit && !shown.some(p => p.path === path)) setPictures([...shown, { path, nativePath: item.path!, src: item.src, role: roles[Math.min(shown.length, 3)] }]);
   };
   const missing = h3 && mode !== 'REF2VA' && shown.length !== limit;
@@ -97,7 +100,7 @@ export function PromptForge({ endpoint, root, inputDir, outputDir, canvasContext
     try {
       if (h3) {
         const references: H3Reference[] = shown.map(p => mode === 'REF2VA' ? { kind: 'image', role: 'subject', path: p.path, easy_role: p.role } : { kind: 'image', role: 'keyframe', path: p.path });
-        const out = await forgeH3(endpoint, root, { model: forge.model, mode, brief, duration, shots, detail, creativity: forge.list?.creativity[creativity - 1] ?? '', references, easy: mode === 'REF2VA' && references.length > 0, see_pictures: see, ...(snapshot.canvas ? { output_canvas: { ...snapshot.canvas } } : {}) });
+        const out = await forgeH3(endpoint, root, { model: forge.model, mode, brief, duration, shots, detail, creativity: forge.list?.creativity[creativity - 1] ?? '', references, easy: mode === 'REF2VA' && references.length > 0, see_pictures: mode === 'REF2VA' && see && shown.length > 0, ...(snapshot.canvas ? { output_canvas: { ...snapshot.canvas } } : {}) });
         if (canPublish()) { setResult(out.simple_prompt); setWarnings(out.warnings); setAssociation(snapshot); }
       } else {
         const out = await writePrompt(endpoint, root, { model: forge.model, write_for: target, idea: brief, detail, creativity, images: shown.map(p => p.path) });
@@ -144,7 +147,8 @@ export function PromptForge({ endpoint, root, inputDir, outputDir, canvasContext
             : <span>{h3 ? t(mode === 'I2VA' || (mode === 'FL2VA' && !i) ? 'forge.role.first-frame' : 'forge.role.last-frame') : p.path}</span>}
           <button type="button" aria-label={t('forge.remove')} onClick={() => setPictures(shown.filter((_, j) => j !== i))}>×</button>
         </li>)}</ul>
-        {h3 && mode === 'REF2VA' && shown.length > 0 && <label className="forge-check"><input type="checkbox" checked={see} onChange={e => setSee(e.target.checked)}/>{t('forge.see')}</label>}
+        {h3 && mode !== 'REF2VA' && shown.length > 0 && <p className="field-help" data-forge-auto-see>{t('forge.autoSee')}</p>}
+        {h3 && mode === 'REF2VA' && shown.length > 0 && <label className="forge-check"><input type="checkbox" data-forge-see checked={see} onChange={e => setSee(e.target.checked)}/>{t('forge.see')}</label>}
       </div>}
       <button type="button" className="action-button" data-forge-write disabled={busy || !active || !root || !forge.model || (!brief.trim() && !shown.length) || missing || !!resolved.error} onClick={() => void run()}>{t(busy ? 'forge.writing' : 'forge.write')}</button>
       {pending && pending.scope !== scope && <p className="forge-warning" data-forge-discarded role="status">{t('forge.canvas.replyStale')}</p>}

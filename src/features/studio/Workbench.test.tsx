@@ -3406,6 +3406,65 @@ test.each([
  expect(uploadInput).not.toHaveBeenCalled();expect(runWorkbenchJob).not.toHaveBeenCalled();
 });
 
+test.each(['REF2VA','FL2VA'] as const)('HyperFlow %s follows the global pipeline and submits its own reference mode',async mode=>{
+ const name=`MiniMaxH3/minimax_h3_${mode.toLowerCase()}_hyperflow_flash_14b-Q8_0.gguf`;
+ vi.mocked(scanModels).mockResolvedValue([
+  {category:'diffusion_models',name,path:'/m/'+name,size:1,info:null,family:'minimax-h3-hyperflow'},
+  {category:'text_encoders',name:'qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors',path:'/m/t',size:1,info:null},
+  {category:'vae',name:'minimax_h3_video_vae_fp16.safetensors',path:'/m/v',size:1,info:null},
+  {category:'vae',name:'minimax_h3_audio_vae_fp32.safetensors',path:'/m/a',size:1,info:null}]);
+ vi.mocked(checkRecipePrerequisites).mockResolvedValue({...evidence,allowlist:{...evidence.allowlist,
+  nodes:[...evidence.allowlist.nodes,'HyperFlowGGUFLoader','HyperFlowSigmas','CLIPLoader','VAELoader'],
+  ggufDiffusionModels:[name],textEncoders:['qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors'],clipTypes:['minimax'],
+  vaes:['minimax_h3_video_vae_fp16.safetensors','minimax_h3_audio_vae_fp32.safetensors']}});
+ vi.mocked(invoke).mockImplementation(async(_c,args)=>({path:(args as {path:string})?.path,parent:'/env',entries:mediaEntries,truncated:false}));
+ vi.mocked(uploadInput).mockResolvedValue('deas-inputs/u.png');
+ vi.mocked(runWorkbenchJob).mockResolvedValue({...heldJob('hyperflow','failed'),error:'fixture'});
+ render(<I18nProvider><Workbench endpoint={evidence.baseUrl} roots={{models:'/m',input:'/env/ComfyUI/input'}}/></I18nProvider>);
+ await waitFor(()=>expect(pipe('Text → Video').disabled).toBe(false));
+ choosePipe('Text → Video');
+ // A checkpoint's name is not a request to change the user's data pipeline.
+ expect(document.querySelector('[data-open-references]')).toBeNull();
+ expect(screen.getByLabelText('Pipeline')).toHaveProperty('value','t2v');
+ expect(pipe('Video → Video').disabled).toBe(true);
+ choosePipe(mode==='REF2VA'?'Multi-reference → Video':'Image → Video');
+ fireEvent.change(screen.getByLabelText('Aspect ratio'),{target:{value:'4:3'}});
+ fireEvent.click(within(screen.getByRole('group',{name:'Environment folders'})).getByRole('button',{name:'Input'}));
+ await screen.findByRole('button',{name:'ref.png'});
+ if(mode==='REF2VA'){
+  expect(document.querySelector('[data-open-references]')).toBeTruthy();
+  expect(menuOf('clip.mp4').getByRole('menuitem',{name:/^Add as reference/})).toHaveProperty('disabled',true);
+  fireEvent.keyDown(window,{key:'Escape'});
+  fireEvent.click(menuOf('ref.png').getByRole('menuitem',{name:'Add as reference'}));
+  fireEvent.click(document.querySelector('[data-open-references]')!);
+  const dialog=screen.getByRole('dialog',{name:'References'});
+  expect(within(dialog).getByRole('region',{name:'Images'})).toBeTruthy();
+  expect(within(dialog).getByText('Images 1/9')).toBeTruthy();
+  expect(within(dialog).queryByText(/Select images, videos or audio/)).toBeNull();
+  expect(within(dialog).queryByRole('region',{name:'Videos'})).toBeNull();
+  expect(within(dialog).queryByRole('region',{name:'Audio'})).toBeNull();
+  for(const [name,media] of [['clip.mp4','video'],['voice.wav','audio']]){
+   const item={name,media,path:`/env/ComfyUI/input/${name}`,src:`asset://${name}`};
+   fireEvent.drop(document.querySelector('[data-references]')!,{dataTransfer:{types:['application/x-deas-media'],getData:()=>JSON.stringify(item)}});
+   expect(within(dialog).getByRole('alert').textContent).toContain('HyperFlow GGUF accepts image references only.');
+   expect(document.querySelectorAll('[data-ref]')).toHaveLength(1);
+  }
+  fireEvent.click(within(dialog).getByRole('button',{name:'Close'}));
+ }else{
+  expect(document.querySelector('[data-open-references]')).toBeNull();
+  fireEvent.click(menuOf('ref.png').getByRole('menuitem',{name:'Use as first and last frame'}));
+  const image=screen.getByRole('img',{name:'ref.png'});
+  Object.defineProperties(image,{naturalWidth:{value:1024},naturalHeight:{value:768}});fireEvent.load(image);
+ }
+ fireEvent.change(screen.getByLabelText('Resolution'),{target:{value:'fixed'}});
+ await waitFor(()=>expect(screen.getByRole('button',{name:'Run'})).toHaveProperty('disabled',false));
+ fireEvent.click(screen.getByRole('button',{name:'Run'}));
+ await waitFor(()=>expect(runWorkbenchJob).toHaveBeenCalledTimes(1));
+ expect(vi.mocked(runWorkbenchJob).mock.lastCall![1]).toMatchObject({family:'minimax-h3-hyperflow',model:name,h3:mode==='REF2VA'
+  ?{mode,references:[],media:[{type:'image',file:'deas-inputs/u.png',slot:0}]}
+  :{mode,references:[{slot:0,image:'deas-inputs/u.png'},{slot:1,image:'deas-inputs/u.png'}]}});
+});
+
 test('Image → Video media menu assigns first, last or both frame roles',async()=>{
  vi.mocked(scanModels).mockResolvedValue([...ltxModels]);
  vi.mocked(invoke).mockImplementation(async(_c,args)=>({path:(args as {path:string}).path,parent:'/env',entries:mediaEntries,truncated:false}));

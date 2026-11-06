@@ -2,6 +2,11 @@
 
 ## 0.2.18 BETA (unreleased)
 
+
+- **Forge reads selected output pictures.** H3 reference images and first/last frames retain their input/output identity through Forge, Cast and Find people. Explicit operations safely upload output images for the input-only node-pack reader; opening Forge does not copy or analyze media. The standalone picker also accepts output pictures. Vision controls/status distinguish labelled-picture opt-in from automatic frame/reference vision.
+
+- **HyperFlow reference pipelines verified and constrained.** Multi-reference → Video exposes image references and submits REF2VA; Image → Video retains first/last-frame FL2VA behavior. HyperFlow GGUF accepts image references only (up to nine), not video/audio references; unsupported restored rows remain removable. Native validation rejects mixed references and the unsupported video-to-video pipeline is no longer advertised.
+
 - **HyperFlow H3 Flash video support.** DEAS now recognizes `VideoRebirthAI/hyperflow-h3-flash` GGUF checkpoints (`hyperflow_gate` tensor signature → family `minimax-h3-hyperflow`) and runs them through the normal MiniMax H3 video flow: same Director pipelines (T2VA/I2VA/L2VA/FL2VA/REF2VA), Continuity and RefMods, with the pack's `HyperFlowGGUFLoader` replacing the plain GGUF loader and `HyperFlowSigmas` replacing the sigma-shift/scheduler chain. Sampling is pinned to the model's distilled schedule: 4, 6 (default) or 8 steps with euler at CFG 1, no negative prompt; shift fields are hidden and learned latent upscale stays disabled (unverified). HyperFlow checkpoints load as GGUF only — the hub's INT8 convrot partition is diffusers-shape data for the upstream Python runtime and cannot load in any ComfyUI build. The ComfyUI-HyperFlow-Flash node pack (pinned source revision) is provisioned with the ComfyUI-GGUF step and verified in the backend probe.
 
 ## Unreleased

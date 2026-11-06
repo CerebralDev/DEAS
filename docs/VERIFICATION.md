@@ -1,5 +1,15 @@
 # DEAS verification — native baseline, optional capabilities and languages
 
+## Forge input/output picture transport (0.2.18, unreleased)
+
+- Frontend typecheck, all 144 core tests and all 1,531 UI tests (76 files) passed. Reference-panel coverage includes output first/last frames and input/output Find people without implicit analysis, plus Linux/Windows path spelling.
+- Independent source review found one standalone output-root identity issue; changing media roots now clears selected pictures and invalidates drafts. Its two regressions failed before the fix; all 113 Forge/canvas tests and typecheck passed after it.
+- Native library: 790 passed, 58 ignored, serial execution. LLM-focused final pass: 36 passed, 1 ignored. Actual loopback HTTP tests inspect uploaded multipart image bytes and forwarded input handles for H3, Cast, Find people and Writer, preserving originals/metadata and deduplicating repeated sources; unsafe paths, symlink escapes, bounds, cancellation/socket closure and snapshot cleanup are covered.
+- Strict native Clippy passed. A loaded initial LLM-focused run hit the existing parallel-listing timing assertion; the serial rerun and complete native suite passed.
+- Linux build completed and atomically staged at `artifacts/deas-linux-amd64`; SHA-256 `44bbd37a5f99b573306c0b5bec52fbb1e6cb2618db0c9b84b3a4506fc24b4a62`. The binary contains the current `index-COSXdgtB.js` frontend and `ldd` reports no missing libraries. Shared layout gate passed, including its broken-layout negative control. Quit/relaunch is required; no live services were restarted.
+- Windows crosscheck remains blocked by existing `src/themes.rs:438` calling unstable `str::as_str`; no Windows runtime acceptance is claimed. Live vision inference, real-model quality/performance and target-WebView interaction were not exercised. Arbitrary external media/video-frame understanding remain open in PLAN.
+
+
 ## Release 0.2.17 (published)
 
 Published [v0.2.17](https://github.com/darksidewalker/DEAS/releases/tag/v0.2.17) from source commit `73000469f6049e7f5ed3b66d6768dcf3677aa285` (tree `ba14abe9312436fa737ecd20efe55a6cd9269282`). Main and annotated release tag were pushed/read back on both remotes. This release rolls up unpublished/local-only 0.2.15 and 0.2.16 work, plus the utility-tab grouping and observed ACE export-alias correction. Independent bounded review passed; the fresh local gates and acceptance limits are listed below.

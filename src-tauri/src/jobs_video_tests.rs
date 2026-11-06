@@ -633,6 +633,60 @@ pub(crate) fn h3() -> Value {
 }
 
 #[test]
+fn hyperflow_ref2va_and_fl2va_route_their_own_director_inputs() {
+    for mode in ["REF2VA", "FL2VA"] {
+        let mut i = h3();
+        i["family"] = json!("minimax-h3-hyperflow");
+        i["model"] = json!(format!(
+            "MiniMaxH3/minimax_h3_{}_hyperflow_flash_14b-Q8_0.gguf",
+            mode.to_lowercase()
+        ));
+        i["h3"]["mode"] = json!(mode);
+        if mode == "REF2VA" {
+            i["h3"]["references"] = json!([]);
+            i["h3"]["media"] = json!([{"type":"image","file":"deas-inputs/a.png","slot":0}]);
+        } else {
+            i["h3"]["references"] = json!([{"slot":0,"image":"deas-inputs/a.png"},{"slot":1,"image":"deas-inputs/b.png"}]);
+        }
+        let graph = compile(&i).unwrap();
+        let inputs = &graph["D"]["inputs"];
+        let socket = if mode == "REF2VA" {
+            "ref2va_model"
+        } else {
+            "fl2va_model"
+        };
+        assert_eq!(inputs[socket], json!(["1", 0]));
+        assert!(inputs
+            .get(if mode == "REF2VA" {
+                "fl2va_model"
+            } else {
+                "ref2va_model"
+            })
+            .is_none());
+        assert_eq!(inputs["mode"], mode);
+        assert_eq!(graph["1"]["class_type"], "HyperFlowGGUFLoader");
+        if mode == "REF2VA" {
+            for (kind, file) in [
+                ("video", "deas-input-clip.mp4"),
+                ("audio", "deas-inputs/voice.wav"),
+            ] {
+                let mut unsupported = i.clone();
+                unsupported["h3"]["media"] = json!([
+                    {"type":"image","file":"deas-inputs/a.png","slot":0},
+                    {"type":kind,"file":file,"slot":0}
+                ]);
+                assert!(compile(&unsupported)
+                    .unwrap_err()
+                    .contains("image references only"));
+                unsupported["family"] = json!("minimax-h3");
+                unsupported["model"] = json!("MiniMaxH3/ref2va.safetensors");
+                assert!(compile(&unsupported).is_ok());
+            }
+        }
+    }
+}
+
+#[test]
 fn hyperflow_flash_uses_its_own_loader_and_saved_schedule() {
     let mut i = h3();
     i["family"] = json!("minimax-h3-hyperflow");

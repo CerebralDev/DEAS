@@ -45,10 +45,10 @@ export const directorTags=(refs:VideoRef[])=>{
  return out.map(x=>x.join(' '));
 };
 /** Director Forge references in node order (`forgeReferences`): images as subjects (REF2VA) or keyframes, videos as motion with their sound stream, audio;
- * `path` only for files in the input folder (the node reads pictures from there), clip length only when both trims are set. */
-export function forgeReferences(refs:VideoRef[],mode:string,inputRoot?:string):H3Reference[]{
+ * `path` uses ComfyUI input/output names; clip length only when both trims are set. */
+export function forgeReferences(refs:VideoRef[],mode:string,inputRoot?:string,outputRoot?:string):H3Reference[]{
  const slots=slotsOf(refs);const rank={image:0,video:1,audio:2} as Record<string,number>;
- const rel=(r:VideoRef)=>{const path=inputRoot?relativeMediaPath(r.item.path??'',inputRoot):'';return path?{path}:{};};
+ const rel=(r:VideoRef)=>{const input=inputRoot?relativeMediaPath(r.item.path??'',inputRoot):'';const output=outputRoot?relativeMediaPath(r.item.path??'',outputRoot):'';const path=input||(output?`${output} [output]`:'');return path?{path}:{};};
  const length=(r:VideoRef)=>{const seconds=referenceSeconds(r);return seconds===undefined?{}:{duration_seconds:seconds};};
  const labels=forgeLabels(refs);
  return refs.map((r,i)=>({r,i})).sort((a,b)=>rank[a.r.item.media??'']-rank[b.r.item.media??'']||slots[a.i]-slots[b.i]||a.i-b.i).map(({r}):H3Reference=>
@@ -58,17 +58,17 @@ export function forgeReferences(refs:VideoRef[],mode:string,inputRoot?:string):H
 }
 /** What the Director Forge gets for a MiniMax H3 video run: the mode and references the intent will carry (REF2VA for
  * Video → Video and Multi-reference, else the first/last-frame mode), the duration and the exact output canvas. */
-export function h3ForgeContext(o:{pipeline:string;media:MediaItem|null;lastFrame:MediaItem|null;refs:VideoRef[];sourceAudio:boolean;seconds:number;canvas:{width:number;height:number};inputRoot?:string;framePeople?:Record<string,FramePeople>}):H3Context{
+export function h3ForgeContext(o:{pipeline:string;media:MediaItem|null;lastFrame:MediaItem|null;refs:VideoRef[];sourceAudio:boolean;seconds:number;canvas:{width:number;height:number};inputRoot?:string;outputRoot?:string;framePeople?:Record<string,FramePeople>}):H3Context{
  const ref=(item:MediaItem,mediaMode:VideoRef['mediaMode']='video'):VideoRef=>({item,second:0,strength:1,mediaMode});
  const base={duration:o.seconds,canvas:{width:o.canvas.width,height:o.canvas.height}};
  if(o.pipeline==='v2v'||o.pipeline==='ref2v'){
   const picks=o.pipeline==='v2v'?(o.media?.media==='video'?[ref(o.media,o.sourceAudio?'video_audio':'video')]:[]):o.refs;
   // Picture labels (the Director's easy mode) apply when every reference is a labelled picture.
-  return {...base,mode:'REF2VA',references:forgeReferences(picks,'REF2VA',o.inputRoot),easy:picks.length>0&&picks.every(r=>r.item.media==='image')};
+  return {...base,mode:'REF2VA',references:forgeReferences(picks,'REF2VA',o.inputRoot,o.outputRoot),easy:picks.length>0&&picks.every(r=>r.item.media==='image')};
  }
  const first=o.pipeline==='i2v'&&o.media?.media==='image'?o.media:null;
  const frames=[first,o.lastFrame].flatMap(i=>i?[{...ref(i),...o.framePeople?.[i.src]}]:[]);
- return {...base,mode:first&&o.lastFrame?'FL2VA':first?'I2VA':o.lastFrame?'L2VA':'T2VA',references:forgeReferences(frames,'I2VA',o.inputRoot),easy:false};
+ return {...base,mode:first&&o.lastFrame?'FL2VA':first?'I2VA':o.lastFrame?'L2VA':'T2VA',references:forgeReferences(frames,'I2VA',o.inputRoot,o.outputRoot),easy:false};
 }
 /** Timeline references in the Director prefill's order (images, video items, audio files; each by slot). */
 export const prefillItems=(refs:VideoRef[])=>{const slots=slotsOf(refs);const rank={image:0,video:1,audio:2} as Record<string,number>;
@@ -143,15 +143,15 @@ export function fromPack(json:unknown,inputRoot:string):{adds:{path:string;media
   ...(x.type!=='image'&&seconds(x.trim_start)!==undefined?{trimStart:seconds(x.trim_start)}:{}),...(x.type!=='image'&&seconds(x.trim_end)!==undefined?{trimEnd:seconds(x.trim_end)}:{}),
   ...(x.type==='image'&&pictureLabels.includes(x.forge_label as string)?{label:x.forge_label as string}:{}),...(typeof x.forge_instructions==='string'&&x.forge_instructions.trim()?{instructions:x.forge_instructions.slice(0,4000)}:{}),...(typeof x.forge_keep==='string'&&x.forge_keep.trim()?{keep:x.forge_keep.slice(0,2000)}:{}),...(typeof x.forge_drop==='string'&&x.forge_drop.trim()?{drop:x.forge_drop.slice(0,2000)}:{})}))};
 }
-const lanes:Record<string,Lane[]>={'minimax-h3':['image','video','audio'],'minimax-h3-hyperflow':['image','video','audio'],'ltx-2':['image']};
+const lanes:Record<string,Lane[]>={'minimax-h3':['image','video','audio'],'minimax-h3-hyperflow':['image'],'ltx-2':['image']};
 
-export function ReferencePeople({r,label,onChange,endpoint,root,inputRoot,allowEmpty=false,prominent=false,title}:{r:VideoRef;label:string;onChange:(x:Partial<VideoRef>)=>void;endpoint:string;root?:string;inputRoot?:string;allowEmpty?:boolean;/** Prompt Forge tab: an always-open titled section instead of a collapsed menu. */prominent?:boolean;title?:string}){
+export function ReferencePeople({r,label,onChange,endpoint,root,inputRoot,outputRoot,allowEmpty=false,prominent=false,title}:{r:VideoRef;label:string;onChange:(x:Partial<VideoRef>)=>void;endpoint:string;root?:string;inputRoot?:string;outputRoot?:string;allowEmpty?:boolean;/** Prompt Forge tab: an always-open titled section instead of a collapsed menu. */prominent?:boolean;title?:string}){
  const {t}=useI18n();const [expanded,setOpen]=useState(false);const open=prominent||expanded;const who=r.who??labelCharacters(label).map(Number);
  const labelOf=(next:number[],axis?:VideoRef['whoAxis'])=>{const group=`group-${next.join('')}`;return !next.length?'':!axis&&next.length>1&&pictureLabels.includes(group)?group:`character-${next[0]}`;};
  const toggle=(n:number)=>{const next=who.includes(n)?who.filter(x=>x!==n):[...who,n];onChange({who:next,label:labelOf(next,r.whoAxis)});};
  const body=<>
   <p className="media-help">{t('forge.peopleHint')}</p>
-  {open&&<PeopleDetector endpoint={endpoint} root={root} reference={forgeReferences([{...r,label}],'REF2VA',inputRoot)[0]} onApply={boxes=>onChange({boxes,label:labelOf([...boxes].sort((a,b)=>a.box[0]+a.box[2]-b.box[0]-b.box[2]).map(b=>b.n))})}/>}
+  {open&&<PeopleDetector endpoint={endpoint} root={root} reference={forgeReferences([{...r,label}],'REF2VA',inputRoot,outputRoot)[0]} onApply={boxes=>onChange({boxes,label:labelOf([...boxes].sort((a,b)=>a.box[0]+a.box[2]-b.box[0]-b.box[2]).map(b=>b.n))})}/>}
   {open&&<PeopleBoxes src={r.item.src} boxes={r.boxes??[]} onChange={boxes=>onChange({boxes,...(boxes.length?{label:labelOf([...boxes].sort((a,b)=>a.box[0]+a.box[2]-b.box[0]-b.box[2]).map(b=>b.n))}:{})})}/>}
   {!r.boxes?.length&&<><div className="wb-ref-actions">{Array.from({length:Math.min(32,Math.max(6,...who.map(n=>n+1)))},(_,i)=>i+1).map(n=><button key={n} type="button" aria-label={t('forge.personIn',{n:String(n),name:r.item.name})} aria-pressed={who.includes(n)} disabled={!allowEmpty&&who.length===1&&who[0]===n} onClick={()=>toggle(n)}>{n}</button>)}</div>
   <p className="media-help">{t('forge.peopleSelected',{n:who.join(' → ')})}</p>
@@ -161,9 +161,9 @@ export function ReferencePeople({r,label,onChange,endpoint,root,inputRoot,allowE
   :<details className="wb-ref-more" data-ref-people onToggle={e=>setOpen(e.currentTarget.open)}><summary>{t('forge.people')}</summary>{body}</details>;
 }
 
-export interface ReferencesPanelProps { endpoint?:string; root?:string; refs:VideoRef[]; onChange:(refs:VideoRef[])=>void; family:'ltx-2'|'minimax-h3'|'minimax-h3-hyperflow'; /** Video length: LTX reference seconds stay inside it. */ seconds:number; /** Adds references in order (dropped tiles/files, loaded packs); `replace` starts from an empty list. */ onAdd:(adds:RefAdd[],replace?:boolean)=>void; /** ComfyUI input folder: Director packs name files relative to it. */ inputRoot?:string; label:(r:VideoRef,i:number)=>string; /** Append a Director label such as `<Picture 1>` to the prompt. */ onInsert:(label:string)=>void; /** H3 RefMod rows (Director slots 1–8 in order). */ refmods?:RefMod[]; onRefmods?:(rows:RefMod[])=>void; /** Reads the backend's RefMod library on demand. */ library?:()=>Promise<RefModEntry[]> }
+export interface ReferencesPanelProps { endpoint?:string; root?:string; refs:VideoRef[]; onChange:(refs:VideoRef[])=>void; family:'ltx-2'|'minimax-h3'|'minimax-h3-hyperflow'; /** Video length: LTX reference seconds stay inside it. */ seconds:number; /** Adds references in order (dropped tiles/files, loaded packs); `replace` starts from an empty list. */ onAdd:(adds:RefAdd[],replace?:boolean)=>void; /** ComfyUI input folder: Director packs name files relative to it. */ inputRoot?:string; outputRoot?:string; label:(r:VideoRef,i:number)=>string; /** Append a Director label such as `<Picture 1>` to the prompt. */ onInsert:(label:string)=>void; /** H3 RefMod rows (Director slots 1–8 in order). */ refmods?:RefMod[]; onRefmods?:(rows:RefMod[])=>void; /** Reads the backend's RefMod library on demand. */ library?:()=>Promise<RefModEntry[]> }
 /** Multi-reference → Video editor in Director lanes; used inside the References overlay. */
-export function ReferencesPanel({endpoint='',root,refs,onChange,family,seconds,label,onAdd,onInsert,inputRoot,refmods=[],onRefmods,library}:ReferencesPanelProps){
+export function ReferencesPanel({endpoint='',root,refs,onChange,family,seconds,label,onAdd,onInsert,inputRoot,outputRoot,refmods=[],onRefmods,library}:ReferencesPanelProps){
  const {t}=useI18n();
  const box=useRef<HTMLDivElement>(null);const [error,setError]=useState('');const [hovering,setHovering]=useState(false);
  const [editing,setEditing]=useState<string|null>(null);
@@ -209,7 +209,7 @@ export function ReferencesPanel({endpoint='',root,refs,onChange,family,seconds,l
    setStatus(t('studio.run.video.packLoaded',{count:String(adds.length)})+(missing?` · ${t('studio.run.video.packMissing',{count:String(missing)})}`:''));
   }catch(e){setError(String(e));}
  };
- const h3=family!=='ltx-2';const c=refCounts(refs);
+ const h3=family!=='ltx-2';const imageOnly=family==='minimax-h3-hyperflow';const c=refCounts(refs);
  const set=(n:number,x:Partial<VideoRef>)=>onChange(refs.map((r,m)=>m===n?{...r,...x}:r));
  // Order matters only inside a lane (slot numbers), so a move swaps with the nearest item of the same lane.
  const neighbour=(n:number,d:-1|1)=>{for(let m=n+d;m>=0&&m<refs.length;m+=d)if(laneOf(refs[m])===laneOf(refs[n]))return m;return -1;};
@@ -220,7 +220,7 @@ export function ReferencesPanel({endpoint='',root,refs,onChange,family,seconds,l
  const editor=(r:VideoRef,n:number)=><>
     {/* Director Forge: which picture label (REF2VA) and what to take from this reference. */}
     {h3&&r.item.media==='image'&&<select data-ref-label aria-label={t('studio.run.video.labelOf',{name:r.item.name})} value={labels[n]} onChange={e=>set(n,{label:e.target.value,who:undefined,whoAxis:undefined,boxes:undefined})}>{pictureLabels.map(l=><option key={l} value={l}>{l.startsWith('group-')?t('forge.role.group',{n:labelCharacters(l).join(' + ')}):t(`forge.role.${l.replace(/-\d+$/,'')}`,{n:l.slice(10)})}</option>)}</select>}
-    {h3&&r.item.media==='image'&&labelCharacters(labels[n]).length>0&&<ReferencePeople r={r} label={labels[n]} onChange={x=>set(n,x)} endpoint={endpoint} root={root} inputRoot={inputRoot}/>}
+    {h3&&r.item.media==='image'&&labelCharacters(labels[n]).length>0&&<ReferencePeople r={r} label={labels[n]} onChange={x=>set(n,x)} endpoint={endpoint} root={root} inputRoot={inputRoot} outputRoot={outputRoot}/>}
     {h3&&<input type="text" data-ref-instructions aria-label={t('studio.run.video.instructionsOf',{name:r.item.name})} placeholder={t(labels[n]==='custom'?'studio.run.video.instructionsNeeded':'studio.run.video.instructions')} maxLength={4000} value={r.instructions??''} onChange={e=>set(n,{instructions:e.target.value})}/>}
     {h3&&<details className="wb-ref-more"><summary>{t('studio.run.video.refDetails')}</summary>
      {(['description','keep','drop'] as const).map(key=><label key={key}><span>{t(`studio.run.video.ref.${key}`)}</span><input type="text" aria-label={t(`studio.run.video.ref.${key}Of`,{name:r.item.name})} maxLength={2000} value={r[key]??''} onChange={e=>set(n,{[key]:e.target.value})}/></label>)}
@@ -241,9 +241,10 @@ export function ReferencesPanel({endpoint='',root,refs,onChange,family,seconds,l
    {status&&<span role="status">{status}</span>}
   </div>
   <p className="media-help">{t('studio.run.video.refsDrop')}</p>
-  {h3&&<p className={`wb-ref-meter${over(c)?' error-message':''}`}>{t('studio.run.video.refMeter',{images:String(c.images),videos:String(c.videos),audio:String(c.audio),files:String(c.images+c.videos+c.audio)})}</p>}
-  {!refs.length&&<p className="media-help">{t(h3?'studio.run.video.refsHintH3':'studio.run.video.refsHint')}</p>}
-  <div className="wb-lanes">{lanes[family].map(lane=><section key={lane} className="wb-lane" aria-label={t(`studio.run.dock.type.${lane}`)}>
+  {h3&&<p className={`wb-ref-meter${over(c)?' error-message':''}`}>{imageOnly?<>{t('studio.run.dock.type.image')} {`${c.images}/9`}</>:t('studio.run.video.refMeter',{images:String(c.images),videos:String(c.videos),audio:String(c.audio),files:String(c.images+c.videos+c.audio)})}</p>}
+  {(imageOnly||!refs.length)&&<p className="media-help">{t(imageOnly?'studio.run.video.refImagesOnlyHyperflow':h3?'studio.run.video.refsHintH3':'studio.run.video.refsHint')}</p>}
+  {/* Keep unsupported saved rows visible so users can remove them. */}
+  <div className="wb-lanes">{[...new Set([...lanes[family],...refs.map(laneOf)])].map(lane=><section key={lane} className="wb-lane" aria-label={t(`studio.run.dock.type.${lane}`)}>
    {h3&&<h4>{t(`studio.run.dock.type.${lane}`)}</h4>}
    <ul>{refs.map((r,n)=>laneOf(r)!==lane?null:<li key={r.item.src} className="wb-ref" data-ref={r.item.name} onDragOver={e=>{if(dragged.current>=0)e.preventDefault();}} onDrop={e=>dropOn(e,n)}>
     {/* The name row is the drag handle, so text selection in the fields below keeps working. */}

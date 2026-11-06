@@ -6,7 +6,7 @@ import type { Size } from './resolution';
 export interface ForgeModel { id: string; label: string; disabled?: boolean }
 export interface ForgeModels { models: ForgeModel[]; errors: Record<string, string>; creativity: string[]; shot_counts: (string | number)[]; default_shots: string | number; durations?: number[] }
 export interface WriteRequest { model: string; write_for: string; idea: string; detail?: number; creativity?: number; /** ComfyUI LoadImage names: input-folder relative, or `name [output]`. */ images?: string[] }
-/** One Director Forge reference (`js/minimax_h3_forge_state.js::forgeReferences`): `path` is input-folder relative and only sent when the file lives there. */
+/** One Director Forge reference (`js/minimax_h3_forge_state.js::forgeReferences`): `path` uses ComfyUI LoadImage names: input-relative or `name [output]`. */
 export interface PeopleBox { n:number; box:[number,number,number,number] }
 /** Reject unsafe or ambiguous imported box data rather than silently changing identities/geometry. */
 export function readPeopleBoxes(raw:unknown):PeopleBox[]|null {

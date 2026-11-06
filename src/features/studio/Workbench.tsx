@@ -452,6 +452,7 @@ const loadChoices=()=>{if(native&&!choices&&endpoint.trim())void refreshChoices(
   :pipeline==='cover'&&!musicSource?.path?'studio.music.needsSource'
   :pipeline==='v2v'&&!(media?.media==='video'&&media.path)?'studio.run.pipe.needsVideo'
   :pipeline==='ref2v'&&!refs.length&&!(isH3Video(videoFamily)&&refmods.length)?'studio.run.pipe.needsRefs'
+  :pipeline==='ref2v'&&videoFamily==='minimax-h3-hyperflow'&&refs.some(r=>r.item.media!=='image')?'studio.run.video.refImagesOnlyHyperflow'
   :pipeline==='ref2v'?refsProblem(refs):'';
  const fps=family?.video?.fixedFps?family.video.fps:video.fps;
  const frames=videoFamily?videoFrames(videoFamily,video.seconds,fps):0;
@@ -1027,14 +1028,14 @@ const loadChoices=()=>{if(native&&!choices&&endpoint.trim())void refreshChoices(
  const noEditModel=!allModels.some(m=>!blocked(m,'i2i'));
  // References: LTX keyframes are images; H3 REF2VA also takes videos and audio within the Director limits. Returns why an item cannot be added.
  const isRef=(item:MediaItem)=>refs.some(r=>r.item.src===item.src);
- const refBlock=(item:MediaItem,list=refs)=>!isH3Video(videoFamily)?(item.media==='image'?'':'studio.run.video.refImagesOnly'):h3Full(list,item)?'studio.run.video.refFull':'';
+ const refBlock=(item:MediaItem,list=refs)=>videoFamily==='minimax-h3-hyperflow'&&item.media!=='image'?'studio.run.video.refImagesOnlyHyperflow':!isH3Video(videoFamily)?(item.media==='image'?'':'studio.run.video.refImagesOnly'):h3Full(list,item)?'studio.run.video.refFull':'';
  // Adds in order; already referenced or path-less (browser) items are skipped, refused ones are named with the reason.
  const addRefs=(adds:RefAdd[],replace=false)=>{
   let next=replace?[]:refs;const refused:string[]=[];
   for(const {item,...rest} of adds){if(!item.path||next.some(r=>r.item.src===item.src))continue;
    const ref:VideoRef={item,second:next.length?video.seconds:0,strength:1,mediaMode:'video',...rest};
    // Limits count the reference as it will be used (a pack may bring a sound-only video).
-   const why=!isH3Video(videoFamily)?refBlock(item,next):over(refCounts([...next,ref]))?'studio.run.video.refFull':'';
+   const why=!isH3Video(videoFamily)||videoFamily==='minimax-h3-hyperflow'&&item.media!=='image'?refBlock(item,next):over(refCounts([...next,ref]))?'studio.run.video.refFull':'';
    if(why)refused.push(`${item.name}: ${t(why)}`);else next=[...next,ref];}
   setRefs(next);setError(refused.join(' · '));
  };
@@ -1066,7 +1067,7 @@ const loadChoices=()=>{if(native&&!choices&&endpoint.trim())void refreshChoices(
  const mediaActions=(item:MediaItem):MediaAction[]=>[...inputActions(item),...(item.path&&item.media!=='audio'?[{label:t('studio.run.metadata.apply'),onClick:()=>void applyFileSettings(item,'all'),blocked:(!native||scanning||working||autoPlan||resolving||!!planRun.current)?t('studio.run.metadata.native'):undefined}]:[])];
  const stageMark=media?.path&&marks.get(media.path);
  // MiniMax H3 video: the hammer is the Director's Prompt Forge for this run (same mode/references the intent gets).
- const forgeContext=isH3Video(videoFamily)&&isVideo?h3ForgeContext({pipeline,media:lastOnly?null:media,lastFrame,refs,framePeople,sourceAudio,seconds:video.seconds,canvas:outputSize,inputRoot:roots.input}):undefined;
+ const forgeContext=isH3Video(videoFamily)&&isVideo?h3ForgeContext({pipeline,media:lastOnly?null:media,lastFrame,refs,framePeople,sourceAudio,seconds:video.seconds,canvas:outputSize,inputRoot:roots.input,outputRoot:outputDir}):undefined;
  useEffect(()=>{onH3ForgeAvailable?.(!!forgeContext);},[!!forgeContext,onH3ForgeAvailable]);
  // Insert at the cursor of the positive prompt (else append), like the node's toolbar.
  const insertPrompt=(text:string)=>{const el=document.getElementById('run-positive') as HTMLTextAreaElement|null;const at=el&&document.activeElement===el?el.selectionStart:positive.length;setPositive(positive.slice(0,at)+text+positive.slice(at));};
@@ -1612,16 +1613,16 @@ const promptTools=forgeContext&&<>
  </div>
  {visionDownload&&<dialog ref={visionDialog} data-vision-download className="continuity-overlay" aria-label={t("studio.run.reference.dlAsk")} onCancel={e=>{e.preventDefault();closeVisionDownload();}}><header className="continuity-overlay-header"><h2>{t("studio.run.reference.dlAsk")}</h2><button type="button" onClick={closeVisionDownload}>{t("studio.close")}</button></header><div className="wb-dock-panel"><p>{t("studio.run.latent.consent")}</p><DownloadPanel embedded installTarget={root} modelsDir={modelsDir} initialEntryIds={visionIds} filenameFilter={["clip_vision_g.safetensors"]} onStatus={visionDownloadStatus}/></div></dialog>}
  {latentDownload&&<dialog ref={latentDialog} data-latent-upscale-download className="continuity-overlay" aria-label={t('studio.run.latent.download')} onCancel={e=>{e.preventDefault();closeLatentDownload();}}><header className="continuity-overlay-header"><h2>{t('studio.run.latent.download')}</h2><button type="button" onClick={closeLatentDownload}>{t('studio.close')}</button></header><div className="wb-dock-panel"><p>{t('studio.run.latent.consent')}</p><DownloadPanel embedded installTarget={root} modelsDir={modelsDir} initialEntryIds={latentIds} filenameFilter={latentDownload==='minimax-h3'?['minimax_h3_latent_upscaler_3d_conv_v1_bf16.safetensors','MiniMax H3 Latent Upscaler.safetensors','minimax h3 latent upscaler.safetensors','minimax_h3_latent_upscaler.safetensors']:['ltx-2.3-spatial-upscaler-x2-1.1.safetensors','LTX-2.3-Latent-Upscaler.safetensors']} onStatus={latentDownloadStatus}/></div></dialog>}
- {referencesOpen&&refsTab&&!planVisible&&<ReferencesOverlay endpoint={endpoint} root={root} refs={refs} onChange={setRefs} family={videoFamily as 'ltx-2'|'minimax-h3'|'minimax-h3-hyperflow'} seconds={video.seconds} label={refLabel} onAdd={addRefs} inputRoot={roots.input} refmods={refmods} onRefmods={setRefmods} library={native&&endpoint.trim()?()=>readRefMods(endpoint):undefined} onInsert={tag=>setPositive(positive.trim()?`${positive.trimEnd()} ${tag}`:tag)} onClose={()=>{setReferencesOpen(false);referencesButton.current?.focus();}} picker={<MediaPanel toolbar={error?<p role="alert" className="error-message">{backendErrorText(error,t)}</p>:undefined} selected={null} onSelect={toggleRef} roots={roots} outputRevision={outputRevision} controls={{query,onQuery:setQuery,sort,onSort:setSort,view:dockView,onView:setDockView,type:dockType,onType:setDockType}} marks={marks} actions={mediaActions}/>}/> }
+ {referencesOpen&&refsTab&&!planVisible&&<ReferencesOverlay endpoint={endpoint} root={root} refs={refs} onChange={setRefs} family={videoFamily as 'ltx-2'|'minimax-h3'|'minimax-h3-hyperflow'} seconds={video.seconds} label={refLabel} onAdd={addRefs} inputRoot={roots.input} outputRoot={outputDir} refmods={refmods} onRefmods={setRefmods} library={native&&endpoint.trim()?()=>readRefMods(endpoint):undefined} onInsert={tag=>setPositive(positive.trim()?`${positive.trimEnd()} ${tag}`:tag)} onClose={()=>{setReferencesOpen(false);referencesButton.current?.focus();}} picker={<MediaPanel toolbar={error?<p role="alert" className="error-message">{backendErrorText(error,t)}</p>:undefined} selected={null} onSelect={toggleRef} roots={roots} outputRevision={outputRevision} controls={{query,onQuery:setQuery,sort,onSort:setSort,view:dockView,onView:setDockView,type:dockType,onType:setDockType}} marks={marks} actions={mediaActions}/>}/> }
  {/* Keep H3 editors with their Workbench state; only their DOM lives in the retained Forge tab. */}
  {forgeHost&&forgeContext&&createPortal(<section className="forge-tab" aria-label={t('studio.tab.forge')} data-h3-forge-tab>
   <ForgeButton inline active={forgeActive} endpoint={endpoint} root={root} dialect={dialectOf(model?.family)} value={positive} onApply={setPositive} h3={forgeContext} tools={promptTools}/>
   <div className="forge-output">
    {frameVideo&&[firstFrame,lastFrame].map((item,i)=>item&&<div className="wb-wide" key={`${i}:${item.src}`} data-frame-people={i===0?'first':'last'}>
-       <ReferencePeople key={item.src} prominent title={`${t(i===0?'forge.role.first-frame':'forge.role.last-frame')} · ${item.name}`} r={{item,second:0,strength:1,mediaMode:'video',who:[],...framePeople[item.src]}} label="" allowEmpty endpoint={endpoint} root={root} inputRoot={roots.input} onChange={x=>setFramePeople(p=>({...p,[item.src]:{...p[item.src],...x}}))}/>
+       <ReferencePeople key={item.src} prominent title={`${t(i===0?'forge.role.first-frame':'forge.role.last-frame')} · ${item.name}`} r={{item,second:0,strength:1,mediaMode:'video',who:[],...framePeople[item.src]}} label="" allowEmpty endpoint={endpoint} root={root} inputRoot={roots.input} outputRoot={outputDir} onChange={x=>setFramePeople(p=>({...p,[item.src]:{...p[item.src],...x}}))}/>
       </div>)}
    {pipeline==='ref2v'&&refs.map((r,i)=>r.item.media==='image'&&labelCharacters(forgeLabels(refs)[i]).length>0&&<div key={r.item.src}>
-    <ReferencePeople prominent title={r.item.name} r={r} label={forgeLabels(refs)[i]} endpoint={endpoint} root={root} inputRoot={roots.input} onChange={x=>setRefs(current=>current.map((pick,j)=>j===i?{...pick,...x}:pick))}/>
+    <ReferencePeople prominent title={r.item.name} r={r} label={forgeLabels(refs)[i]} endpoint={endpoint} root={root} inputRoot={roots.input} outputRoot={outputDir} onChange={x=>setRefs(current=>current.map((pick,j)=>j===i?{...pick,...x}:pick))}/>
    </div>)}
   </div>
  </section>,forgeHost)}

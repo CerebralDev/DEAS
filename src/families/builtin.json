@@ -273,7 +273,7 @@
     "defaults": { "width": 2048, "height": 2048, "steps": 25, "cfg": 1, "sampler": "euler", "scheduler": "simple" }
   },
   {
-    "id": "minimax-h3-hyperflow", "temporalLatent": true, "multiple": 32, "name": "MiniMax H3 HyperFlow Flash", "forge": "MiniMax H3", "loader": "diffusion", "pipelines": ["t2v", "i2v", "v2v", "ref2v"],
+    "id": "minimax-h3-hyperflow", "temporalLatent": true, "multiple": 32, "name": "MiniMax H3 HyperFlow Flash", "forge": "MiniMax H3", "loader": "diffusion", "pipelines": ["t2v", "i2v", "ref2v"],
     "clipType": "minimax", "textEncoders": ["minimax_h3"], "vaes": ["h3_video_vae", "h3_sol_vae"], "audioVaes": ["h3_audio_vae"],
     "ggufLoader": "HyperFlowGGUFLoader", "videoSigmaNode": "HyperFlowSigmas", "fixedSampler": "euler", "stepChoices": [4, 6, 8],
     "defaults": { "width": 1024, "height": 768, "steps": 6, "cfg": 1, "sampler": "euler", "scheduler": "simple" },

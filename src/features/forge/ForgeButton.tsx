@@ -120,7 +120,9 @@ export function ForgeButton({ endpoint, root, dialect, value, image, onApply, on
     busyCallback.current?.(false);
   }, []);
   // A draft fits only the run it was written for: mode, duration, canvas, references and model (as the Director checks on Apply).
-  const seeing = !!h3?.easy && see;
+  const hasPictures = !!h3?.references.some(r => r.kind === 'image' && r.path?.trim());
+  const labelledPictures = !!h3?.easy && h3.mode === 'REF2VA';
+  const seeing = labelledPictures && hasPictures && see;
   const frames = !!h3 && ['I2VA', 'FL2VA', 'L2VA'].includes(h3.mode);
   const castKeys = frames
     ? [...new Set(h3!.references.filter(r => r.kind === 'image' && r.path).flatMap(r => r.boxes?.length ? r.boxes.map(b => String(b.n)) : r.who?.map(String) ?? []))].sort((a, b) => Number(a) - Number(b))
@@ -229,7 +231,8 @@ export function ForgeButton({ endpoint, root, dialect, value, image, onApply, on
       {h3 && <>
         <div className="forge-row">{level('forge.detail', detail, setDetail)}{level('forge.creativity', creativity, setCreativity)}</div>
         <label className="forge-field"><span>{t('forge.shots')}</span><select data-forge-shots value={shots} onChange={e => setShots(e.target.value === 'Auto' ? 'Auto' : Number(e.target.value))}>{(forge.list?.shot_counts ?? ['Auto']).map(s => <option key={s} value={s}>{s === 'Auto' ? t('forge.shotsAuto') : s}</option>)}</select></label>
-        {h3.easy && <label className="forge-check"><input type="checkbox" data-forge-see checked={see} onChange={e => setSee(e.target.checked)}/>{t('forge.see')}</label>}
+        {hasPictures && !labelledPictures && <p className="field-help" data-forge-auto-see>{t('forge.autoSee')}</p>}
+        {hasPictures && labelledPictures && <label className="forge-check"><input type="checkbox" data-forge-see checked={see} onChange={e => setSee(e.target.checked)}/>{t('forge.see')}</label>}
         {castKeys.length > 0 && <fieldset className="forge-cast" data-forge-cast><legend>{t('forge.cast')}</legend>
           {castKeys.map(k => { const name = /^\d+$/.test(k) ? t('forge.role.character', { n: k }) : k.startsWith('pose:') ? `${t('forge.role.pose')} · ${t('forge.picture')} ${wireKey(k).slice(5)}` : t(`forge.role.${k}`); return <label key={k} className="forge-field"><span>{name} <button type="button" data-forge-read={k} disabled={!!reading || busy || !forge.model} onClick={() => void read(k)}>{t(reading === k ? 'forge.reading' : cards[k]?.trim() ? 'forge.readAgain' : 'forge.read')}</button></span>
             <textarea rows={2} maxLength={600} aria-label={t('forge.cardOf', { name })} value={cards[k] ?? ''} onChange={e => setCards({ ...cards, [k]: e.target.value })}/></label>; })}

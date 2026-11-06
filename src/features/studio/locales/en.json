@@ -654,6 +654,7 @@
   "studio.run.video.trimInvalid": "A trimmed clip must last 2–15 s (end after start).",
   "studio.run.video.refFull": "Director limit reached: 9 images, 3 videos, 3 audio clips, 12 files.",
   "studio.run.video.refImagesOnly": "LTX takes images as references only.",
+  "studio.run.video.refImagesOnlyHyperflow": "HyperFlow GGUF accepts image references only.",
   "studio.run.video.refSecond": "Second",
   "studio.run.video.refSecondOf": "Second of {name}",
   "studio.run.video.refStrength": "Strength",

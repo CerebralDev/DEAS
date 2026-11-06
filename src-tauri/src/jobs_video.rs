@@ -824,6 +824,14 @@ pub(crate) fn validate(i: &Value) -> Result<&str, String> {
                 .into(),
         );
     }
+    // GGUF ref2va supports images only; mixed references require upstream's Python runtime.
+    if family == "minimax-h3-hyperflow"
+        && i["h3"]["media"]
+            .as_array()
+            .is_some_and(|items| items.iter().any(|item| item["type"] != "image"))
+    {
+        return Err("HyperFlow Flash GGUF accepts image references only".into());
+    }
     if crate::jobs::is_gguf(i["ltx"]["textProjection"].as_str().unwrap_or_default()) {
         return Err("MODEL_FORMAT_UNSUPPORTED: GGUF text projection is unsupported".into());
     }

@@ -8,6 +8,11 @@ import * as references from './ReferenceImages';
 import { dialectOf } from '../../lib/forge';
 import { aspects as settingsAspects } from '../../lib/resolution';
 
+it('global search finds the H3 picture switch or automatic-vision status', async () => {
+  const { matchEntries, searchIndex } = await import('../../lib/search');
+  expect(matchEntries(searchIndex, 'vision', key => bundledCatalog.dictionaries.en[key] ?? key).map(entry => entry.target)).toContain('[data-forge-see], [data-forge-auto-see]');
+});
+
 it('routes the MOSS generation family to the existing MOSS prompt writer', () => {
   expect(dialectOf('moss-image')).toBe('MOSS');
 });
@@ -419,7 +424,7 @@ it('Forge uses the shared media controls and roots without changing reference or
   fireEvent.click(panel.querySelector('[data-media-root="output"]')!);
   await waitFor(() => expect(panel.querySelector('[data-media-root="output"]')?.getAttribute('aria-pressed')).toBe('true'));
   fireEvent.click(panel.querySelector('.media-list button[data-kind="file"]')!);
-  expect(screen.getAllByRole('button', { name: 'Remove picture' })).toHaveLength(1);
+  expect(screen.getAllByRole('button', { name: 'Remove picture' })).toHaveLength(2);
   expect(forgeCalls().filter(c => c.route !== 'models')).toHaveLength(0);
   expect(vi.mocked(invoke).mock.calls.some(([c]) => ['native_input_upload', 'native_job_submit'].includes(c))).toBe(false);
   expect(localStorage.getItem('deas.pref.forge.media.view')).toBe('"list"');
@@ -448,6 +453,64 @@ it.each([
   expect(forgeCalls().at(-1)).toMatchObject({ route: 'h3', body: { mode: 'REF2VA', creativity: 'balanced', easy: true, references: [{ kind: 'image', role: 'subject', path: 'a.png', easy_role: 'place' }] } });
   fireEvent.click(screen.getByRole('button', { name: 'Send to Generate' }));
   expect(send).toHaveBeenCalledWith('H3 structured prompt', '');
+});
+
+it.each(['inputDir', 'outputDir'] as const)('standalone Forge clears picture identity and invalidates drafts when %s changes', async folder => {
+  localStorage.setItem('deas.pref.forge.target', JSON.stringify('MiniMax H3'));
+  localStorage.setItem('deas.pref.forge.h3.mode', JSON.stringify('I2VA'));
+  const base = vi.mocked(invoke).getMockImplementation()!;
+  vi.mocked(invoke).mockImplementation((command, args) => command === 'native_media_list' ? Promise.resolve({ path: '/env/media', parent: null, truncated: false, entries: [
+    { name: 'same.png', path: '/env/media/same.png', kind: 'file', symlink: false, media: 'image', size: 1, modified: 1 },
+  ] }) : base(command, args));
+  const view = (path: string) => <I18nProvider><PromptForge endpoint="http://127.0.0.1:8188" root="/env" {...{[folder]: path}} onSend={vi.fn()}/></I18nProvider>;
+  const { container, rerender } = render(view('/env/media'));
+  fireEvent.click(await screen.findByText('same.png'));
+  fireEvent.click(screen.getByRole('button', { name: 'Write' }));
+  await screen.findByText('check cut');
+  expect((container.querySelector('[data-forge-send]') as HTMLButtonElement).disabled).toBe(false);
+  rerender(view('/env/other-media'));
+  expect(screen.queryByRole('button', { name: 'Remove picture' })).toBeNull();
+  expect((container.querySelector('[data-forge-send]') as HTMLButtonElement).disabled).toBe(true);
+  expect((screen.getByRole('button', { name: 'Write' }) as HTMLButtonElement).disabled).toBe(true);
+  expect(forgeCalls().filter(c => c.route === 'h3')).toHaveLength(1);
+});
+
+it.each(['I2VA', 'FL2VA', 'L2VA', 'REF2VA'])('standalone H3 %s shows truthful vision controls for selected output pictures', async mode => {
+  localStorage.setItem('deas.pref.forge.target', JSON.stringify('MiniMax H3'));
+  localStorage.setItem('deas.pref.forge.h3.mode', JSON.stringify(mode));
+  const base = vi.mocked(invoke).getMockImplementation()!;
+  vi.mocked(invoke).mockImplementation((command, args) => command === 'native_media_list' ? Promise.resolve({ path: '/env/output', parent: null, truncated: false, entries: [
+    { name: 'first.png', path: '/env/output/scenes/first.png', kind: 'file', symlink: false, media: 'image', size: 1, modified: 2 },
+    { name: 'last.png', path: '/env/output/scenes/last.png', kind: 'file', symlink: false, media: 'image', size: 1, modified: 1 },
+  ] }) : base(command, args));
+  const { container } = render(<I18nProvider><PromptForge endpoint="http://127.0.0.1:8188" root="/env" outputDir="/env/output/" onSend={vi.fn()}/></I18nProvider>);
+  expect(screen.queryByRole('checkbox')).toBeNull();
+  fireEvent.click(await screen.findByText('first.png'));
+  if (mode === 'FL2VA') fireEvent.click(screen.getByText('last.png'));
+  const toggle = screen.queryByRole('checkbox', { name: 'Let the model see the pictures (needs a vision model)' }) as HTMLInputElement | null;
+  expect(!!toggle).toBe(mode === 'REF2VA');
+  if (toggle) expect(toggle.checked).toBe(false);
+  expect(!!container.querySelector('[data-forge-auto-see]')).toBe(mode !== 'REF2VA');
+  fireEvent.click(screen.getByRole('button', { name: 'Write' }));
+  await screen.findByText('check cut');
+  const references = ['first', ...(mode === 'FL2VA' ? ['last'] : [])].map(name => ({ kind: 'image', path: `scenes/${name}.png [output]`, ...(mode === 'REF2VA' ? { role: 'subject', easy_role: 'character-1' } : { role: 'keyframe' }) }));
+  expect(forgeCalls().at(-1)).toMatchObject({ route: 'h3', body: { mode, easy: mode === 'REF2VA', see_pictures: false, references } });
+  if (toggle) fireEvent.click(toggle);
+  else fireEvent.change(container.querySelector('[data-forge-brief]')!, { target: { value: 'walk' } });
+  expect((container.querySelector('[data-forge-send]') as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.click(screen.getByRole('button', { name: 'Write' }));
+  await waitFor(() => expect(forgeCalls().filter(c => c.route === 'h3')).toHaveLength(2));
+  expect(forgeCalls().at(-1)!.body).toMatchObject({ easy: mode === 'REF2VA', see_pictures: mode === 'REF2VA', references });
+  fireEvent.click(screen.getAllByRole('button', { name: 'Remove picture' })[0]);
+  if (mode === 'FL2VA') fireEvent.click(screen.getByRole('button', { name: 'Remove picture' }));
+  expect(screen.queryByRole('checkbox')).toBeNull();
+  expect(container.querySelector('[data-forge-auto-see]')).toBeNull();
+  if (mode === 'REF2VA') {
+    fireEvent.change(container.querySelector('[data-forge-brief]')!, { target: { value: 'text only' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Write' }));
+    await waitFor(() => expect(forgeCalls().filter(c => c.route === 'h3')).toHaveLength(3));
+    expect(forgeCalls().at(-1)!.body).toMatchObject({ easy: false, see_pictures: false, references: [] });
+  }
 });
 
 it('maps a missing node-pack route (404, or 405 from ComfyUI static) to the upgrade hint', async () => {
@@ -504,19 +567,47 @@ it('H3 hammer is the Director Forge for the run: context, shots, detail/creativi
   expect(apply).toHaveBeenLastCalledWith('H3 structured prompt');
 });
 
-it('H3 hammer offers "see the pictures" only for labelled pictures and sends easy/see_pictures', async () => {
+it('H3 hammer keeps labelled-picture semantics when see pictures is enabled', async () => {
   const run = { mode: 'REF2VA', duration: 5, canvas: { width: 1024, height: 576 }, references: [{ kind: 'image' as const, path: 'a.png', role: 'subject', subject_group: 'A', easy_role: 'character-1' }], easy: true };
-  render(<I18nProvider><ForgeButton endpoint="http://127.0.0.1:8188" root="/env" dialect="MiniMax H3" value="a walk" onApply={vi.fn()} h3={run}/></I18nProvider>);
+  const view = (h3: H3Context = run) => <I18nProvider><ForgeButton endpoint="http://127.0.0.1:8188" root="/env" dialect="MiniMax H3" value="a walk" onApply={vi.fn()} h3={h3}/></I18nProvider>;
+  const { rerender } = render(view());
   fireEvent.click(screen.getByRole('button', { name: 'Prompt Forge' }));
   await waitFor(() => expect(screen.getByRole('option', { name: 'qwen' })).toBeTruthy());
-  fireEvent.click(screen.getByRole('checkbox', { name: 'Let the model see the pictures (needs a vision model)' }));
+  const toggle = screen.getByRole('checkbox', { name: 'Let the model see the pictures (needs a vision model)' }) as HTMLInputElement;
+  expect(toggle.checked).toBe(false);
+  fireEvent.click(toggle);
   fireEvent.click(screen.getByRole('button', { name: 'Write' }));
   await waitFor(() => expect(screen.getByRole('textbox', { name: 'Result' })).toBeTruthy());
   expect(forgeCalls().find(c => c.route === 'h3')!.body).toMatchObject({ easy: true, see_pictures: true, references: run.references });
-  cleanup();
-  render(<I18nProvider><ForgeButton endpoint="http://127.0.0.1:8188" root="/env" dialect="MiniMax H3" value="" onApply={vi.fn()} h3={{ ...run, easy: false }}/></I18nProvider>);
-  fireEvent.click(screen.getByRole('button', { name: 'Prompt Forge' }));
+  rerender(view({ ...run, references: [{ ...run.references[0], path: '' }] }));
   expect(screen.queryByRole('checkbox')).toBeNull();
+  expect((screen.getByRole('button', { name: 'Apply' }) as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.click(screen.getByRole('button', { name: 'Regenerate' }));
+  await waitFor(() => expect(forgeCalls().filter(c => c.route === 'h3')).toHaveLength(2));
+  expect(forgeCalls().at(-1)!.body).toMatchObject({ easy: true, see_pictures: false });
+});
+
+it.each(['I2VA', 'FL2VA', 'L2VA', 'REF2VA'])('H3 %s shows automatic vision for readable frames or mixed references without a fake opt-out', async mode => {
+  const references: H3Context['references'] = [
+    { kind: 'image', role: mode === 'REF2VA' ? 'subject' : 'keyframe', path: 'first.png' },
+    ...(mode === 'FL2VA' ? [{ kind: 'image' as const, role: 'keyframe', path: 'last.png' }] : []),
+    ...(mode === 'REF2VA' ? [{ kind: 'video' as const, role: 'motion', path: 'motion.mp4' }] : []),
+  ];
+  // The easy flag must not turn keyframe modes into labelled REF2VA.
+  const run: H3Context = { mode, duration: 5, canvas: { width: 1024, height: 576 }, references, easy: mode !== 'REF2VA' };
+  const view = (h3 = run) => <I18nProvider><ForgeButton inline endpoint="http://127.0.0.1:8188" root="/env" dialect="MiniMax H3" value="a walk" onApply={vi.fn()} h3={h3}/></I18nProvider>;
+  const { rerender } = render(view());
+  await screen.findByRole('option', { name: 'qwen' });
+  expect(screen.queryByRole('checkbox')).toBeNull();
+  expect(document.querySelector('[data-forge-auto-see]')?.textContent).toContain('automatically');
+  fireEvent.click(screen.getByRole('button', { name: 'Write' }));
+  await screen.findByRole('button', { name: 'Regenerate' });
+  // This is the request flag, not proof of an opt-out: the nodepack attaches normal references automatically.
+  expect(forgeCalls().at(-1)!.body).toMatchObject({ easy: run.easy, see_pictures: false, references });
+  rerender(view({ ...run, references: [{ kind: 'image', role: 'subject' }, { kind: 'video', path: 'motion.mp4', role: 'motion' }] }));
+  expect(document.querySelector('[data-forge-auto-see]')).toBeNull();
+  expect(screen.queryByRole('checkbox')).toBeNull();
+  expect((screen.getByRole('button', { name: 'Apply' }) as HTMLButtonElement).disabled).toBe(true);
 });
 
 it.each(['success', 'error', 'cancel error'])('cancelled H3 request A cannot disturb pending B after late A %s', async outcome => {

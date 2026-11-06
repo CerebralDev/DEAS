@@ -654,6 +654,7 @@
   "studio.run.video.trimInvalid": "裁剪后的片段须为 2–15 秒（结束晚于开始）。",
   "studio.run.video.refFull": "已达 Director 上限：9 张图片、3 个视频、3 段音频、共 12 个文件。",
   "studio.run.video.refImagesOnly": "LTX 只接受图片作为参考。",
+  "studio.run.video.refImagesOnlyHyperflow": "HyperFlow GGUF 仅支持图像参考。",
   "studio.run.video.refSecond": "秒",
   "studio.run.video.refSecondOf": "{name} 的秒数",
   "studio.run.video.refStrength": "强度",

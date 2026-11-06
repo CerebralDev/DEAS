@@ -936,6 +936,20 @@ fn forge_route(route: &str) -> Result<&'static str, String> {
         _ => return Err("Unknown Prompt Forge route".into()),
     })
 }
+type ForgeUploads =
+    std::collections::HashMap<(String, String, String), tokio::sync::watch::Sender<bool>>;
+static FORGE_UPLOADS: std::sync::LazyLock<std::sync::Mutex<ForgeUploads>> =
+    std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::HashMap::new()));
+
+struct ForgeUpload((String, String, String));
+impl Drop for ForgeUpload {
+    fn drop(&mut self) {
+        if let Ok(mut uploads) = FORGE_UPLOADS.lock() {
+            uploads.remove(&self.0);
+        }
+    }
+}
+
 /// Prompt Forge runs in the DaSiWa node pack on the backend (Director Forge and Prompt Writer); this forwards one JSON call.
 #[tauri::command]
 pub async fn native_forge(
@@ -944,6 +958,17 @@ pub async fn native_forge(
     route: String,
     body: Value,
 ) -> Result<Value, String> {
+    if route == "cancel" {
+        if let Some(id) = body["request_id"].as_str() {
+            if let Some(upload) = FORGE_UPLOADS
+                .lock()
+                .map_err(|_| "Prompt Forge upload lock unavailable")?
+                .get(&(base_url.clone(), root.clone(), id.to_owned()))
+            {
+                let _ = upload.send(true);
+            }
+        }
+    }
     let correlation = if route == "people" {
         body["request_id"]
             .as_str()
@@ -964,7 +989,9 @@ pub async fn native_forge(
                 crate::logs::Source::Deas,
                 &format!(
                     "{}: Prompt Forge {route}{correlation}: {e}",
-                    if route == "people" && e.ends_with("People detection cancelled") {
+                    if (route == "people" && e.ends_with("People detection cancelled"))
+                        || e == "Prompt Forge cancelled"
+                    {
                         "INFO"
                     } else {
                         "ERROR"
@@ -1017,6 +1044,116 @@ fn validate_forge_continuity(value: &Value) -> Result<(), String> {
     }
     Ok(())
 }
+fn forge_image_path(path: &str) -> Result<&str, String> {
+    let relative = path.strip_suffix(" [output]").unwrap_or(path);
+    if relative.is_empty()
+        || path.len() > 4096
+        || relative.contains(['\\', ':'])
+        || relative.chars().any(char::is_control)
+        || relative
+            .split('/')
+            .any(|p| p.is_empty() || p.trim_end() != p || p.ends_with('.'))
+        || relative.ends_with(" [temp]")
+    {
+        return Err("Invalid Prompt Forge image path".into());
+    }
+    Ok(relative)
+}
+
+async fn forge_output_image(base_url: &str, root: &Path, path: &str) -> Result<String, String> {
+    let relative = forge_image_path(path)?;
+    owned_environment(root)?;
+    // Read only the owned environment's configured output root, never a root supplied in the request.
+    let settings = root.join(crate::settings::FILE);
+    let folders: crate::settings::Folders = match std::fs::symlink_metadata(&settings) {
+        Ok(_) => serde_json::from_slice(crate::bom_free(&crate::backend::read_owned(
+            &settings,
+            16 * 1024,
+        )?))
+        .map_err(|_| "Invalid output folder settings")?,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => crate::settings::Folders::default(),
+        Err(_) => return Err("Cannot read output folder settings".into()),
+    };
+    let output = folders
+        .output
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| root.join("ComfyUI/output"));
+    let source = output.join(relative);
+    let parent =
+        crate::projects::Root::open(source.parent().ok_or("Invalid output image parent")?)?;
+    let bytes = parent.read(
+        source
+            .file_name()
+            .and_then(|s| s.to_str())
+            .ok_or("Invalid output image name")?,
+        64 << 20,
+    )?;
+    if !matches!(crate::jobs::sniff_media(&bytes), Some(("image", _))) {
+        return Err("Prompt Forge output reference must be a PNG, JPEG or WebP image".into());
+    }
+    // A private snapshot avoids reopening the source by path during upload; Drop also cleans up on cancellation.
+    root_guard(&root.join("tmp"))?;
+    let mut snapshot = tempfile::NamedTempFile::new_in(root.join("tmp"))
+        .map_err(|_| "Cannot stage Prompt Forge output image")?;
+    snapshot
+        .write_all(&bytes)
+        .map_err(|_| "Cannot stage Prompt Forge output image")?;
+    drop(bytes);
+    crate::jobs::upload_input(
+        base_url,
+        snapshot.path().to_str().ok_or("Invalid staging path")?,
+        false,
+    )
+    .await
+}
+
+async fn forge_images(
+    base_url: &str,
+    root: &Path,
+    route: &str,
+    body: &mut Value,
+) -> Result<(), String> {
+    let paths: Vec<&mut Value> = match route {
+        "people" => body.get_mut("path").into_iter().collect(),
+        "write" => body
+            .get_mut("images")
+            .and_then(Value::as_array_mut)
+            .into_iter()
+            .flatten()
+            .collect(),
+        "h3" | "cast" => body
+            .get_mut("references")
+            .and_then(Value::as_array_mut)
+            .into_iter()
+            .flatten()
+            .filter(|r| r["kind"] == "image")
+            .filter_map(|r| r.get_mut("path"))
+            .collect(),
+        _ => return Ok(()),
+    };
+    // Validate the entire image list before the first upload.
+    for value in &paths {
+        if let Some(path) = value.as_str() {
+            forge_image_path(path)?;
+        }
+    }
+    let mut uploaded = std::collections::HashMap::<String, String>::new();
+    for value in paths {
+        let Some(path) = value.as_str().filter(|p| p.ends_with(" [output]")) else {
+            continue;
+        };
+        let input = if let Some(input) = uploaded.get(path) {
+            input.clone()
+        } else {
+            let input = forge_output_image(base_url, root, path).await?;
+            uploaded.insert(path.to_owned(), input.clone());
+            input
+        };
+        *value = Value::String(input);
+    }
+    Ok(())
+}
+
 async fn forge(base_url: &str, root: &str, route: &str, mut body: Value) -> Result<Value, String> {
     let path = forge_route(route)?;
     if !body.is_object() {
@@ -1048,16 +1185,7 @@ async fn forge(base_url: &str, root: &str, route: &str, mut body: Value) -> Resu
         if model.trim().is_empty()
             || model.len() > 1024
             || model.chars().any(char::is_control)
-            || path.is_empty()
-            || path.len() > 4096
-            || path.starts_with('/')
-            || path.contains(['\\', ':'])
-            || path.chars().any(char::is_control)
-            || path
-                .split('/')
-                .any(|p| p.is_empty() || p == "." || p == "..")
-            || path.ends_with(" [output]")
-            || path.ends_with(" [temp]")
+            || forge_image_path(path).is_err()
             || id.len() != 36
             || uuid::Uuid::parse_str(id).is_err()
         {
@@ -1069,6 +1197,30 @@ async fn forge(base_url: &str, root: &str, route: &str, mut body: Value) -> Resu
     let url = crate::validate_base_url(base_url)?
         .join(path)
         .map_err(|_| "Invalid backend URL")?;
+    if matches!(route, "h3" | "cast" | "people" | "write") {
+        if let Some(id) = body["request_id"].as_str() {
+            let key = (base_url.to_owned(), root.to_owned(), id.to_owned());
+            let (sender, mut cancelled) = tokio::sync::watch::channel(false);
+            {
+                let mut uploads = FORGE_UPLOADS
+                    .lock()
+                    .map_err(|_| "Prompt Forge upload lock unavailable")?;
+                if uploads.contains_key(&key) {
+                    return Err("Prompt Forge request is already preparing images".into());
+                }
+                uploads.insert(key.clone(), sender);
+            }
+            let _upload = ForgeUpload(key);
+            // The node pack has not registered this request yet, so Stop must also cancel preparation here.
+            tokio::select! {
+                biased;
+                _ = cancelled.changed() => return Err(if route == "people" { "People detection cancelled" } else { "Prompt Forge cancelled" }.into()),
+                result = forge_images(base_url, Path::new(root), route, &mut body) => result?,
+            }
+        } else {
+            forge_images(base_url, Path::new(root), route, &mut body).await?;
+        }
+    }
     // A local 27B can take minutes to load and write; the node pack's own limit is 600 s.
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())

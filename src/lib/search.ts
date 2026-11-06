@@ -95,6 +95,7 @@ export const searchIndex: readonly SearchEntry[] = [
   { view: studio, studioTab: 'generate', dockTab: 'options', tab: 'setup.tab.studio', section: 'studio.run.dock.options', label: 'studio.run.opt.output', target: '[data-option="output"]', aliases: ['format', 'png', 'webp', 'jpeg', 'quality', 'codec'] },
   { view: studio, studioTab: 'generate', dockTab: 'options', tab: 'setup.tab.studio', section: 'studio.run.dock.options', label: 'studio.run.opt.outputNaming', target: '[data-option="outputNaming"]', aliases: ['filename', 'prefix'] },
   // Prompt Forge
+  { view: studio, studioTab: 'forge', tab: 'studio.tab.forge', section: 'studio.tab.forge', label: 'forge.see', target: '[data-forge-see], [data-forge-auto-see]', aliases: ['vision', 'pictures', 'reference images', 'keyframes'] },
   { view: studio, studioTab: 'forge', tab: 'studio.tab.forge', section: 'studio.tab.forge', label: 'forge.brief', target: '[data-forge-brief]', aliases: ['prompt', 'idea'] },
   { view: studio, studioTab: 'forge', tab: 'studio.tab.forge', section: 'studio.tab.forge', label: 'forge.result', target: '[data-forge-result]', aliases: ['prompt', 'output'] },
   { view: studio, studioTab: 'forge', tab: 'studio.tab.forge', section: 'studio.tab.forge', label: 'forge.negative', target: '[data-forge-negative]', aliases: ['prompt'] },

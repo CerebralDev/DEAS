@@ -1132,7 +1132,10 @@ async fn people_detection_validates_native_requests_responses_and_redacts_failur
         "/private.png",
         "C:/private.png",
         "a\\\\b.png",
-        "pair.png [output]",
+        "pair.png [temp]",
+        "../private.png [output]",
+        "/private.png [output]",
+        "nested/../private.png [output]",
     ] {
         let mut bad = body.clone();
         bad["path"] = json!(path);
@@ -1237,6 +1240,343 @@ async fn people_detection_validates_native_requests_responses_and_redacts_failur
             )
             && !e.text.contains("hf_secret_token")));
     }
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn forge_output_images_upload_and_forward_without_changing_originals() {
+    let (root, _approved) = crate::backend::tests::fixture("# no service launched");
+    let custom = tempfile::tempdir().unwrap();
+    let png = b"\x89PNG\r\n\x1a\nforge image bytes";
+    for route in ["h3", "cast", "people", "write"] {
+        // Exercise both the default folder and a configured folder outside the environment.
+        let output = if route == "h3" {
+            root.path().join("ComfyUI/output")
+        } else {
+            std::fs::write(
+                root.path().join(crate::settings::FILE),
+                serde_json::to_vec(&json!({"output":custom.path()})).unwrap(),
+            )
+            .unwrap();
+            custom.path().to_owned()
+        };
+        std::fs::create_dir_all(output.join("nested")).unwrap();
+        let source = output.join("nested/人物 frame.png");
+        std::fs::write(&source, png).unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/prefix", listener.local_addr().unwrap());
+        let server = std::thread::spawn(move || {
+            let mut forwarded = Value::Null;
+            let mut uploaded = String::new();
+            for index in 0..2 {
+                let (mut stream, _) = listener.accept().unwrap();
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(5)))
+                    .unwrap();
+                let mut headers = Vec::new();
+                while !headers.ends_with(b"\r\n\r\n") {
+                    let mut byte = [0];
+                    stream.read_exact(&mut byte).unwrap();
+                    headers.push(byte[0]);
+                }
+                let headers = String::from_utf8(headers).unwrap();
+                let len = headers
+                    .lines()
+                    .find_map(|l| {
+                        l.to_ascii_lowercase()
+                            .strip_prefix("content-length:")
+                            .map(|n| n.trim().parse::<usize>().unwrap())
+                    })
+                    .unwrap();
+                let mut payload = vec![0; len];
+                stream.read_exact(&mut payload).unwrap();
+                let reply = if index == 0 {
+                    assert!(headers.starts_with("POST /prefix/upload/image HTTP/1.1"));
+                    assert!(payload.windows(png.len()).any(|p| p == png));
+                    let text = String::from_utf8_lossy(&payload);
+                    for field in [
+                        "name=\"subfolder\"\r\n\r\ndeas-inputs",
+                        "name=\"type\"\r\n\r\ninput",
+                        "name=\"overwrite\"\r\n\r\nfalse",
+                    ] {
+                        assert!(text.contains(field));
+                    }
+                    uploaded = text
+                        .split("filename=\"")
+                        .nth(1)
+                        .unwrap()
+                        .split('"')
+                        .next()
+                        .unwrap()
+                        .into();
+                    json!({"name":uploaded,"subfolder":"deas-inputs","type":"input"})
+                } else {
+                    assert!(headers.starts_with(&format!(
+                        "POST /prefix/{} HTTP/1.1",
+                        forge_route(route).unwrap()
+                    )));
+                    forwarded = serde_json::from_slice(&payload).unwrap();
+                    if route == "people" {
+                        json!({"people":[]})
+                    } else {
+                        json!({"text":"ok"})
+                    }
+                };
+                let bytes = serde_json::to_vec(&reply).unwrap();
+                write!(
+                    stream,
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    bytes.len()
+                )
+                .unwrap();
+                stream.write_all(&bytes).unwrap();
+            }
+            (forwarded, format!("deas-inputs/{uploaded}"))
+        });
+        let path = "nested/人物 frame.png [output]";
+        let references = json!([
+            {"kind":"image","path":path,"easy_role":"first-frame","who":[2,1],"boxes":[{"n":2,"box":[0.1,0.2,0.3,0.4]}]},
+            {"kind":"image","path":path,"easy_role":"last-frame"},
+            {"kind":"audio","path":"sound.wav"},
+            {"kind":"image","path":"existing.png"}
+        ]);
+        let body = match route {
+            "people" => {
+                json!({"model":"vision:model","path":path,"request_id":uuid::Uuid::new_v4().to_string()})
+            }
+            "write" => json!({"images":[path,path,"existing.png"],"idea":"unchanged"}),
+            _ => json!({"references":references,"brief":"unchanged"}),
+        };
+        native_forge(
+            url,
+            root.path().to_str().unwrap().into(),
+            route.into(),
+            body.clone(),
+        )
+        .await
+        .unwrap();
+        let (mut actual, input) = server.join().unwrap();
+        actual.as_object_mut().unwrap().remove("settings");
+        let mut expected = body;
+        match route {
+            "people" => expected["path"] = json!(input),
+            "write" => {
+                expected["images"][0] = json!(input);
+                expected["images"][1] = json!(input);
+            }
+            _ => {
+                expected["references"][0]["path"] = json!(input);
+                expected["references"][1]["path"] = json!(input);
+            }
+        }
+        assert_eq!(actual, expected);
+        assert_eq!(std::fs::read(&source).unwrap(), png);
+        assert_eq!(
+            std::fs::read_dir(root.path().join("tmp")).unwrap().count(),
+            0
+        );
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn forge_output_upload_cancellation_closes_socket_and_removes_snapshot() {
+    for abort in [true, false] {
+        let (root, _approved) = crate::backend::tests::fixture("# no service launched");
+        let output = root.path().join("ComfyUI/output");
+        std::fs::create_dir_all(&output).unwrap();
+        let png = b"\x89PNG\r\n\x1a\noriginal";
+        std::fs::write(output.join("frame.png"), png).unwrap();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let root_text = root.path().to_str().unwrap().to_owned();
+        let id = uuid::Uuid::new_v4().to_string();
+        let request = tokio::spawn(native_forge(
+            url.clone(),
+            root_text.clone(),
+            "people".into(),
+            json!({"path":"frame.png [output]","model":"vision:model","request_id":id}),
+        ));
+        let (mut socket, _) = tokio::time::timeout(Duration::from_secs(5), listener.accept())
+            .await
+            .unwrap()
+            .unwrap();
+        let mut headers = Vec::new();
+        while !headers.ends_with(b"\r\n\r\n") {
+            let mut byte = [0];
+            socket.read_exact(&mut byte).await.unwrap();
+            headers.push(byte[0]);
+        }
+        let headers = String::from_utf8(headers).unwrap();
+        assert!(headers.starts_with("POST /upload/image HTTP/1.1"));
+        let len = headers
+            .lines()
+            .find_map(|l| {
+                l.to_ascii_lowercase()
+                    .strip_prefix("content-length:")
+                    .map(|n| n.trim().parse::<usize>().unwrap())
+            })
+            .unwrap();
+        let mut payload = vec![0; len];
+        socket.read_exact(&mut payload).await.unwrap();
+        assert_eq!(
+            std::fs::read_dir(root.path().join("tmp")).unwrap().count(),
+            1
+        );
+        if abort {
+            request.abort();
+            assert!(request.await.unwrap_err().is_cancelled());
+        } else {
+            let cancel = tokio::spawn(native_forge(
+                url,
+                root_text,
+                "cancel".into(),
+                json!({"request_id":id}),
+            ));
+            let (mut cancellation, _) =
+                tokio::time::timeout(Duration::from_secs(3), listener.accept())
+                    .await
+                    .unwrap()
+                    .unwrap();
+            let mut wire = Vec::new();
+            while !String::from_utf8_lossy(&wire).contains(&format!("\"request_id\":\"{id}\"")) {
+                let mut buf = [0; 4096];
+                let n = cancellation.read(&mut buf).await.unwrap();
+                assert!(n > 0);
+                wire.extend_from_slice(&buf[..n]);
+            }
+            assert!(wire.starts_with(b"POST /dasiwa/h3/forge/cancel HTTP/1.1"));
+            cancellation.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 19\r\nConnection: close\r\n\r\n{\"cancelled\":false}").await.unwrap();
+            assert_eq!(cancel.await.unwrap().unwrap(), json!({"cancelled":false}));
+            assert_eq!(
+                tokio::time::timeout(Duration::from_secs(3), request)
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .unwrap_err(),
+                "People detection cancelled"
+            );
+        }
+        assert_eq!(
+            tokio::time::timeout(Duration::from_secs(3), socket.read(&mut [0]))
+                .await
+                .unwrap()
+                .unwrap(),
+            0
+        );
+        assert_eq!(
+            std::fs::read_dir(root.path().join("tmp")).unwrap().count(),
+            0
+        );
+        assert_eq!(std::fs::read(output.join("frame.png")).unwrap(), png);
+        assert!(
+            tokio::time::timeout(Duration::from_millis(50), listener.accept())
+                .await
+                .is_err()
+        );
+    }
+}
+
+#[tokio::test]
+async fn forge_discovery_and_cancel_do_not_resolve_or_upload_images() {
+    let root = tempfile::tempdir().unwrap();
+    for route in ["models", "cancel"] {
+        let (url, server) = http_sequence(vec![(200, json!({"ok":true}))]);
+        let body = json!({"images":["../private.png [output]"],"references":[{"kind":"image","path":"/private.png [output]"}]});
+        native_forge(
+            url,
+            root.path().to_str().unwrap().into(),
+            route.into(),
+            body.clone(),
+        )
+        .await
+        .unwrap();
+        let calls = server.join().unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].1["images"], body["images"]);
+        assert_eq!(calls[0].1["references"], body["references"]);
+    }
+}
+
+#[test]
+fn forge_image_names_reject_unsafe_paths() {
+    for path in [
+        "",
+        "../x.png [output]",
+        "/x.png [output]",
+        "C:/x.png [output]",
+        "a\\x.png [output]",
+        "a//x.png [output]",
+        "a/./x.png [output]",
+        "x.png [temp]",
+        "x.png\n [output]",
+        ".. /x.png [output]",
+        ".../x.png [output]",
+        ".. ./x.png [output]",
+    ] {
+        assert!(forge_image_path(path).is_err(), "{path:?}");
+    }
+    for path in ["nested/人物 frame.png [output]", "nested/input.png"] {
+        assert!(forge_image_path(path).is_ok());
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn forge_output_images_fail_closed_before_upload() {
+    use std::os::unix::fs::symlink;
+    let (root, _approved) = crate::backend::tests::fixture("# no service launched");
+    let output = root.path().join("ComfyUI/output");
+    std::fs::create_dir_all(&output).unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    std::fs::write(
+        outside.path().join("secret.png"),
+        b"\x89PNG\r\n\x1a\nprivate",
+    )
+    .unwrap();
+    symlink(outside.path(), output.join("escape")).unwrap();
+    symlink(outside.path().join("secret.png"), output.join("leaf.png")).unwrap();
+    std::fs::write(output.join("audio.wav"), b"RIFFxxxxWAVE").unwrap();
+    let large = std::fs::File::create(output.join("large.png")).unwrap();
+    large.set_len((64 << 20) + 1).unwrap();
+    for path in [
+        "escape/secret.png [output]",
+        "leaf.png [output]",
+        "missing.png [output]",
+        "audio.wav [output]",
+        "large.png [output]",
+    ] {
+        let error = native_forge(
+            "http://127.0.0.1:1".into(),
+            root.path().to_str().unwrap().into(),
+            "write".into(),
+            json!({"images":[path]}),
+        )
+        .await
+        .unwrap_err();
+        assert!(!error.contains("Upload"), "{path}: {error}");
+    }
+    symlink(outside.path(), root.path().join("linked-output")).unwrap();
+    std::fs::write(
+        root.path().join(crate::settings::FILE),
+        serde_json::to_vec(&json!({"output":root.path().join("linked-output")})).unwrap(),
+    )
+    .unwrap();
+    assert!(
+        forge_output_image("http://127.0.0.1:1", root.path(), "secret.png [output]")
+            .await
+            .is_err()
+    );
+    let unowned = tempfile::tempdir().unwrap();
+    assert!(
+        forge_output_image("http://127.0.0.1:1", unowned.path(), "secret.png [output]")
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        std::fs::read_dir(root.path().join("tmp")).unwrap().count(),
+        0
+    );
 }
 
 #[test]
