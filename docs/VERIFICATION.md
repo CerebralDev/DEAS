@@ -25,6 +25,12 @@ Fresh evidence: Rust theme tests **19 passed / 0 failed**, including no-clobber 
 
 Not exercised: the running packaged application resource directory, Linux/Windows OS browser opening, real Chrome/Edge folder permission and actual saved-file round trip through the native path. These remain acceptance gates in PLAN §4.10.
 
+## Beginner guide illustration removal (unreleased)
+
+`src/features/beginner/assets/{anima.png,illustrious.png,krea2.png,moss.webp}` were removed and `ModelGuide.image` made optional. The guide cards use the existing text placeholder; summaries, tags, credits and publisher URLs remain. Source documentation retains publisher links but no bundled-file SHA inventory.
+
+Verification after removal: Beginner Models/download targeted tests passed, full UI suite passed, TypeScript typecheck and production frontend build passed. Vite reports zero remaining references to the removed asset paths.
+
 ## Release candidate 0.2.17 (local gates)
 
 Utility tabs now form a separate right-hand group (Monitoring, Run Plan, Backend, Logs), including right alignment after wrapping on narrow windows; Studio, Library, Prompt Forge, Chat, TVE and Comfy stay left. Existing tab IDs/retained view state are unchanged. Source tests assert exact group membership and the browser viewport gate checks group geometry across six locales and five widths. Desktop and German narrow screenshots inspected. The exact observed ACE export alias `modelspec.architecture = "ace-step-1_5"` now uses matching 1.5 regular/XL header shapes; incomplete/contradictory structures stay unresolved/conflicting and training variant evidence remains filename-based. The explicitly selected real local `unet/Ace/ace_step_1.5_turbo_aio.safetensors` header detects as `ace-step-1-5-turbo` / `Filename`; no model weights were loaded, moved or executed. AIO under UNet is still the split-loader path: use checkpoints for its embedded encoders/VAE, or supply split components.

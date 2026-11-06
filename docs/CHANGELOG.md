@@ -3,6 +3,7 @@
 ## Unreleased
 
 - **Integrated theme editing without palette duplication.** Quick Settings **Open themes folder** is replaced by **Edit themes**. DEAS bundles one offline `EDIT-THEMES.html` and one `new-theme` starter, creates the starter in the selected environment only when absent, opens the editor, and leaves an existing starter unchanged. The nine built-in colour schemes remain compiled into DEAS and are no longer duplicated as supplied `theme-packs/classic` folders or per-theme HTML editors.
+- **Smaller Beginner guide bundle.** The four publisher illustration assets used by the Beginner Models cards were removed. Guides, tags, prompting advice, credits and external source links remain; cards use the existing local placeholder.
 
 ## 0.2.17 BETA
 

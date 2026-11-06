@@ -41,7 +41,7 @@ prerequisites still apply.
   outer edge rather than leaving the right side square.
   Music, video-to-video and reference/video modes remain in Advanced.
 - **Models** — Installed / Explore / All views with Image/Video capability filters and local
-  search. Cards show publisher illustrations and prompting guides for four curated families; tags
+  search. Cards show prompting guides for four curated families; tags
   fill the search field, they are not compatibility declarations. **Use this model** changes the
   existing Workbench selection and keeps the prompt. **Download this model** presents only the
   featured variant's verified ComfyUI file names over the existing native browse/plan/confirm

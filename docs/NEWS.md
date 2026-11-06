@@ -3,6 +3,7 @@
 ## Unreleased
 
 - **Edit themes from Quick Settings.** DEAS creates a starter theme in your environment only when needed, opens the offline editor, and no longer ships duplicate copies of the built-in palettes. Save a unique theme, refresh, and choose it. [Theme guide](THEME-PACKS.md).
+- **Smaller Beginner guide bundle.** The four large model-guide illustrations were removed. The guide text, tags, credits and publisher links remain.
 
 ## 0.2.17 BETA
 

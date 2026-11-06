@@ -45,12 +45,14 @@ test('style tags are non-exclusive and search is accent-insensitive with multipl
  expect(baseGuide({...models[3],name:'Illustrious-XL-v0.1.safetensors'})).toBeUndefined();
 });
 
-test('Explore includes four illustrated English guides and clickable tags; Installed never invents files',async()=>{
+test('Explore includes four text guides and clickable tags; Installed never invents files',async()=>{
  render(<I18nProvider><BeginnerModels models={models} onUse={()=>{}} onRefresh={()=>{}} reason={()=>''} loading={false}/></I18nProvider>);
  expect(document.querySelector('[data-featured-models]')).toBeNull();
  fireEvent.click(screen.getByRole('tab',{name:'Explore'}));
  expect(document.querySelectorAll('[data-guide]')).toHaveLength(4);
- expect(screen.getByRole('img',{name:'MOSS-Image SFT'})).toBeTruthy();
+ const mossCard=document.querySelector('[data-guide="moss-sft"]')!;
+ expect(mossCard.querySelector('h3')?.textContent).toBe('MOSS-Image SFT');
+ expect(document.querySelector('[data-guide="moss-sft"] img')).toBeNull();
  expect(screen.queryByRole('heading',{name:'MOSS-Image Base'})).toBeNull();
  const card=document.querySelector('[data-guide="krea2-raw"]')!;
  expect(within(card as HTMLElement).getByText('How to prompt')).toBeTruthy();
