@@ -333,7 +333,7 @@ test('device restoration defaults legacy intents to Auto, omits non-Stems and ke
 
 test('mount does not install, export, upload or submit; optional CUDA is validated', async () => {
   await act(async () => { render(<I18nProvider><AudioEnhance scope="tve"/></I18nProvider>); });
-  expect(vi.mocked(invoke).mock.calls.map(([command]) => command)).toEqual(['native_audio_enhance_install_status']);
+  expect(vi.mocked(invoke).mock.calls.map(([command]) => command).sort()).toEqual(['native_audio_enhance_capabilities', 'native_audio_enhance_install_status']); // Mount may only read: install status plus the read-only capability probe that enables the options immediately.
   vi.mocked(invoke).mockResolvedValue({ clean: true, deep: true, stems: true });
   expect(await readAudioEnhanceCapabilities()).toEqual({ clean: true, deep: true, stems: true, cuda: false });
   vi.mocked(invoke).mockResolvedValue({ clean: true, deep: true, stems: true, cuda: 'yes' });

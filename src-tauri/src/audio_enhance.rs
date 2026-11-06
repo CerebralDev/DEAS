@@ -104,6 +104,21 @@ const CANCELLED: &str = "AUDIO_CANCELLED: Audio enhancement cancelled; original 
 const MIX: &str = "loudnorm=I=-16:TP=-1.5:LRA=11";
 const SPEECH: &str = "highpass=f=80,afftdn=nr=10:nf=-35,deesser=i=0.2,dynaudnorm=f=150:g=15,loudnorm=I=-16:TP=-1.5:LRA=11";
 
+/// Enhanced video keeps the source's audio encode settings (the TVE/video-combine node's
+/// codec, plus bitrate where the container reports one); unknown codecs and audio-only
+/// masters fall back to lossless FLAC.
+/// shortcut: Matroska carries no per-stream bitrate, so MKV sources keep the codec only and
+/// fall to encoder default quality; add an explicit bitrate to the export intent if needed.
+fn audio_encoder(codec: &str, video: bool) -> (&'static str, &'static str) {
+    match if video { codec } else { "" } {
+        "aac" => ("aac", "aac"),
+        "opus" | "libopus" => ("libopus", "opus"),
+        "vorbis" | "libvorbis" => ("libvorbis", "vorbis"),
+        "mp3" | "libmp3lame" => ("libmp3lame", "mp3"),
+        _ => ("flac", "flac"),
+    }
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Request {
@@ -217,7 +232,7 @@ struct Input {
     before: Identity,
     demuxer: &'static str,
     video: bool,
-    streams: Vec<(String, String, u32, u32)>,
+    streams: Vec<(String, String, u32, u32, Option<u64>)>,
     audio_offsets: Vec<f64>,
 }
 impl Input {
@@ -263,7 +278,7 @@ impl Input {
         probe
             .args([
                 "-show_entries",
-                "stream=codec_type,codec_name,sample_rate,channels,start_time:format=duration",
+                "stream=codec_type,codec_name,sample_rate,channels,start_time,bit_rate:format=duration",
                 "-of",
                 "json",
                 "-i",
@@ -306,7 +321,10 @@ impl Input {
                 {
                     return Err("AUDIO_SOURCE: Unsupported audio rate/channel count");
                 }
-                Ok((kind.to_owned(), codec.to_owned(), rate, channels))
+                let bitrate = stream["bit_rate"]
+                    .as_str()
+                    .and_then(|s| s.parse::<u64>().ok());
+                Ok((kind.to_owned(), codec.to_owned(), rate, channels, bitrate))
             })
             .collect::<Result<_, &str>>()?;
         input.audio_offsets = streams
@@ -348,12 +366,28 @@ impl Input {
         }
         Ok(())
     }
-    fn extension(&self) -> &'static str {
-        if self.video {
-            "mkv"
-        } else {
-            "flac"
+    /// Video keeps the source's container (the TVE/video-combine node's choice), which also
+    /// drives the save-dialog filter and the target-extension guard; audio-only masters stay FLAC.
+    fn muxer(&self) -> (&'static str, &'static str) {
+        if !self.video {
+            return ("flac", "flac");
         }
+        match self
+            .path
+            .extension()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase()
+            .as_str()
+        {
+            "mp4" => ("mp4", "mp4"),
+            "mov" => ("mov", "mov"),
+            "webm" => ("webm", "webm"),
+            _ => ("matroska", "mkv"),
+        }
+    }
+    fn extension(&self) -> &'static str {
+        self.muxer().1
     }
 }
 
@@ -380,7 +414,9 @@ fn validate_product(input: &Input, path: &Path, cancel: &AtomicBool) -> Result<(
             .any(|(actual, expected)| {
                 actual.0 != expected.0
                     || if actual.0 == "audio" {
-                        actual.1 != "flac" || actual.2 != expected.2 || actual.3 != expected.3
+                        actual.1 != audio_encoder(&expected.1, input.video).1
+                            || actual.2 != expected.2
+                            || actual.3 != expected.3
                     } else {
                         actual.1 != expected.1
                     }
@@ -580,8 +616,6 @@ fn process_mode(
         command.args([
             "-c",
             "copy",
-            "-c:a",
-            "flac",
             "-filter:a",
             if settings.mode == "clean" && settings.profile == "speech" {
                 SPEECH
@@ -595,12 +629,20 @@ fn process_mode(
         ]);
         // loudnorm works internally at 192 kHz; restore each source track's rate explicitly.
         for (index, stream) in input.streams.iter().filter(|s| s.0 == "audio").enumerate() {
+            let (encoder, _) = audio_encoder(&stream.1, input.video);
             command.args([
+                format!("-c:a:{index}"),
+                encoder.to_owned(),
                 format!("-ar:a:{index}"),
                 stream.2.to_string(),
                 format!("-ac:a:{index}"),
                 stream.3.to_string(),
             ]);
+            if encoder != "flac" {
+                if let Some(bitrate) = stream.4 {
+                    command.args([format!("-b:a:{index}"), bitrate.to_string()]);
+                }
+            }
             if !processed.is_empty() {
                 let duration = audio_duration(&input, Some(index), cancel)?;
                 let samples = (duration * f64::from(stream.2)).round() as u64;
@@ -613,21 +655,39 @@ fn process_mode(
                 ]);
             }
         }
-        command.args([
-            "-f",
-            if input.video { "matroska" } else { "flac" },
-            "pipe:1",
-        ]);
-        run_tool(
-            command,
-            Duration::from_secs(6 * 60 * 60),
-            cancel,
-            Some(
-                file.try_clone()
+        let (muxer, _) = input.muxer();
+        command.args(["-f", muxer]);
+        if matches!(muxer, "mp4" | "mov") {
+            // MP4/MOV writers must seek back to patch their index, which a pipe cannot take:
+            // encode to the private workspace, then stream the finished bytes into the anchor.
+            let staged = work.path().join(format!("container.{muxer}"));
+            command.arg(&staged);
+            run_tool(command, Duration::from_secs(6 * 60 * 60), cancel, None)
+                .map_err(tool_error)?;
+            if cancel.load(Ordering::Relaxed) {
+                return Err(CANCELLED.into());
+            }
+            std::io::copy(
+                &mut File::open(&staged)
+                    .map_err(|_| "AUDIO_WRITE: Cannot read staged container")?,
+                &mut file
+                    .try_clone()
                     .map_err(|_| "AUDIO_WRITE: Cannot open output stream")?,
-            ),
-        )
-        .map_err(tool_error)?;
+            )
+            .map_err(|_| "AUDIO_WRITE: Cannot stream enhanced output")?;
+        } else {
+            command.arg("pipe:1");
+            run_tool(
+                command,
+                Duration::from_secs(6 * 60 * 60),
+                cancel,
+                Some(
+                    file.try_clone()
+                        .map_err(|_| "AUDIO_WRITE: Cannot open output stream")?,
+                ),
+            )
+            .map_err(tool_error)?;
+        }
         input.recheck()?;
         file.sync_all()
             .map_err(|_| "AUDIO_WRITE: Cannot sync enhanced output")?;
@@ -738,6 +798,19 @@ async fn export(
     };
     log(id, "started", "INFO");
     let target = selected.path().to_owned();
+    // The chooser may return a path through symlinked folders (bookmarks like ~/Downloads);
+    // resolve the parent so the strict anchored write below sees the real directory. Other
+    // seams keep their own symlink policies untouched.
+    let target = match target
+        .parent()
+        .and_then(|parent| std::fs::canonicalize(parent).ok())
+    {
+        Some(real) => match target.file_name() {
+            Some(name) => real.join(name),
+            None => target,
+        },
+        None => target,
+    };
     // The worker owns admission and cleanup even if the invoking webview stops awaiting IPC.
     tauri::async_runtime::spawn_blocking(move || {
         let _permit = permit;

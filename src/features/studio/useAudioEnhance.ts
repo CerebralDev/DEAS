@@ -24,7 +24,7 @@ export function useAudioEnhance(scope: 'post' | 'tve') {
     catch (failure) { if (live.current) { setCapabilities(null); setError(String(failure)); } }
     finally { probing.current = false; if (live.current) setChecking(false); }
   }
-  useEffect(() => { if (mode !== 'off' && !capabilities) void probe(); }, [mode]); // Restored preferences never imply engine readiness.
+  useEffect(() => { void probe(false); }, []); // Read-only probe at mount so options are enabled the moment the tab opens; restored preferences never imply engine readiness.
   async function readInstallStatus() {
     if (!isTauri() || statusReading.current) return;
     statusReading.current = true;

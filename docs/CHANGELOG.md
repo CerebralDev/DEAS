@@ -2,6 +2,7 @@
 
 ## 0.2.18 BETA (unreleased)
 
+- **Audio enhancement ready and faithful.** Processing options load when the Post-Processing or TVE tab opens instead of staying greyed until the mode dropdown is clicked again. **Enhance audio and save…** accepts target folders reached through symlinks (bookmark paths) again. Enhanced video products keep the source's container (MKV/MP4/MOV/WebM) and audio codec (plus bitrate where the container reports one) instead of always re-encoding to MKV/FLAC, so TVE and video-combine output settings survive the audio stage; the video stream already stayed byte-identical.
 
 - **Forge reads selected output pictures.** H3 reference images and first/last frames retain their input/output identity through Forge, Cast and Find people. Explicit operations safely upload output images for the input-only node-pack reader; opening Forge does not copy or analyze media. The standalone picker also accepts output pictures. Vision controls/status distinguish labelled-picture opt-in from automatic frame/reference vision.
 

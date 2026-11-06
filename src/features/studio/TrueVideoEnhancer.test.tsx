@@ -14,7 +14,7 @@ const source: VideoPostInspection = { sourceId: '6f1c2b3a-4d5e-4f60-8a9b-0c1d2e3
 test('mount only reads audio installation recovery; chooser inspection feeds the backend panel without execution', async () => {
   vi.mocked(invoke).mockImplementation(async command => command === 'native_audio_enhance_install_status' ? { running: false, mode: '', stage: '', downloaded: 0, total: 0 } : source);
   render(<I18nProvider><TrueVideoEnhancer endpoint="http://127.0.0.1:7801/"/></I18nProvider>);
-  expect(invoke).toHaveBeenCalledExactlyOnceWith('native_audio_enhance_install_status');
+  expect(vi.mocked(invoke).mock.calls.map(([command]) => command).sort()).toEqual(['native_audio_enhance_capabilities', 'native_audio_enhance_install_status']); // Mount may only read: install status plus the read-only capability probe.
   vi.mocked(invoke).mockClear();
   expect(document.querySelector('[data-tve-scale]')).toBeNull();
   expect(document.querySelector('[data-tve-bind]')).toBeNull();

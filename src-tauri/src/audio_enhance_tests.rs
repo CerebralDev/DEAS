@@ -73,7 +73,25 @@ fn audio_commands_registered_and_logged_without_paths() {
     }));
 }
 
-fn fixture(path: &Path, video: bool, silent: bool) {
+fn audio_codec(path: &Path) -> String {
+    let out = Command::new("ffprobe")
+        .args([
+            "-v",
+            "error",
+            "-select_streams",
+            "a:0",
+            "-show_entries",
+            "stream=codec_name",
+            "-of",
+            "csv=p=0",
+        ])
+        .arg(path)
+        .output()
+        .unwrap();
+    String::from_utf8_lossy(&out.stdout).trim().to_owned()
+}
+
+fn fixture(path: &Path, video: bool, silent: bool, audio_codec: &str) {
     let mut cmd = Command::new("ffmpeg");
     cmd.args(["-hide_banner", "-v", "error", "-nostdin"]);
     if video {
@@ -87,7 +105,7 @@ fn fixture(path: &Path, video: bool, silent: bool) {
         cmd.args(["-c:v", "mpeg4"]);
     }
     if !silent {
-        cmd.args(["-c:a", "flac"]);
+        cmd.args(["-c:a", audio_codec]);
     }
     assert!(cmd.arg(path).status().unwrap().success());
 }
@@ -139,7 +157,7 @@ fn audio_real_ffmpeg_clean_remux_and_failure_preservation() {
     );
     let dir = tempfile::tempdir().unwrap();
     let source = dir.path().join("音 source.mkv");
-    fixture(&source, true, false);
+    fixture(&source, true, false, "flac");
     let original = std::fs::read(&source).unwrap();
     let target = dir.path().join("enhanced.mkv");
     let cancel = AtomicBool::new(false);
@@ -211,8 +229,49 @@ fn audio_real_ffmpeg_clean_remux_and_failure_preservation() {
     .unwrap_err();
     assert!(error.starts_with("AUDIO_CHANGED:"), "{error}");
     assert!(!aborted.exists());
+    let combine = dir.path().join("combine-settings.mkv");
+    fixture(&combine, true, false, "aac");
+    let combine_enhanced = dir.path().join("combine-enhanced.mkv");
+    process(
+        Input::open(combine.clone()).unwrap(),
+        &combine_enhanced,
+        "mix",
+        &AtomicBool::new(false),
+    )
+    .unwrap();
+    assert_eq!(
+        audio_codec(&combine_enhanced),
+        "aac",
+        "enhanced export must keep the combine node's audio codec"
+    );
+    assert_eq!(
+        packet_hashes(&combine),
+        packet_hashes(&combine_enhanced),
+        "video packets must be byte-identical"
+    );
+    let mp4_source = dir.path().join("combine-settings.mp4");
+    fixture(&mp4_source, true, false, "aac");
+    let mp4_enhanced = dir.path().join("combine-enhanced.mp4");
+    process(
+        Input::open(mp4_source).unwrap(),
+        &mp4_enhanced,
+        "mix",
+        &AtomicBool::new(false),
+    )
+    .unwrap();
+    let mp4_bytes = std::fs::read(&mp4_enhanced).unwrap();
+    assert_eq!(
+        &mp4_bytes[4..8],
+        b"ftyp",
+        "the MP4 container must survive enhancement"
+    );
+    assert_eq!(
+        audio_codec(&mp4_enhanced),
+        "aac",
+        "MP4 keeps the source audio codec"
+    );
     let audio = dir.path().join("voice.flac");
-    fixture(&audio, false, false);
+    fixture(&audio, false, false, "flac");
     let clean = dir.path().join("voice-clean.flac");
     process(
         Input::open(audio).unwrap(),
@@ -223,7 +282,7 @@ fn audio_real_ffmpeg_clean_remux_and_failure_preservation() {
     .unwrap();
     assert!(std::fs::metadata(clean).unwrap().len() > 12);
     let silent = dir.path().join("no-audio.mkv");
-    fixture(&silent, true, true);
+    fixture(&silent, true, true, "flac");
     assert!(Input::open(silent)
         .err()
         .unwrap()
@@ -255,7 +314,7 @@ fn audio_real_install_deep_stems_cpu() {
         .tempdir_in(crate::audio_runtime::root())
         .unwrap();
     let source = dir.path().join("source.mkv");
-    fixture(&source, true, false);
+    fixture(&source, true, false, "flac");
     let source_bytes = std::fs::read(&source).unwrap();
     for (mode, profile) in [("deep", "speech"), ("stems", "mix"), ("stems", "speech")] {
         let settings = AudioSettings {
@@ -318,7 +377,7 @@ fn audio_real_manual_cancel_does_not_poison_automatic_token() {
         .tempdir_in(crate::audio_runtime::root())
         .unwrap();
     let source = dir.path().join("source.flac");
-    fixture(&source, false, false);
+    fixture(&source, false, false, "flac");
     let target = dir.path().join("automatic.flac");
     native_audio_enhance_cancel();
     let result = process_file(

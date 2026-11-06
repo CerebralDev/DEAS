@@ -187,18 +187,22 @@ fn process(job: &Job, cancel: &AtomicBool, outputs: &mut Vec<Value>) -> Result<(
             .and_then(|s| s.to_str())
             .unwrap_or("")
             .to_ascii_lowercase();
-        let extension = if ["mp4", "mkv", "webm", "mov"].contains(&source_extension.as_str()) {
-            "mkv"
+        // The source's container (Input::muxer) survives enhancement; audio-only gets FLAC.
+        let extension = if ["mp4", "mov", "mkv", "webm"].contains(&source_extension.as_str()) {
+            source_extension.as_str()
         } else {
             "flac"
         };
         let filename = format!("deas-audio-{}.{}", uuid::Uuid::new_v4(), extension);
-        let target: PathBuf = source
+        // Stage and publish through the resolved directory (see the Anchor below).
+        let target: PathBuf = canonical
             .parent()
             .ok_or("AUDIO_SOURCE: Missing parent")?
             .join(&filename);
+        // Anchor the resolved directory: the owned media root may itself sit behind a
+        // symlinked folder (a bookmarked output root), which the strict walk would refuse.
         let parent = crate::downloads::fs::Anchor::open(
-            source.parent().ok_or("AUDIO_SOURCE: Missing parent")?,
+            canonical.parent().ok_or("AUDIO_SOURCE: Missing parent")?,
         )?;
         let stage_name = format!(".deas-audio-stage-{}.{}", uuid::Uuid::new_v4(), extension);
         let stage = target.with_file_name(&stage_name);
@@ -216,14 +220,14 @@ fn process(job: &Job, cancel: &AtomicBool, outputs: &mut Vec<Value>) -> Result<(
                     attempt += 1;
                     std::thread::sleep(Duration::from_secs(5));
                 }
-                Err(error) if extension == "mkv" && error.starts_with("AUDIO_NO_STREAM:") => {
+                Err(error) if extension != "flac" && error.starts_with("AUDIO_NO_STREAM:") => {
                     break Err(error)
                 }
                 Err(error) => break Err(error),
             }
         };
         if let Err(error) = processed_stage {
-            if extension == "mkv" && error.starts_with("AUDIO_NO_STREAM:") {
+            if extension != "flac" && error.starts_with("AUDIO_NO_STREAM:") {
                 continue;
             }
             return Err(error);
@@ -250,10 +254,12 @@ fn process(job: &Job, cancel: &AtomicBool, outputs: &mut Vec<Value>) -> Result<(
         published?;
         let mut processed = output;
         processed["filename"] = json!(filename);
-        processed["format"] = json!(if extension == "mkv" {
-            "video/x-matroska"
-        } else {
-            "audio/flac"
+        processed["format"] = json!(match extension {
+            "flac" => "audio/flac",
+            "mp4" => "video/mp4",
+            "mov" => "video/quicktime",
+            "webm" => "video/webm",
+            _ => "video/x-matroska",
         });
         processed["role"] = json!("processed");
         outputs.insert(0, processed);
