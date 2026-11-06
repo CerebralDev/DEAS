@@ -59,6 +59,37 @@ test('mounted observers update only exact paths and reset removes the declaratio
 test('context-menu key opens focused compact action and Escape restores tile focus',()=>{
  mount();const button=screen.getByRole('button',{name:model.name});fireEvent.keyDown(button,{key:'ContextMenu'});expect(document.activeElement).toBe(screen.getByRole('menuitem'));fireEvent.keyDown(screen.getByRole('menuitem'),{key:'Escape'});expect(screen.queryByRole('menu')).toBeNull();expect(document.activeElement).toBe(button);expect(writeModelFamily).not.toHaveBeenCalled();
 });
+test.each([
+ ['header','Identified from header metadata or tensor structure.'],
+ ['filename','Variant inferred from filename; not confirmed by the header.'],
+ ['unresolved','Variant not identified. Declare the exact model family before using model-specific defaults.'],
+ ['conflict','Conflicting model identity evidence. Check the file and declare its exact family.'],
+] as const)('ACE-Step detection explains %s evidence without changing the declaration', (familyEvidence,text)=>{
+ mount({...model,detectedFamily:'ace-step',family:'ace-step',familyEvidence});open();
+ expect(screen.getByText(text)).toBeTruthy();
+ expect(document.querySelector('[data-model-family-evidence]')?.getAttribute('data-model-family-evidence')).toBe(familyEvidence);
+ expect(writeModelFamily).not.toHaveBeenCalled();
+});
+test('ACE-Step variants use the existing family declaration and keep automatic evidence separate',async()=>{
+ const ace={...model,detectedFamily:'ace-step-1-5',family:'ace-step-1-5',familyEvidence:'unresolved' as const};
+ mount(ace);open();
+ const select=screen.getByLabelText('Model family');
+ for(const entry of families.filter(f=>f.id.startsWith('ace-step'))){
+  expect([...select.querySelectorAll('option')].some(o=>o.value===entry.id)).toBe(true);
+  expect(entry.pipelines).toEqual('music' in entry?['t2m']:[]);
+ }
+ fireEvent.change(select,{target:{value:'ace-step-1-5-xl-sft'}});
+ vi.mocked(writeModelFamily).mockResolvedValue({...ace,family:'ace-step-1-5-xl-sft',familyOverride:'ace-step-1-5-xl-sft'});
+ fireEvent.click(screen.getByRole('button',{name:'Save'}));
+ await waitFor(()=>expect(screen.queryByRole('dialog')).toBeNull());
+ expect(writeModelFamily).toHaveBeenCalledExactlyOnceWith(model.path,'ace-step-1-5-xl-sft');
+});
+
+test('models without ACE-Step evidence keep the existing metadata surface',()=>{
+ mount({...model,detectedFamily:'anima'});open();
+ expect(document.querySelector('[data-model-family-evidence]')).toBeNull();
+});
+
 test('all metadata strings have six-locale data-only parity',()=>{
  const dictionaries=import.meta.glob('./locales/*.json',{eager:true,import:'default'}) as Record<string,Record<string,string>>;
  const entries=Object.values(dictionaries);expect(entries).toHaveLength(6);for(const dict of entries){expect(Object.keys(dict).sort()).toEqual(Object.keys(entries[0]).sort());expect(Object.values(dict).every(v=>typeof v==='string'&&v.length>0)).toBe(true);}expect(bundledCatalog.diagnostics).toEqual([]);

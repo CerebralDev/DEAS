@@ -23,7 +23,7 @@ test('image/video uses declared capabilities, with no style categories or filena
 test('onboarding choices and switch report the chosen experience',()=>{
  const choose=vi.fn();render(<I18nProvider><ExperienceWelcome onChoose={choose}/><ExperienceSwitch value="beginner" onChange={choose}/></I18nProvider>);
  fireEvent.click(screen.getByRole('button',{name:/A beginner/}));expect(choose).toHaveBeenCalledWith('beginner');
- fireEvent.click(screen.getByRole('button',{name:'Advanced'}));expect(choose).toHaveBeenLastCalledWith('advanced');
+ fireEvent.click(screen.getByRole('switch',{name:'Advanced'}));expect(choose).toHaveBeenLastCalledWith('advanced');
 });
 test('installed selection uses exact model identity; Explorer hands off to the existing download panel only on click',async()=>{
  const use=vi.fn();render(<I18nProvider><BeginnerModels models={models} root="/env" onUse={use} onRefresh={()=>{}} reason={()=>''} loading={false}/></I18nProvider>);

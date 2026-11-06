@@ -23,7 +23,7 @@ Every supplied pack contains `theme.json`, `assets/`, `EDIT-THEME.html` and `REA
 
 1. Open the pack's **EDIT-THEME.html** deliberately in Chrome or Edge, or use the shared `theme-packs/EDIT-THEMES.html`. It works offline; DEAS never executes this HTML.
 2. Click **Choose theme folder** and select the folder containing `theme.json`. Browser permission grants access to that chosen folder, not an upload.
-3. Edit the name, colours and optional PNG/static WebP images. The editor has English labels; More colors exposes advanced tokens. Duplicate a pack first and assign a new unique Theme ID to create a separate theme.
+3. Edit the name, colours and optional PNG/static WebP images — via each row's file button or by dragging a PNG/WebP onto the row (a dashed outline marks a droppable row). The editor has English labels; More colors exposes advanced tokens. Duplicate a pack first and assign a new unique Theme ID to create a separate theme.
 4. Click **Save changes**, then **Refresh themes** in DEAS. Preserve attribution when sharing the complete folder.
 
 The editor backs up the previous manifest and any overwritten images under `backups/`. Undo discards unsaved edits only. Restore by copying the backed-up manifest and any replaced images back to their recorded locations. It checks for external manifest changes before saving and again immediately before publishing. The browser API cannot make that last check/write atomic across processes: do not edit the same pack simultaneously in another program. A failed save may leave a newly copied image; keep backups until recovery is complete. DEAS loads only referenced images.

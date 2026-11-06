@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { useI18n } from '../../i18n/I18nProvider';
 import { isImageIntent, type JobIntent } from '../../lib/jobs';
-import { isMusicIntent } from '../../lib/musicIntent';
+import { isAceMusicIntent, isMusicIntent } from '../../lib/musicIntent';
 import { isVideoIntent, latentUpscaleSize, videoPostFrameRate } from '../../lib/videoIntent';
 import { describeVideoPost } from './TvePostControls';
 
@@ -21,7 +21,7 @@ export function RunPlan({intent,pipeline,notices,outputRoot,inputNotes=[]}:{inte
 
  const stage=(id:string,body:ReactNode)=><li data-plan-stage={id}><h3>{t(`studio.plan.${id}`)}</h3><dl className="run-plan-facts">{body}</dl></li>;
  if(intent&&isMusicIntent(intent)){
-  const music=intent;
+  const music=intent,ace=isAceMusicIntent(music);
   // Music keeps the stage chain (input → model → prompt → ABC → generate → output) without any image/video fields.
   const settings=(o:object)=>Object.entries(o).map(([k,v])=>row(k==='cfgScale'?'studio.music.arCfg':`studio.music.${k}`,v));
   return <section className="feature-panel run-plan" aria-label={t('studio.tab.map')}>
@@ -30,10 +30,10 @@ export function RunPlan({intent,pipeline,notices,outputRoot,inputNotes=[]}:{inte
    <ul className="run-plan-notices">{notices.map((s,i)=><li key={i}>{s}</li>)}</ul>
    <ol className="run-plan-stages">
     {(music.mode==='cover'||inputNotes.length>0)&&stage('input',<>{music.mode==='cover'&&<>{row('studio.music.source',music.sourceAudio)}{row('studio.music.audioEncoder',music.audioEncoder)}<dd>{t('studio.music.coverHint')}</dd></>}{inputNotes.map((s,i)=><dd key={i}>{s}</dd>)}</>)}
-    {stage('model',<>{row('studio.run.checkpoint',music.checkpoint)}{row('studio.run.textEncoder',t('studio.plan.checkpointParts'))}{row('studio.run.vae',t('studio.plan.checkpointParts'))}</>)}
+    {stage('model',<>{ace&&row('studio.plan.family',music.family)}{row('studio.run.checkpoint',music.checkpoint)}{row('studio.run.textEncoder',ace&&music.diffusion?music.diffusion.textEncoder:t('studio.plan.checkpointParts'))}{ace&&music.diffusion?.textEncoder2&&row('studio.run.textEncoder2',music.diffusion.textEncoder2)}{row('studio.run.vae',ace&&music.diffusion?music.diffusion.vae:t('studio.plan.checkpointParts'))}</>)}
     {stage('prompt',<>{row('studio.music.style',music.style||'∅')}{row('studio.music.lyrics',music.lyrics||'∅')}</>)}
-    {music.planning!=='off'&&stage('abc',<>{row('studio.music.planning',t(`studio.music.${music.planning}`))}{music.mode==='t2m'&&settings(music.abc)}</>)}
-    {stage('generate',<>{row('studio.music.maxDuration',music.maxDuration)}<dd>{t('studio.music.durationHint')}</dd>{row('studio.run.seed',music.seed)}{row('studio.run.steps',music.steps)}{row('studio.run.cfg',music.cfg)}{row('studio.recipe.sampler',music.sampler)}{row('studio.recipe.scheduler',music.scheduler)}{settings(music.generation)}</>)}
+    {!ace&&music.planning!=='off'&&stage('abc',<>{row('studio.music.planning',t(`studio.music.${music.planning}`))}{music.mode==='t2m'&&settings(music.abc)}</>)}
+    {stage('generate',<>{row('studio.music.maxDuration',music.maxDuration)}{!ace&&<dd>{t('studio.music.durationHint')}</dd>}{row('studio.run.seed',music.seed)}{row('studio.run.steps',music.steps)}{row('studio.run.cfg',music.cfg)}{row('studio.recipe.sampler',music.sampler)}{row('studio.recipe.scheduler',music.scheduler)}{ace?Object.entries(music.ace).map(([k,v])=>row(`studio.music.ace.${k}`,typeof v==='boolean'?yesNo(v):v)):settings(music.generation)}</>)}
     {music.audioEnhance&&stage('audioEnhance',<>{row('studio.audioEnhance.mode',t(`studio.audioEnhance.${music.audioEnhance.mode}`))}{row('studio.audioEnhance.profile',t(`studio.audioEnhance.${music.audioEnhance.profile}`))}{music.audioEnhance.mode==='stems'&&row('studio.audioEnhance.device',t(`studio.audioEnhance.device.${music.audioEnhance.device??'auto'}`))}<dd>{t('studio.audioEnhance.automatic')}</dd></>)}
     {stage('output',<>{row('studio.music.output','FLAC')}{row('settings.output',outputRoot)}{row('studio.run.opt.outputNaming',music.outputPrefix)}<dd>{t('studio.plan.outputPending')}</dd></>)}
    </ol>

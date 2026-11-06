@@ -1,4 +1,9 @@
 {
+  "modelMeta.evidence": "Detection evidence",
+  "modelMeta.evidence.header": "Identified from header metadata or tensor structure.",
+  "modelMeta.evidence.filename": "Variant inferred from filename; not confirmed by the header.",
+  "modelMeta.evidence.unresolved": "Variant not identified. Declare the exact model family before using model-specific defaults.",
+  "modelMeta.evidence.conflict": "Conflicting model identity evidence. Check the file and declare its exact family.",
   "modelMeta.title": "Edit meta…",
   "modelMeta.filename": "Filename",
   "modelMeta.path": "Exact path",

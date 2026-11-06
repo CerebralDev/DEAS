@@ -5,6 +5,9 @@ use crate::jobs::{comfy_model_name, model_name, safe_choice, safe_output_prefix}
 use serde::Deserialize;
 use serde_json::{json, Value};
 
+#[path = "jobs_music_ace.rs"]
+pub(crate) mod ace;
+
 /// Every class the graphs can emit; prepare() checks the compiled graph's nodes against object_info.
 /// (`CheckpointLoaderSimple`/`KSampler` are already core-required.)
 pub(crate) const MUSIC_NODES: [&str; 9] = [
@@ -164,6 +167,9 @@ fn validate(i: &Value) -> Result<Intent, String> {
 }
 
 pub(crate) fn compile(i: &Value) -> Result<Value, String> {
+    if i["family"] != "yue2" {
+        return ace::compile(i);
+    }
     let m = validate(i)?;
     let g = &m.generation;
     let (abc, mode) = match (m.mode.as_str(), m.planning.as_str()) {
@@ -194,6 +200,26 @@ pub(crate) fn compile(i: &Value) -> Result<Value, String> {
 
 /// Model prerequisites by object_info field; called only on a validated intent.
 pub(crate) fn requirements(i: &Value) -> Vec<(&'static str, Vec<&str>)> {
+    if i["diffusion"].is_object() {
+        return vec![
+            (
+                "diffusionModels",
+                vec![i["checkpoint"].as_str().unwrap_or_default()],
+            ),
+            (
+                "dualTextEncoders",
+                vec![
+                    i["diffusion"]["textEncoder"].as_str().unwrap_or_default(),
+                    i["diffusion"]["textEncoder2"].as_str().unwrap_or_default(),
+                ],
+            ),
+            ("dualClipTypes", vec!["ace"]),
+            (
+                "vaes",
+                vec![i["diffusion"]["vae"].as_str().unwrap_or_default()],
+            ),
+        ];
+    }
     let mut r = vec![(
         "checkpoints",
         vec![i["checkpoint"].as_str().unwrap_or_default()],

@@ -121,3 +121,15 @@ test('reads selected local images, clears stale values, ignores late replies and
  rerender(<I18nProvider><GenerationMetadata job={job}/></I18nProvider>);
  expect(screen.getByText('Krea2/model.safetensors')).toBeTruthy();
 });
+
+const aceIntent={recipeId:'music-generation',version:1,family:'ace-step-1-5-xl-sft',mode:'t2m',planning:'off',checkpoint:'ace-xl.safetensors',style:'jazz 猫',lyrics:'',seed:42,maxDuration:30,steps:37,cfg:4.25,sampler:'euler',scheduler:'simple',outputPrefix:'raw/audio/exact',ace:{shift:2.5,lyricsStrength:1,bpm:123,timeSignature:'3',language:'de',keyScale:'D minor',generateAudioCodes:false,lmCfg:3.5,temperature:0.7,topP:0.8,topK:12,minP:0.03},diffusion:{textEncoder:'text.safetensors',textEncoder2:'code.safetensors',vae:'audio-vae.safetensors'},audioEnhance:{mode:'clean',profile:'mix'}} as const;
+
+test('ACE metadata displays submitted identity, components, sampling and LM settings without YuE2 ABC rows',()=>{
+ localStorage.setItem('deas.locale.v1','en');
+ const before=JSON.stringify(aceIntent),view=render(<I18nProvider><GenerationMetadata job={{...job,intent:aceIntent}}/></I18nProvider>);
+ const meta=view.container.querySelector('[data-music-metadata]')!;
+ for(const value of [aceIntent.family,aceIntent.checkpoint,...Object.values(aceIntent.diffusion),'37','4.25','euler','simple','2.5','123','D minor','3.5','0.03','13.31 sec'])expect(meta.textContent).toContain(value);
+ expect(meta.textContent).not.toMatch(/YuE2|ABC|SheetSage/);expect(view.container.querySelector('[data-metadata-apply]')).toBeNull();expect(JSON.stringify(aceIntent)).toBe(before);
+ view.rerender(<I18nProvider><GenerationMetadata job={{...job,intent:{...aceIntent,family:'ace-step-1-0',diffusion:undefined}}}/></I18nProvider>);
+ expect(meta.textContent).not.toContain('code.safetensors');expect(meta.textContent).not.toContain('ace-step-1-5-xl-sft');expect(meta.textContent).toContain('ace-step-1-0');
+});

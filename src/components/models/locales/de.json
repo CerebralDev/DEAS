@@ -1,4 +1,9 @@
 {
+  "modelMeta.evidence": "Erkennungsgrundlage",
+  "modelMeta.evidence.header": "Anhand von Header-Metadaten oder Tensorstruktur erkannt.",
+  "modelMeta.evidence.filename": "Variante aus dem Dateinamen abgeleitet; nicht durch den Header bestätigt.",
+  "modelMeta.evidence.unresolved": "Variante nicht erkannt. Vor modellspezifischen Standardwerten die genaue Modellfamilie zuordnen.",
+  "modelMeta.evidence.conflict": "Widersprüchliche Hinweise zur Modellidentität. Datei prüfen und die genaue Familie zuordnen.",
   "modelMeta.title": "Meta bearbeiten…",
   "modelMeta.filename": "Dateiname",
   "modelMeta.path": "Exakter Pfad",

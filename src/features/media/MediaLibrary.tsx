@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { convertFileSrc, invoke, isTauri } from '@tauri-apps/api/core';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { useI18n } from '../../i18n/I18nProvider';
-import { describeMedia, dragItem, itemFromEntry, itemFromFile, listMedia, normalizedMediaPath as normalizedPath, type MediaEntry, type MediaItem, type MediaListing } from '../../lib/media';
+import { describeMedia, dragItem, dropCssPoint, itemFromEntry, itemFromFile, listMedia, normalizedMediaPath as normalizedPath, type MediaEntry, type MediaItem, type MediaListing } from '../../lib/media';
 import { usePref } from '../../lib/preferences';
 import { StarMediaButton } from './StarMediaButton';
 import { relocatedMediaItem, type MediaRelocation } from '../../lib/media';
@@ -122,7 +122,7 @@ export function MediaLibrary({selected,onSelect,roots={},outputRevision=0,filter
     const modal=document.querySelector('dialog[open], [aria-modal="true"]'),el=dropBox.current;
     if(!el||el.closest('[hidden]')||(modal&&!modal.contains(el))){setDragging(false);return;}
     if(e.payload.type!=='leave'){
-     const r=el.getBoundingClientRect(),x=e.payload.position.x/devicePixelRatio,y=e.payload.position.y/devicePixelRatio;
+     const r=el.getBoundingClientRect(),{x,y}=dropCssPoint(e.payload.position);
      if(r.width<=0||r.height<=0||x<r.left||x>r.right||y<r.top||y>r.bottom){setDragging(false);return;}
     }
     if(e.payload.type==='enter'||e.payload.type==='over')setDragging(true);

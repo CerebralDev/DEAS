@@ -119,6 +119,15 @@ impl Player {
         pointers.push(std::ptr::null());
         Self::check(unsafe { (self.api.mpv_command_async)(self.handle, 0, pointers.as_ptr()) })
     }
+    fn set_paused(&self, paused: bool) -> Result<(), String> {
+        if !paused {
+            self.clear_crop()?;
+        }
+        if !paused && self.status.borrow()["ended"] == true {
+            self.command(&["seek", "0", "absolute+exact"])?;
+        }
+        self.command(&["set", "pause", if paused { "yes" } else { "no" }])
+    }
     fn clear_crop(&self) -> Result<(), String> {
         if self.crop.get() {
             self.command(&["set", "file-local-options/end", "none"])?;
@@ -279,6 +288,15 @@ pub fn open(
  Player::check(unsafe{(p.api.mpv_initialize)(handle)})?;
  for (key,format) in [("time-pos",5),("duration",5),("width",4),("height",4),("pause",3),("mute",3),("volume",5),("eof-reached",3)] {let key=CString::new(key).unwrap();Player::check(unsafe{(p.api.mpv_observe_property)(handle,0,key.as_ptr(),format)})?;}
  let area=gtk::GLArea::new();area.set_required_version(3,2);area.set_auto_render(false);area.set_size_request(1,1);area.set_no_show_all(true);
+ // Native GL windows receive picture clicks before WebKit's DOM surface can.
+ area.add_events(gtk::gdk::EventMask::BUTTON_PRESS_MASK | gtk::gdk::EventMask::BUTTON_RELEASE_MASK);
+ let player=p.clone();area.connect_button_release_event(move |_,event| {
+ if event.button()!=1{return gtk::glib::Propagation::Proceed;}
+ player.poll();
+ let paused=player.status.borrow()["paused"]!=true;
+ if let Err(error)=player.set_paused(paused){player.fail(&error);}
+ gtk::glib::Propagation::Stop
+ });
  let player=p.clone();area.connect_realize(move |area| {
  area.make_current();
  let result=(|| {
@@ -350,15 +368,7 @@ pub fn update(id: &str, action: Action) -> Result<Value, String> {
                     }
                 }
             }
-            Action::Pause { paused } => {
-                if !paused {
-                    p.clear_crop()?;
-                }
-                if !paused && p.status.borrow()["ended"] == true {
-                    p.command(&["seek", "0", "absolute+exact"])?;
-                }
-                p.command(&["set", "pause", if paused { "yes" } else { "no" }])?;
-            }
+            Action::Pause { paused } => p.set_paused(paused)?,
             Action::Seek { seconds } => {
                 p.clear_crop()?;
                 p.command(&["seek", &seconds.to_string(), "absolute+exact"])?

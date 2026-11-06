@@ -40,8 +40,23 @@ defaults"); nothing in Studio changes because of this file.
 | wan | 720×1280, 4, CFG 1, euler, linear_quadratic | Official 14B lightning 4 steps (2+2 stages) / CFG 1 / euler, ModelSamplingSD3 shift 5.0, scheduler simple; 5B 20 / CFG 5 / uni_pc / shift 8 | keep steps; **scheduler simple, shift 5.0 (14B)** | [video_wan2_2_14B_t2v.json](https://github.com/Comfy-Org/workflow_templates/blob/main/templates/video_wan2_2_14B_t2v.json) |
 | ltx-2 | 1280×704, 8, CFG 1, euler_cfg_pp, linear_quadratic | Not covered by official Comfy-Org templates in this research pass | unverified | — |
 | sam3 | (no sampling defaults) | Segmentation model, no KSampler path | n/a | — |
-| ace-step | (no defaults) | Official 8 / CFG 1 / euler / simple, shift 3.0 (ModelSamplingAuraFlow) | **add defaults 8/1/euler/simple + shift 3** | [Comfy ACE-Step docs](https://docs.comfy.org/tutorials/audio/ace-step/ace-step-v1), [audio_ace_step_1_5_split.json](https://github.com/Comfy-Org/workflow_templates/blob/main/templates/audio_ace_step_1_5_split.json) |
+| ace-step | (variant-specific music profiles) | Variant-specific; see ACE-Step table below. Turbo values are not valid generic defaults. | **applied per resolved variant; unresolved identities blocked** | [Comfy ACE-Step 1.0](https://docs.comfy.org/tutorials/audio/ace-step/ace-step-v1), [Comfy ACE-Step 1.5](https://docs.comfy.org/tutorials/audio/ace-step/ace-step-v1-5) |
 | yue2 | 1024², 32, CFG 1, dpm_2, sgm_uniform | Official template identical (music model; the 32/1/dpm_2/sgm_uniform is its KSampler leg) | keep | [audio_yue2_text2music.json](https://github.com/Comfy-Org/workflow_templates/blob/main/templates/audio_yue2_text2music.json) |
+
+## ACE-Step: variant-specific reference settings
+
+These are the shipped per-variant music starting settings; template-backed rows follow official Comfy-Org graphs. Regular Base/SFT uses a documented DEAS step choice within the manufacturer’s recommendation. Training variants cannot be established from shared tensor shapes alone. AIO/split is a loader form, not a different training variant; the XL DiT and code-LM size are independent.
+
+| Variant | Steps / diffusion CFG | Sampler / scheduler | Sampling patch | Source |
+| --- | --- | --- | --- | --- |
+| Original 1.0 | 50 / 5 | euler / simple | ModelSamplingSD3, shift 5 | [original song template](https://github.com/Comfy-Org/workflow_templates/blob/main/templates/audio_ace_step_1_t2a_song.json) |
+| 1.5 Base / SFT | 50 / 7 | euler / simple | ModelSamplingAuraFlow, shift 1 | [manufacturer inference parameters](https://github.com/ace-step/ACE-Step-1.5/blob/main/docs/en/INFERENCE.md#diffusion-parameters): CFG 7 / shift 1 for Base/SFT; DEAS chooses 50 within recommended 32–64 steps |
+| 1.5 Turbo | 8 / 1 | euler / simple | ModelSamplingAuraFlow, shift 3 | [split Turbo template](https://github.com/Comfy-Org/workflow_templates/blob/main/templates/audio_ace_step_1_5_split.json) |
+| 1.5 XL Base | 50 / 6 | euler / simple | ModelSamplingAuraFlow, shift 3 | [XL Base template](https://github.com/Comfy-Org/workflow_templates/blob/main/templates/audio_ace_step1_5_xl_base.json) |
+| 1.5 XL SFT | 50 / 7 | euler / simple | ModelSamplingAuraFlow, shift 3 | [XL SFT template](https://github.com/Comfy-Org/workflow_templates/blob/main/templates/audio_ace_step1_5_xl_sft.json) |
+| 1.5 XL Turbo | 8 / 1 | euler / simple | ModelSamplingAuraFlow, shift 3 | [XL Turbo template](https://github.com/Comfy-Org/workflow_templates/blob/main/templates/audio_ace_step1_5_xl_turbo.json) |
+
+Regular Base/SFT follows the manufacturer’s explicit Base/SFT parameter guidance, while XL rows follow their exact Comfy templates. Additional shift/continuous distilled forms remain unresolved rather than guessed Turbo. Do not copy the XL Base CFG into regular Base or SFT. The 1.5 encoder's LM CFG (node default 2), temperature (0.85), top-p (0.9), top-k (0) and min-p (0) are separate from diffusion CFG; the installed core declares them in `TextEncodeAceStepAudio1.5`. Preserve per-model user overrides when revisiting a model.
 
 ## Fix list (feeds PLAN.md §4.5 checklist)
 
@@ -49,7 +64,7 @@ moss-image (card canonical, incl. SLG + negative), ideogram4 (CFG 7), fibo2 (50/
 (50), boogu (turbo 4/1/lcm/sgm_uniform), kandinsky5 (50/3.5 + shift 3), pixeldit (30/er_sde +
 negative), hidream (uni_pc/simple/shift 3), flux3 (15/er_sde), chroma (3.5/beta/shift 1),
 qwen-image-2.1 (CFG 1, 25 steps), minimax-h3 (30/res_multistep), wan (simple + shift 5),
-ace-step (add 8/1/euler/simple + shift 3). Recommended negatives to adopt: anima, omnigen2,
+ace-step music profiles are applied per resolved variant; remaining real-model acceptance is in PLAN F3. Recommended negatives to adopt: anima, omnigen2,
 pixeldit, illustrious, moss.
 
 ## Caveats

@@ -1,4 +1,9 @@
 {
+  "modelMeta.evidence": "Source de détection",
+  "modelMeta.evidence.header": "Identification par les métadonnées de l’en-tête ou la structure des tenseurs.",
+  "modelMeta.evidence.filename": "Variante déduite du nom de fichier ; non confirmée par l’en-tête.",
+  "modelMeta.evidence.unresolved": "Variante non identifiée. Déclarez la famille exacte avant d’utiliser ses réglages par défaut.",
+  "modelMeta.evidence.conflict": "Indices contradictoires sur le modèle. Vérifiez le fichier et déclarez sa famille exacte.",
   "modelMeta.title": "Modifier les métadonnées…",
   "modelMeta.filename": "Nom du fichier",
   "modelMeta.path": "Chemin exact",

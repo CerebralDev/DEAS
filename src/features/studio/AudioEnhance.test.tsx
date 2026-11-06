@@ -21,6 +21,22 @@ async function mount(source?: { sourceId: string }) {
   await act(async () => { fireEvent.focus(mode()); });
 }
 
+test.each(['post', 'tve'] as const)('optional engines stay visible and installed buttons are blocked in %s', async scope => {
+  vi.mocked(invoke).mockImplementation(async command => command === 'native_audio_enhance_capabilities'
+    ? { clean: true, deep: true, stems: false }
+    : command === 'native_audio_enhance_install_status' ? { running: false, mode: '', stage: '', downloaded: 0, total: 0 } : null);
+  await act(async () => { render(<I18nProvider><AudioEnhance scope={scope}/></I18nProvider>); });
+  await act(async () => { fireEvent.focus(mode()); });
+  const group = screen.getByRole('group', { name: 'Optional audio engines' });
+  expect(group.tagName).toBe('DIV');
+  const deep = group.querySelector<HTMLButtonElement>('[data-audio-enhance-install="deep"]')!;
+  const stems = group.querySelector<HTMLButtonElement>('[data-audio-enhance-install="stems"]')!;
+  expect(deep.disabled).toBe(true);
+  expect(stems.disabled).toBe(false);
+  fireEvent.click(deep);
+  expect(invoke).not.toHaveBeenCalledWith('native_audio_enhance_install', expect.anything());
+});
+
 test('defaults off, disables unavailable engines and requires a source', async () => {
   await mount();
   expect(mode().value).toBe('off');
@@ -132,7 +148,7 @@ test('installation needs explicit consent and never reports readiness before a s
   expect(mode().querySelector<HTMLOptionElement>('[value="deep"]')!.disabled).toBe(true);
   await act(async () => { finish(); });
   expect(mode().querySelector<HTMLOptionElement>('[value="deep"]')!.disabled).toBe(false);
-  expect(document.querySelector('[data-audio-enhance-install="deep"]')).toBeNull();
+  expect((document.querySelector('[data-audio-enhance-install="deep"]') as HTMLButtonElement).disabled).toBe(true);
   expect(mode().value).toBe('off');
   consent.mockRestore();
 });

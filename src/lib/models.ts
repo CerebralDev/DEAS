@@ -4,7 +4,8 @@ export interface ModelSettings { sampler?:string; scheduler?:string; steps?:numb
 export interface CivitaiInfo { modelId:number; versionId:number; name:string; version:string; modelType:string; category:string; base?:string; nsfw:boolean; trainedWords:string[]; preview?:string; settings?:ModelSettings }
 export interface ModelInfo { sha256:string; size:number; fetchedAt:number; civitai:CivitaiInfo|null }
 /** `family` is effective (declaration or detection); metadataError blocks execution, even for unknown checkpoints. */
-export interface LocalModel { category:string; name:string; path:string; size:number; info:ModelInfo|null; family?:string; detectedFamily?:string; familyOverride?:string; metadataError?:string; /** Header-detected companion architecture; absent means unknown, not compatible. */ component?:string; /** `truncated` when the safetensors header covers payload the file does not hold. */ integrity?:string }
+export type FamilyEvidence = 'header' | 'filename' | 'unresolved' | 'conflict';
+export interface LocalModel { category:string; name:string; path:string; size:number; info:ModelInfo|null; family?:string; detectedFamily?:string; /** ACE-Step automatic identity evidence, independent of manual declaration. */ familyEvidence?:FamilyEvidence; familyOverride?:string; metadataError?:string; /** Header-detected companion architecture; absent means unknown, not compatible. */ component?:string; /** `truncated` when the safetensors header covers payload the file does not hold. */ integrity?:string }
 export const scanModels=(root:string,extraRoots:string[]=[])=>invoke<LocalModel[]>('native_models_scan',extraRoots.length?{root,extraRoots}:{root});
 /** Hashes the file once (cached), asks CivitAI by hash and writes `<file>.deas.json`. */
 export const fetchModelInfo=(path:string,authenticated:boolean)=>invoke<LocalModel>('native_model_info',{path,authenticated});

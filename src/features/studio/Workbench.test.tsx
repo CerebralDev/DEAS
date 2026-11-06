@@ -4,6 +4,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { Workbench } from './Workbench';
 import { defaultOptions } from './OptionsPanel';
+import {normalizeAceDuration,defaultAceSettings,type AceStepFamily} from '../../lib/musicIntent';
 import { applyStudioSettings, captureStudioSettings } from '../../lib/preferences';
 import { aspects, resolutions } from '../../lib/resolution';
 import type { HistoryRecord } from './history';
@@ -833,6 +834,40 @@ test('native preview drop is bounded to the visible stage and resolves a local v
  await waitFor(()=>expect(screen.getByLabelText('Prompt')).toHaveProperty('value','native clip prompt'));
  expect(readImageMetadata).toHaveBeenCalledWith('/outside/clip.mp4');
  expect(runWorkbenchJob).not.toHaveBeenCalled();expect(uploadInput).not.toHaveBeenCalled();
+ vi.mocked(invoke).mockImplementation(previous);
+});
+test('native drop positions arrive already logical on WebKitGTK despite fractional scaling',async()=>{
+ localStorage.setItem('deas.pref.interface.experience',JSON.stringify('advanced'));
+ vi.mocked(scanModels).mockResolvedValue([{category:'checkpoints',name:'a.safetensors',family:'sdxl',path:'/m/a',size:1,info:null}]);
+ vi.mocked(checkRecipePrerequisites).mockResolvedValue(evidence);
+ const previous=vi.mocked(invoke).getMockImplementation()!;
+ vi.mocked(invoke).mockImplementation(async(command,args)=>command==='native_media_describe'?[{name:'clip.mp4',path:'/outside/clip.mp4',kind:'file',media:'video',size:1,modified:1,symlink:false}]:previous(command,args));
+ vi.mocked(readImageMetadata).mockResolvedValue([['parameters','scaled drop prompt\nSteps: 7, Sampler: Euler, CFG scale: 3, Seed: 11, Size: 512x512']]);
+ Object.defineProperty(window,'devicePixelRatio',{configurable:true,value:1.25});
+ try{
+  render(<I18nProvider><Workbench endpoint={evidence.baseUrl} roots={{models:'/m'}}/></I18nProvider>);
+  await waitFor(()=>expect(document.querySelector<HTMLButtonElement>('[data-run]')!.disabled).toBe(false));
+  const stage=screen.getByRole('region',{name:'Preview'});
+  vi.spyOn(stage,'getBoundingClientRect').mockReturnValue({left:100,top:600,right:500,bottom:800,width:400,height:200,x:100,y:600,toJSON:()=>({})});
+  act(()=>{for(const handler of nativeDrops)handler({payload:{type:'drop',paths:['/outside/clip.mp4'],position:{x:300,y:700}}});});
+  await waitFor(()=>expect(screen.getByLabelText('Prompt')).toHaveProperty('value','scaled drop prompt'));
+ }finally{Object.defineProperty(window,'devicePixelRatio',{configurable:true,value:1});vi.mocked(invoke).mockImplementation(previous);}
+});
+test('beginner starting image row accepts a native OS drop',async()=>{
+ vi.mocked(scanModels).mockResolvedValue([{category:'checkpoints',name:'a.safetensors',family:'sdxl',path:'/m/a',size:1,info:null}]);
+ vi.mocked(checkRecipePrerequisites).mockResolvedValue(evidence);
+ const previous=vi.mocked(invoke).getMockImplementation()!;
+ vi.mocked(invoke).mockImplementation(async(command,args)=>command==='native_media_describe'?[{name:'clip.png',path:'/m/clip.png',kind:'file',media:'image',size:1,modified:1,symlink:false}]:previous(command,args));
+ vi.mocked(readImageMetadata).mockResolvedValue([]);
+ render(<I18nProvider><Workbench endpoint={evidence.baseUrl} roots={{models:'/m'}} beginner/></I18nProvider>);
+ await waitFor(()=>expect(document.querySelector('[data-beginner-aspect]')).not.toBeNull());
+ fireEvent.change(document.querySelector('#beginner-mode')!,{target:{value:'i2v'}});
+ expect(document.querySelector('.beginner-preview-hint')!.textContent).toContain('Pick an image');
+ expect(document.querySelector('.beginner-empty-preview')!.textContent).toContain('watch your imagination take shape here');
+ const row=await waitFor(()=>{const el=document.querySelector('.beginner-input');if(!el)throw Error('no input row');return el;});
+ vi.spyOn(row as HTMLElement,'getBoundingClientRect').mockReturnValue({left:20,top:20,right:320,bottom:80,width:300,height:60,x:20,y:20,toJSON:()=>({})});
+ act(()=>{for(const handler of nativeDrops)handler({payload:{type:'drop',paths:['/m/clip.png'],position:{x:170,y:50}}});});
+ await waitFor(()=>expect(row.textContent).toContain('clip.png'));
  vi.mocked(invoke).mockImplementation(previous);
 });
 test.each(['edit','edit back','selection','base','base revert','new drop','unmount'] as const)('late metadata cannot overwrite a newer %s',async change=>{
@@ -4490,7 +4525,7 @@ const yue2Models=[
  {category:'checkpoints',name:'yue2_3b.safetensors',path:'/m/checkpoints/yue2_3b.safetensors',size:1,info:null,family:'yue2'},
  {category:'checkpoints',name:'a.safetensors',path:'/m/checkpoints/a.safetensors',size:1,info:null}] as const;
 const musicNodes=['YuE2GenerateABC','YuE2GenerateMusic','ConditioningZeroOut','EmptyYuE2LatentAudio','VAEDecodeAudio','SaveAudioAdvanced','LoadAudio','AudioEncoderLoader','SheetSage2AudioToABC'];
-const musicEvidence=(extra:Partial<typeof evidence.allowlist&{audioEncoders:string[]}>={})=>({...evidence,allowlist:{...evidence.allowlist,nodes:[...evidence.allowlist.nodes,...musicNodes],checkpoints:['yue2_3b.safetensors','a.safetensors'],samplers:[...evidence.allowlist.samplers,'dpm_2'],schedulers:[...evidence.allowlist.schedulers,'sgm_uniform'],audioEncoders:['sheetsage2_bf16.safetensors'],...extra}});
+const musicEvidence=(extra:Partial<typeof evidence.allowlist&{audioEncoders:string[];diffusionModels:string[];dualTextEncoders:string[];textEncoders:string[];vaes:string[]}>={})=>({...evidence,allowlist:{...evidence.allowlist,nodes:[...evidence.allowlist.nodes,...musicNodes],checkpoints:['yue2_3b.safetensors','a.safetensors'],samplers:[...evidence.allowlist.samplers,'dpm_2'],schedulers:[...evidence.allowlist.schedulers,'sgm_uniform'],audioEncoders:['sheetsage2_bf16.safetensors'],...extra}});
 const musicJob=(id:string):JobStatus=>({id,baseUrl:'http://127.0.0.1:7801/',promptId:'p',state:'queued',outputs:[],error:null,generationReady:false});
 async function mountMusic(pipeline:'Music (Text to Music)'|'Music (Cover Music)',planVisible=false,allow=musicEvidence()){
  vi.mocked(scanModels).mockResolvedValue([...yue2Models]);vi.mocked(checkRecipePrerequisites).mockResolvedValue(allow);
@@ -4734,7 +4769,20 @@ test('beginner submits through the real Workbench adapter and restores advanced 
  await waitFor(()=>expect(captureStudioSettings()['studio.run.cfg']).toBe(3.5));
  expect(JSON.parse(localStorage.getItem('deas.pref.studio.run.cfg')!)).toBe(7);
  fireEvent.change(document.querySelector('[data-run-positive]')!,{target:{value:'A house by a lake'}});
- const button=screen.getByRole('button',{name:'Generate'});await waitFor(()=>expect(button).toHaveProperty('disabled',false));
+ const button=screen.getByRole('button',{name:'Run'});await waitFor(()=>expect(button).toHaveProperty('disabled',false));
+ expect(button.closest('#studio-queue')).not.toBeNull();
+ expect(document.querySelector('.beginner-studio-heading')).toBeNull();
+ expect(document.querySelector('.beginner-local-badge')).toBeNull();
+ expect(document.querySelector('.beginner-composer-top')).toBeNull();
+ expect(document.querySelector('[data-run-positive]')!.getAttribute('placeholder')).toBe('Describe what you imagine…');
+ expect(document.querySelector('.beginner-composer')!.closest('#studio-settings')).not.toBeNull();
+ expect(document.querySelector('#project-actions-slot')!.hasAttribute('hidden')).toBe(true);
+ expect(document.querySelector('#project-status-slot')!.hasAttribute('hidden')).toBe(true);
+ expect(screen.getByRole('heading',{name:'What will you bring to life?'})).toBeTruthy();
+ expect(document.querySelector('.beginner-empty-preview')!.textContent).toContain('watch your imagination take shape here');
+ expect(document.querySelectorAll('[data-run-positive]')).toHaveLength(1);
+ expect(document.querySelector('[data-run-positive]')!.closest('.wb-center')).not.toBeNull();
+ expect(screen.getByRole('button',{name:'Recent generations'}).closest('#studio-queue')).not.toBeNull();
  expect(runWorkbenchJob).not.toHaveBeenCalled();fireEvent.click(button);
  await waitFor(()=>expect(runWorkbenchJob).toHaveBeenCalledTimes(1));
  expect(vi.mocked(runWorkbenchJob).mock.lastCall![1]).toMatchObject({positivePrompt:'A house by a lake',negativePrompt:'',checkpoint:'a.safetensors',cfg:3.5,steps:28,sampler:'euler',scheduler:'normal'});
@@ -4772,7 +4820,7 @@ test('beginner LoRAs use known matching families, native strengths and Ctrl+Ente
  fireEvent.change(screen.getByRole('combobox',{name:'Add a LoRA…'}),{target:{value:'watercolor.safetensors'}});
  fireEvent.change(screen.getByRole('spinbutton',{name:/watercolor/}),{target:{value:'0.65'}});
  expect(runWorkbenchJob).not.toHaveBeenCalled();expect(JSON.parse(localStorage.getItem('deas.pref.studio.run.loras')!)).toEqual(advanced);
- const run=screen.getByRole('button',{name:'Generate'});await waitFor(()=>expect(run).toHaveProperty('disabled',false));
+ const run=screen.getByRole('button',{name:'Run'});await waitFor(()=>expect(run).toHaveProperty('disabled',false));
  fireEvent.keyDown(window,{key:'Enter',ctrlKey:true});await waitFor(()=>expect(runWorkbenchJob).toHaveBeenCalledTimes(1));
  expect(vi.mocked(runWorkbenchJob).mock.lastCall![1]).toMatchObject({family:'sdxl',loras:[{name:'watercolor.safetensors',strength:0.65}]});
  view.rerender(<I18nProvider><Workbench {...props} beginner={false}/></I18nProvider>);await waitFor(()=>expect(captureStudioSettings()['studio.run.loras']).toEqual(advanced));
@@ -4794,7 +4842,7 @@ test('beginner format and quality reuse the shared aspect and resolution options
  fireEvent.change(aspect,{target:{value:'3:4'}});fireEvent.change(resolution,{target:{value:'1024p'}});
  expect(captureStudioSettings()['studio.run.aspect']).toBe('3:4');expect(captureStudioSettings()['studio.run.resolution']).toBe('1024p');
  fireEvent.change(document.querySelector('[data-run-positive]')!,{target:{value:'A house by a lake'}});
- const button=screen.getByRole('button',{name:'Generate'});await waitFor(()=>expect(button).toHaveProperty('disabled',false));
+ const button=screen.getByRole('button',{name:'Run'});await waitFor(()=>expect(button).toHaveProperty('disabled',false));
  fireEvent.click(button);
  await waitFor(()=>expect(runWorkbenchJob).toHaveBeenCalledTimes(1));
  // model-exact: SDXL 3:4 at 1 MP snaps to 896x1152 on the family grid
@@ -4802,4 +4850,110 @@ test('beginner format and quality reuse the shared aspect and resolution options
  // shared canvas intent survives the round-trip into advanced
  view.rerender(<I18nProvider><Workbench endpoint={evidence.baseUrl} roots={{models:'/m'}} beginner={false}/></I18nProvider>);
  expect(captureStudioSettings()['studio.run.aspect']).toBe('3:4');expect(captureStudioSettings()['studio.run.resolution']).toBe('1024p');
+});
+
+test('beginner resizes and collapses the prompt below preview without changing the Advanced media dock',async()=>{
+ vi.mocked(scanModels).mockResolvedValue([{name:'a.safetensors',category:'checkpoints',path:'/m/a',size:1,info:null,family:'sdxl'}]);
+ vi.mocked(checkRecipePrerequisites).mockResolvedValue(evidence);
+ localStorage.setItem('deas.pref.studio.dock.height','300');
+ const props={endpoint:evidence.baseUrl,roots:{models:'/m'}};
+ const view=render(<I18nProvider><Workbench {...props} beginner/></I18nProvider>);
+ await waitFor(()=>expect(captureStudioSettings()['studio.run.cfg']).toBe(3.5));
+ const dock=document.getElementById('studio-dock')!,prompts=document.getElementById('studio-prompts')!;
+ expect(dock.hidden).toBe(true);
+ const handle=screen.getByRole('separator',{name:'Resize prompt area'});
+ expect(handle.getAttribute('aria-controls')).toBe('studio-prompts');
+ fireEvent.keyDown(handle,{key:'ArrowUp'});expect(handle.getAttribute('aria-valuenow')).toBe('126');
+ fireEvent.change(document.querySelector('[data-run-positive]')!,{target:{value:'Keep this prompt'}});
+ fireEvent.click(screen.getByRole('button',{name:'Collapse prompt area'}));expect(prompts.hidden).toBe(true);
+ fireEvent.keyDown(handle,{key:'ArrowUp'});expect(handle.getAttribute('aria-valuenow')).toBe('126');
+ fireEvent.click(screen.getByRole('button',{name:'Expand prompt area'}));expect(prompts.hidden).toBe(false);
+ expect(document.querySelector('[data-run-positive]')).toHaveProperty('value','Keep this prompt');
+ act(()=>window.dispatchEvent(new Event('deas:reset-studio-layout')));
+ expect(handle.getAttribute('aria-valuenow')).toBe('110');
+ expect(screen.getByRole('button',{name:'Collapse prompt area'}).getAttribute('aria-expanded')).toBe('true');
+ view.rerender(<I18nProvider><Workbench {...props} beginner={false}/></I18nProvider>);
+ expect(dock.hidden).toBe(false);expect(prompts.hidden).toBe(false);
+ expect(screen.queryByRole('separator',{name:'Resize prompt area'})).toBeNull();
+});
+
+// ACE-Step authoring uses the shared music pipeline, never YuE2 conditioning.
+const aceVariants=[
+ ['ace-step-1-0',50,5,5],['ace-step-1-5-base',50,7,1],['ace-step-1-5-sft',50,7,1],['ace-step-1-5-turbo',8,1,3],
+ ['ace-step-1-5-xl-base',50,6,3],['ace-step-1-5-xl-sft',50,7,3],['ace-step-1-5-xl-turbo',8,1,3],
+] as const;
+const aceModel=(family:string,category='checkpoints')=>({category,name:`${family}.safetensors`,path:`/m/${category}/${family}.safetensors`,size:1,info:null,family});
+const aceNodes=['LatentOperationTonemapReinhard','LatentApplyOperationCFG','KSampler','ConditioningZeroOut','VAEDecodeAudio','SaveAudioAdvanced','CheckpointLoaderSimple','ModelSamplingSD3','ModelSamplingAuraFlow','TextEncodeAceStepAudio','EmptyAceStepLatentAudio','TextEncodeAceStepAudio1.5','EmptyAceStep1.5LatentAudio','UNETLoader','DualCLIPLoader','VAELoader'];
+async function mountAce(category='checkpoints',missing:string[]=[]) {
+ const ms=aceVariants.map(([f])=>aceModel(f,category));
+ vi.mocked(scanModels).mockResolvedValue([...ms,aceModel('ace-step'),aceModel('ace-step-1-5'),aceModel('ace-step-1-5-xl'),...yue2Models]);
+ vi.mocked(checkRecipePrerequisites).mockResolvedValue(musicEvidence({nodes:aceNodes.filter(n=>!missing.includes(n)),checkpoints:ms.map(m=>m.name),diffusionModels:ms.map(m=>m.name)}));
+ vi.mocked(invoke).mockImplementation(async command=>command==='native_media_star_status'?{starred:false,unavailable:null}:command==='native_jobs_history'?{schemaVersion:1,records:[],readOnly:false,error:null}:{path:'/env/ComfyUI/input',parent:'/env',entries:[],truncated:false});
+ vi.mocked(runWorkbenchJob).mockImplementation(async()=>musicJob('job-ace'));
+ const view=render(<I18nProvider><Workbench endpoint={evidence.baseUrl} root="/env" roots={{models:'/m'}}/></I18nProvider>);
+ await waitFor(()=>expect(pipe('Music (Text to Music)').disabled).toBe(false));choosePipe('Music (Text to Music)');
+ await screen.findByRole('textbox',{name:'Style'});
+ return view;
+}
+const aceControl=(key:string)=>document.querySelector<HTMLInputElement|HTMLSelectElement>(`[data-ace-setting="${key}"]`)!;
+const changeAceModel=(family:string)=>fireEvent.change(screen.getByRole('combobox',{name:'Checkpoint'}),{target:{value:`${family}.safetensors`}});
+test.each(aceVariants)('ACE authoring %s submits variant defaults and no YuE2/image fields',async(family,steps,cfg,shift)=>{
+ await mountAce();changeAceModel(family);
+ const picker=screen.getByRole('combobox',{name:'Checkpoint'}) as HTMLSelectElement;
+ for(const f of ['ace-step','ace-step-1-5','ace-step-1-5-xl'])expect([...picker.options].some(o=>o.value===`${f}.safetensors`)).toBe(false);
+ expect(document.querySelector('[data-num="steps"]')).toHaveProperty('value',String(steps));expect(document.querySelector('[data-num="cfg"]')).toHaveProperty('value',String(cfg));
+ expect(aceControl('shift')).toHaveProperty('value',String(shift));
+ expect(screen.queryByLabelText('ABC Planning')).toBeNull();expect(document.querySelector('[data-music-generation-settings]')).toBeNull();expect(document.querySelector('.forge-hammer')).toBeNull();
+ expect(screen.queryByRole('textbox',{name:'Negative prompt'})).toBeNull();expect(screen.queryByLabelText('Width')).toBeNull();
+ if(family==='ace-step-1-0'){expect(aceControl('lyricsStrength')).toHaveProperty('value','1');expect(aceControl('bpm')).toBeNull();}
+ else {expect(aceControl('generateAudioCodes')).toHaveProperty('checked',true);expect(aceControl('lmCfg')).toHaveProperty('value','2');expect(aceControl('temperature')).toHaveProperty('value','0.85');}
+ fireEvent.change(music().style,{target:{value:'Ambient piano'}});fireEvent.change(music().lyrics,{target:{value:''}});
+ const run=screen.getByRole('button',{name:'Run'});await waitFor(()=>expect(run).toHaveProperty('disabled',false));fireEvent.click(run);
+ await waitFor(()=>expect(runWorkbenchJob).toHaveBeenCalledTimes(1));
+ const intent=vi.mocked(runWorkbenchJob).mock.lastCall![1];expect(intent).toMatchObject({family,mode:'t2m',planning:'off',steps,cfg,sampler:'euler',scheduler:'simple',ace:{...defaultAceSettings,shift},style:'Ambient piano',lyrics:'',maxDuration:normalizeAceDuration(120,family)});
+ for(const key of ['abc','generation','sourceAudio','audioEncoder','options','loras','diffusion'])expect(intent).not.toHaveProperty(key);
+ expect(uploadInput).not.toHaveBeenCalled();
+});
+test('ACE model in unet remains selectable for Text to Music',async()=>{
+ await mountAce('unet');changeAceModel('ace-step-1-5-turbo');
+ expect(screen.getByRole('combobox',{name:'Checkpoint'})).toHaveProperty('value','ace-step-1-5-turbo.safetensors');
+ expect(aceControl('shift')).toHaveProperty('value','3');
+ expect(document.querySelector('[data-num="steps"]')).toHaveProperty('value','8');
+ expect(screen.getByRole('combobox',{name:'Text encoder'})).toBeTruthy();
+ expect(runWorkbenchJob).not.toHaveBeenCalled();
+});
+
+test('ACE initial auto-selection applies its profile before accepting authored overrides',async()=>{
+ localStorage.setItem('deas.pref.studio.run.pipeline',JSON.stringify('t2m'));
+ await mountAce();
+ expect(document.querySelector('[data-num="steps"]')).toHaveProperty('value','50');
+ fireEvent.change(document.querySelector('[data-num="steps"]')!,{target:{value:'21'}});
+ expect(document.querySelector('[data-num="steps"]')).toHaveProperty('value','21');
+ expect(runWorkbenchJob).not.toHaveBeenCalled();
+});
+
+test('ACE upgrades a remembered checkpoint to its profile without rewriting bound saved overrides',async()=>{
+ localStorage.setItem('deas.pref.studio.run.pipeline',JSON.stringify('t2m'));
+ localStorage.setItem('deas.pref.studio.run.checkpoint',JSON.stringify('ace-step-1-5-turbo.safetensors'));
+ localStorage.setItem('deas.pref.studio.run.steps','20');
+ const view=await mountAce();
+ expect(document.querySelector('[data-num="steps"]')).toHaveProperty('value','8');
+ fireEvent.change(document.querySelector('[data-num="steps"]')!,{target:{value:'14'}});
+ view.unmount();
+ await mountAce();
+ expect(document.querySelector('[data-num="steps"]')).toHaveProperty('value','14');
+});
+
+test('ACE authoring keeps empty prompts and explicit per-model settings on revisits without submitting',async()=>{
+ await mountAce();changeAceModel('ace-step-1-5-turbo');
+ fireEvent.change(music().style,{target:{value:'will clear'}});fireEvent.change(music().lyrics,{target:{value:'will clear'}});
+ fireEvent.change(aceControl('shift'),{target:{value:'4.5'}});fireEvent.change(document.querySelector('[data-num="steps"]')!,{target:{value:'11'}});fireEvent.click(aceControl('generateAudioCodes'));
+ changeAceModel('ace-step-1-5-xl-sft');expect(aceControl('shift')).toHaveProperty('value','3');
+ fireEvent.change(music().style,{target:{value:''}});fireEvent.change(music().lyrics,{target:{value:''}});
+ changeAceModel('ace-step-1-5-turbo');expect(music().style.value).toBe('');expect(music().lyrics.value).toBe('');expect(aceControl('shift')).toHaveProperty('value','4.5');expect(aceControl('generateAudioCodes')).toHaveProperty('checked',false);expect(document.querySelector('[data-num="steps"]')).toHaveProperty('value','11');
+ expect(runWorkbenchJob).not.toHaveBeenCalled();expect(uploadInput).not.toHaveBeenCalled();
+});
+test('ACE authoring missing actual conditioning node blocks Run without YuE2 requirements',async()=>{
+ await mountAce('checkpoints',['TextEncodeAceStepAudio1.5']);changeAceModel('ace-step-1-5-turbo');fireEvent.change(music().style,{target:{value:'lofi'}});
+ expect(screen.getByRole('button',{name:'Run'})).toHaveProperty('disabled',true);expect(document.body.textContent).toContain('TextEncodeAceStepAudio1.5');expect(document.body.textContent).not.toContain('YuE2GenerateMusic');
 });

@@ -30,6 +30,14 @@ def assert_viewport(page, label):
     assert g['footer']['position'] == 'fixed' and g['footer']['height'] < 24, (label, 'version reserves workspace space', g)
     if g['active'] and g['activeOnly']:
         assert abs(g['active']['bottom'] - g['frame']['bottom']) <= 2, (label, 'Studio tab does not inherit viewport', g)
+    if page.locator('.aio-utility-tabs').count():
+        utility = page.locator('.aio-utility-tabs')
+        assert utility.locator('[role="tab"]').evaluate_all('(es)=>es.map(e=>e.dataset.studioTab||e.dataset.node)') == ['monitor','map','settings','logs'], label
+        creative = page.locator('.aio-topbar > .aio-tabs').first
+        assert creative.locator('[role="tab"]').evaluate_all('(es)=>es.map(e=>e.dataset.studioTab||e.dataset.node)')[:6] == ['generate','optional-downloads','forge','chat','tve','comfy'], label
+        if g['width'] >= 1440:
+            left, right = creative.bounding_box(), utility.bounding_box()
+            assert left['x']+left['width'] <= right['x']+1, (label,'utility group is not right of creative tabs')
     return g
 
 

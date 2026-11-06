@@ -22,6 +22,33 @@ test('Quick Settings exposes separate layout and authoring reset requests and cl
  view.unmount();target.remove();window.removeEventListener('deas:reset-studio-layout',layout);window.removeEventListener('deas:request-studio-defaults',defaults);
 });
 
+test.each(['beginner','advanced'] as const)('experience switch sits directly above Reset layout and forwards changes from %s',experience=>{
+ localStorage.setItem('deas.locale.v1','en');
+ const onExperience=vi.fn();
+ const view=render(<I18nProvider><QuickSettings experience={experience} onExperience={onExperience}/></I18nProvider>);
+ expect(document.querySelector('.experience-switch')).toBeNull();
+ fireEvent.click(screen.getByRole('button',{name:'Quick Settings'}));
+ const group=document.querySelector('.experience-switch')!;
+ expect(group.nextElementSibling).toBe(screen.getByRole('button',{name:'Reset layout'}));
+ const toggle=screen.getByRole('switch',{name:'Advanced'});
+ expect(toggle.getAttribute('aria-checked')).toBe(String(experience==='advanced'));
+ fireEvent.click(toggle);expect(onExperience).toHaveBeenLastCalledWith(experience==='advanced'?'beginner':'advanced');
+ view.unmount();
+});
+
+test('experience search opens closed Quick Settings and reveals the switch',()=>{
+ localStorage.setItem('deas.locale.v1','en');
+ const view=render(<I18nProvider><QuickSettings experience="advanced" onExperience={vi.fn()}/></I18nProvider>);
+ const entry=searchIndex.find(e=>e.label==='beginner.experience')!;
+ expect(entry).toBeTruthy();
+ expect(document.querySelector(entry.target)).toBeNull();
+ act(()=>{revealTarget(entry.target);});
+ expect(screen.getByRole('button',{name:'Quick Settings'}).getAttribute('aria-expanded')).toBe('true');
+ expect(revealTarget(entry.target).state).toBe('revealed');
+ expect(document.querySelector(entry.target)?.classList.contains('search-flash')).toBe(true);
+ view.unmount();
+});
+
 test('reset actions explain why they are unavailable before Studio mounts',()=>{
  localStorage.setItem('deas.locale.v1','en');
  const request=vi.fn();window.addEventListener('deas:reset-studio-layout',request);window.addEventListener('deas:request-studio-defaults',request);

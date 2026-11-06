@@ -150,3 +150,33 @@ test('a saved tiled refine on a temporal-latent family is named, not silently dr
  const restored=historyRestore(record({...image,refine:{width:2432,height:1664,denoise:0.35,tiled:{tileWidth:1024,tileHeight:1024,overlap:128}}}),{...context,models:[{name:'exact.safetensors',family:'anima'}]});
  expect(restored.unsupported).toContain('refine.tiled');
 });
+
+const aceIntent={recipeId:'music-generation',version:1,family:'ace-step-1-5-xl-sft',mode:'t2m',planning:'off',checkpoint:'ace-xl.safetensors',style:'jazz 猫',lyrics:'',seed:42,maxDuration:30,steps:37,cfg:4.25,sampler:'euler',scheduler:'simple',outputPrefix:'raw/audio/exact',ace:{shift:2.5,lyricsStrength:1,bpm:123,timeSignature:'3',language:'de',keyScale:'D minor',generateAudioCodes:false,lmCfg:3.5,temperature:0.7,topP:0.8,topK:12,minP:0.03},diffusion:{textEncoder:'text.safetensors',textEncoder2:'code.safetensors',vae:'audio-vae.safetensors'},audioEnhance:{mode:'clean',profile:'mix'}} as const;
+
+const aceContext:RestoreContext={...context,models:[{name:aceIntent.checkpoint,family:aceIntent.family}],allow:{...context.allow!,nodes:['VAEDecodeAudio','SaveAudioAdvanced','KSampler','ConditioningZeroOut','TextEncodeAceStepAudio1.5','EmptyAceStep1.5LatentAudio','ModelSamplingAuraFlow','UNETLoader','DualCLIPLoader','VAELoader'],samplers:['euler'],schedulers:['simple'],dualClipTypes:['ace'],dualTextEncoders:['text.safetensors','code.safetensors'],vaes:['audio-vae.safetensors']}};
+test('ACE restore preserves exact submitted family, sampling, settings and split components without YuE2 dependencies',()=>{
+ const original=record(aceIntent),before=JSON.stringify(original),restored=historyRestore(original,aceContext);
+ expect(restored.pipeline).toBe('t2m');expect(restored.unavailable).toEqual([]);expect(restored.unsupported).toEqual([]);
+ expect(restored.source).toBeUndefined();expect(restored.references).toEqual([]);expect(restored.intent).toEqual(aceIntent);expect(restored.intent).not.toBe(original.intent);
+ expect(JSON.stringify(original)).toBe(before);expect(invoke).not.toHaveBeenCalled();
+ const missing=historyRestore(original,{...aceContext,models:[{name:aceIntent.checkpoint,family:'ace-step-1-5-xl-turbo'}],allow:{...aceContext.allow!,nodes:[],dualTextEncoders:[],dualClipTypes:[],vaes:[]}});
+ expect(missing.unavailable).toEqual(expect.arrayContaining(['family: ace-step-1-5-xl-sft','textEncoder: text.safetensors','textEncoder: code.safetensors','vae: audio-vae.safetensors','TextEncodeAceStepAudio1.5']));
+ expect(missing.unavailable.join(' ')).not.toMatch(/YuE2|SheetSage/);
+});
+test.each([
+ {family:'ace-step-1-5'},{family:'ace-step-1-5-xl'},{mode:'cover'},{planning:'full'},{abc:{}},{generation:{}},{sourceAudio:'old.wav'},{audioEncoder:'old.safetensors'},{options:{}},{loras:[]},{ace:undefined},{ace:{...aceIntent.ace,topK:-1}},{ace:{...aceIntent.ace,language:'invalid'}},{maxDuration:30.01},{seed:NaN},{cfg:Infinity},{steps:0},{outputPrefix:null},{diffusion:{...aceIntent.diffusion,textEncoder2:undefined}},{diffusion:{...aceIntent.diffusion,vae:''}},{diffusion:null},{diffusion:{...aceIntent.diffusion,textEncoder2:aceIntent.diffusion.textEncoder}},{unexpected:true},{outputPrefix:'../outside'},{family:'yue2'},{audioEnhance:null},{audioEnhance:{mode:'off',profile:'mix'}},
+])('malformed or incompatible ACE history is blocked without coercion: %j',invalid=>{
+ const intent={...aceIntent,...invalid} as unknown as JobIntent,before=structuredClone(intent);
+ const restored=historyRestore(record(intent),aceContext);
+ expect(restored.unsupported).toContain('music intent');expect(restored.intent).toEqual(before);expect(intent).toEqual(before);expect(invoke).not.toHaveBeenCalled();
+});
+test.each(['ace-step-1-5-base','ace-step-1-5-sft','ace-step-1-5-turbo','ace-step-1-5-xl-base','ace-step-1-5-xl-sft','ace-step-1-5-xl-turbo'] as const)('ACE history retains exact %s variant and explicit nondefault values',family=>{
+ const intent={...aceIntent,family},restored=historyRestore(record(intent),{...aceContext,models:[{name:intent.checkpoint,family}]});
+ expect(restored.unsupported).toEqual([]);expect(restored.unavailable).toEqual([]);expect(restored.intent).toEqual(intent);
+});
+test('original ACE AIO restores without assuming 1.5 components or planning',()=>{
+ const intent={...aceIntent,family:'ace-step-1-0',maxDuration:4096/44100*330,diffusion:undefined} as const;
+ const restored=historyRestore(record(intent),{...aceContext,models:[{name:intent.checkpoint,family:intent.family}],allow:{...aceContext.allow!,nodes:['VAEDecodeAudio','SaveAudioAdvanced','KSampler','ConditioningZeroOut','TextEncodeAceStepAudio','EmptyAceStepLatentAudio','ModelSamplingSD3','LatentOperationTonemapReinhard','LatentApplyOperationCFG','CheckpointLoaderSimple']}});
+ expect(restored.unsupported).toEqual([]);expect(restored.unavailable).toEqual([]);expect(restored.intent).toEqual(intent);
+ expect(historyRestore(record({...intent,diffusion:aceIntent.diffusion}),aceContext).unsupported).toContain('music intent');
+});

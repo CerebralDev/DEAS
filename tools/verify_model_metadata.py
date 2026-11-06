@@ -13,7 +13,8 @@ FIXTURE = layout.FIXTURE + r'''
 const metadataInvoke=window.__TAURI_INTERNALS__.invoke;
 const unknown={category:'diffusion_models',name:'nested/unknown.safetensors',path:'/fixture/models/diffusion_models/nested/unknown.safetensors',size:42,info:null};
 const invalid={...unknown,category:'checkpoints',name:'nested/retired.safetensors',path:'/fixture/models/checkpoints/nested/retired.safetensors',detectedFamily:'sdxl',metadataError:'Unknown model family',info:{sha256:'a'.repeat(64),size:42,fetchedAt:1,civitai:{modelId:2,versionId:1,modelName:'Fixture',versionName:'v1'}}};
-f.models=[unknown,invalid];
+const ace={...unknown,name:'nested/acestep_v1.5_turbo.safetensors',path:'/fixture/models/diffusion_models/nested/acestep_v1.5_turbo.safetensors',family:'ace-step-1-5-turbo',detectedFamily:'ace-step-1-5-turbo',familyEvidence:'filename'};
+f.models=[unknown,invalid,ace];
 window.__TAURI_INTERNALS__.invoke=async(c,a)=>{
  if(c==='native_download_catalog'){f.calls.push({command:c,args:clone(a??{})});return {version:1,providers:[],entries:[]};}
  if(c==='native_model_scan_status'){f.calls.push({command:c,args:clone(a??{})});return {state:'idle',completed:0,total:0,remaining:0,failed:0};}
@@ -25,7 +26,7 @@ window.__TAURI_INTERNALS__.invoke=async(c,a)=>{
   const old=f.models.find(m=>m.path===a.path);if(!old)return fail('foreign metadata path');
   const updated={...old};delete updated.metadataError;delete updated.familyOverride;
   if(a.family===null)updated.family=old.detectedFamily;
-  else {if(a.family!=='anima')return fail('unexpected family');updated.family=a.family;updated.familyOverride=a.family;}
+  else {if(!['anima','ace-step-1-5-sft'].includes(a.family))return fail('unexpected family');updated.family=a.family;updated.familyOverride=a.family;}
   f.models=f.models.map(m=>m.path===a.path?updated:m);return clone(updated);
  }
  return metadataInvoke(c,a);
@@ -68,11 +69,26 @@ def verify(browser, url, shots):
         page.locator('[data-node="studio"]').click()
         expect(page.get_by_role('button', name='nested/retired.safetensors', exact=True)).to_have_attribute('aria-disabled', 'false')
         checks.append('Library reset repairs invalid metadata and updates mounted Studio')
+        ace_tile = page.get_by_role('button', name='nested/acestep_v1.5_turbo.safetensors', exact=True)
+        ace_tile.press('Shift+F10')
+        page.get_by_role('menuitem', name='Edit meta…').click()
+        expect(dialog.locator('[data-model-family-evidence]')).to_have_attribute('data-model-family-evidence', 'filename')
+        expect(dialog.locator('[data-model-family-evidence]')).to_contain_text('not confirmed by the header')
+        page.get_by_label('Model family', exact=True).select_option('ace-step-1-5-sft')
+        page.get_by_role('button', name='Save', exact=True).click()
+        expect(dialog).not_to_be_visible()
+        ace_tile.press('Shift+F10')
+        page.get_by_role('menuitem', name='Edit meta…').click()
+        expect(page.get_by_label('Model family', exact=True)).to_have_value('ace-step-1-5-sft')
+        expect(dialog.locator('[data-model-family-evidence]')).to_have_attribute('data-model-family-evidence', 'filename')
+        page.get_by_role('button', name='Reset to detection').click()
+        expect(dialog).not_to_be_visible()
+        checks.append('ACE filename evidence stays distinct from declared variant and reset')
         for locale in collection.LOCALES:
             collection.set_locale(page, locale, '[data-node="studio"]')
             for width in (1440, 768, 320):
                 page.set_viewport_size({'width': width, 'height': 900})
-                tile.click(button='right')
+                ace_tile.press('Shift+F10')
                 page.get_by_role('menuitem').click()
                 expect(dialog).to_be_visible()
                 bounds = dialog.evaluate('e=>{const r=e.getBoundingClientRect();return {x:r.x,right:r.right,bottom:r.bottom,scroll:e.scrollWidth,client:e.clientWidth}}')
@@ -86,7 +102,7 @@ def verify(browser, url, shots):
                 checks.append(f'{locale}:{width}:dialog fits and Escape closes')
         calls = page.evaluate('__collection.calls')
         writes = [c for c in calls if c['command'] == 'native_model_family_write']
-        assert [c['args']['family'] for c in writes] == ['anima', None], writes
+        assert [c['args']['family'] for c in writes] == ['anima', None, 'ace-step-1-5-sft', None], writes
         forbidden = ('native_workbench_run', 'native_job_prepare', 'native_job_submit', 'native_model_info', 'native_download_start', 'native_backend_start')
         assert not [c for c in calls if c['command'] in forbidden]
         collection.assert_clean(page, errors)

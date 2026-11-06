@@ -1,6 +1,25 @@
 # News
 
-## 0.2.15 BETA
+## 0.2.17 BETA
+
+- Monitoring, Run Plan, Backend and Logs are grouped on the right; creative tabs remain on the left.
+- ACE-Step exports using the `ace-step-1_5` header identifier are recognized correctly, including models found under UNet.
+- This release also publishes the Beginner workspace, optional audio enhancement and ACE-Step improvements listed below.
+
+## 0.2.16 BETA (untagged; shipped in 0.2.17)
+
+- Beginner layout refinement: resize directly between preview and prompt, no lower Media dock, rounded Run/Stop ends, and a full-width Beginner/Advanced light switch in Quick Settings.
+
+- ACE-Step now has Text to Music authoring and native recipes for original 1.0 and resolved 1.5/XL Base, SFT and Turbo, with distinct defaults, AIO/split components and separate code-LM controls. Model detection explains uncertain filename evidence in Edit meta; prompts and model-specific overrides are retained. Graph/UI validation is covered; real-model inference remains unverified.
+
+- Beginner now has one creative invitation in the preview, with pipeline instructions kept below it, no Local workspace badge or project controls, and restored pane resizing/collapse arrows. Switch Beginner/Advanced in Quick Settings just above Reset layout.
+
+- Clicking a Linux preview video now pauses it; clicking again resumes playback. The existing playback buttons remain available.
+
+- Beginner mode now looks and works like the advanced Studio: the positive prompt field with tag help sits under the preview without extra buttons; the job queue and all Generate controls appear on the right. Both modes share the same tab styling without a separate DEAS Studio logo; the separate right-hand Engine button is now a matching **Backend** tab, and **Collection** is now **Media**.
+- Drag-and-drop of files from your desktop into DEAS now lands correctly on Linux screens with scaling, and dropped images can target the Beginner starting-image row directly; theme editors accept images dragged onto their image rows.
+
+## 0.2.15 BETA (previously local-only; shipped in 0.2.17)
 
 - DEAS now asks **You are… A beginner / An advanced user** on first launch. Beginner mode keeps only Generation (model, LoRAs optional, prompt), Models and Collection; the Engine button reaches setup, and the top-right Beginner/Advanced switch restores your full technical workbench untouched. [Beginner mode](BEGINNER-MODE.md).
 

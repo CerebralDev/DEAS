@@ -4,8 +4,9 @@ import { availableSchemes, useScheme, useThemeCatalog,refreshThemePacks } from '
 import './quickSettings.css';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { DICTIONARY_EVENT, reportPromptSpellcheckError, usePromptTools } from '../../lib/promptTools';
+import { ExperienceSwitch, type Experience } from '../beginner/Experience';
 
-export function QuickSettings({root}:{root?:string}={}){
+export function QuickSettings({root,experience='advanced',onExperience}:{root?:string;experience?:Experience;onExperience?:(value:Experience)=>void}={}){
  const themes=useThemeCatalog(root);
  const [folderError,setFolderError]=useState(false);
  const tools=usePromptTools();
@@ -34,6 +35,7 @@ export function QuickSettings({root}:{root?:string}={}){
   <button type="button" ref={button} className="repo-button" aria-label={t('studio.quick.title')} title={t('studio.quick.title')} aria-expanded={open} aria-controls="studio-quick-actions" onClick={()=>setOpen(!open)}>{t('studio.quick.title')}</button>
   {open&&<div id="studio-quick-actions" className="studio-quick-actions" aria-label={t('studio.quick.title')}>
    {!ready&&<p id="studio-quick-unavailable">{t('studio.quick.openStudioFirst')}</p>}
+   {onExperience&&<ExperienceSwitch value={experience} onChange={onExperience}/>}
    <button type="button" disabled={!ready} aria-describedby={!ready?'studio-quick-unavailable':undefined} onClick={()=>request('deas:reset-studio-layout')}>{t('studio.quick.layout')}</button>
    <button type="button" disabled={!ready} aria-describedby={!ready?'studio-quick-unavailable':undefined} onClick={()=>request('deas:request-studio-defaults')}>{t('studio.quick.defaults')}</button>
    {/* Unavailable spellcheck is only greyed here; the explanation lives under Backend. */}

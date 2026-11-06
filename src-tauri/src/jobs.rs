@@ -78,6 +78,7 @@ struct Plan {
 struct LocalModels {
     roots: Vec<std::path::PathBuf>,
     selected: Vec<(String, String)>,
+    music_family: Option<String>,
 }
 
 pub(crate) fn is_gguf(name: &str) -> bool {
@@ -131,7 +132,16 @@ impl LocalModels {
     fn validate(&self) -> Result<(), String> {
         if !self.roots.is_empty() {
             for (field, name) in &self.selected {
-                crate::downloads::models::validate_selected(&self.roots, field, name)?;
+                if let Some(family) = self.music_family.as_deref().filter(|_| field != "loras") {
+                    crate::downloads::models::validate_selected_family(
+                        &self.roots,
+                        field,
+                        name,
+                        Some(family),
+                    )?;
+                } else {
+                    crate::downloads::models::validate_selected(&self.roots, field, name)?;
+                }
             }
         }
         Ok(())
@@ -283,7 +293,7 @@ async fn get(client: &reqwest::Client, base: &reqwest::Url, path: &str) -> Resul
     Ok(value)
 }
 
-fn compile(i: &Value) -> Result<Value, String> {
+pub(crate) fn compile(i: &Value) -> Result<Value, String> {
     if audio_post::settings(i)?.is_some() {
         let mut recipe = i.clone();
         recipe.as_object_mut().unwrap().remove("audioEnhance");
@@ -1597,7 +1607,7 @@ impl Jobs {
                     return Err(format!("Diagnostic {field} are not available on this backend: {model}"));
                 }
             }
-            let mut local_models = LocalModels { roots, selected: vec![] };
+            let mut local_models = LocalModels { roots, selected: vec![], music_family: intent["family"].as_str().filter(|f| music && f.starts_with("ace-step")).map(str::to_owned) };
             for (field, required) in required {
                 if matches!(
                     field,

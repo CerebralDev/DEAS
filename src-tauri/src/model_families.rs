@@ -2,7 +2,19 @@
 //! (shared with the frontend, which reads loaders, pipelines and defaults from it). Like SwarmUI's
 //! class sorter it reads only the safetensors header: `modelspec.architecture` first, then key
 //! signatures; the cached CivitAI base model is the fallback for other formats.
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+
+mod ace_step;
+
+/// Automatic ACE identity provenance, independent of a user's family declaration.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FamilyEvidence {
+    Header,
+    Filename,
+    Unresolved,
+    Conflict,
+}
 use serde_json::Value;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
@@ -170,6 +182,15 @@ fn read_header(path: &Path) -> Option<(serde_json::Map<String, Value>, u64)> {
     let mut buf = vec![0; len as usize];
     file.read_exact(&mut buf).ok()?;
     Some((serde_json::from_slice(&buf).ok()?, meta.len() - 8 - len))
+}
+
+/// A checkpoint loader needs embedded VAE and text encoders, not a bare DiT in that folder.
+/// Both inspected official ACE AIO exports use these core checkpoint namespaces.
+pub(crate) fn ace_checkpoint_has_companions(path: &Path) -> bool {
+    read_header(path).is_some_and(|(head, _)| {
+        head.keys().any(|key| key.starts_with("vae."))
+            && head.keys().any(|key| key.starts_with("text_encoders."))
+    })
 }
 
 /// Folded tensor name → shape, read once per file.
@@ -813,9 +834,17 @@ pub fn detect_component(category: &str, path: &Path) -> Option<&'static str> {
 
 /// Family ID of a model (`checkpoints`, `diffusion_models`, `unet`) or LoRA file; `None` = unknown.
 pub fn detect(category: &str, path: &Path, base: Option<&str>) -> Option<String> {
+    detect_with_evidence(category, path, base).0
+}
+
+pub fn detect_with_evidence(
+    category: &str,
+    path: &Path,
+    base: Option<&str>,
+) -> (Option<String>, Option<FamilyEvidence>) {
     let lora = category == "loras";
     if !lora && !["checkpoints", "diffusion_models", "unet"].contains(&category) {
-        return None;
+        return (None, None);
     }
     let file = path
         .file_name()
@@ -826,17 +855,26 @@ pub fn detect(category: &str, path: &Path, base: Option<&str>) -> Option<String>
     let all: Vec<&Family> = families()
         .iter()
         .filter(|f| {
-            f.file_match.is_empty() || (!lora && f.file_match.iter().any(|s| file.contains(s)))
+            !f.id.starts_with("ace-step")
+                && (f.file_match.is_empty()
+                    || (!lora && f.file_match.iter().any(|s| file.contains(s))))
         })
         .collect();
-    let by_header = (if safetensors(path) {
+    let parsed = if safetensors(path) {
         header(path)
     } else if gguf_file(path) {
         gguf_metadata(path).map(|(keys, arch)| (keys, arch, Vec::new()))
     } else {
         None
-    })
-    .and_then(|(keys, arch, shapes)| {
+    };
+    if !lora {
+        if let Some((keys, arch, shapes)) = &parsed {
+            if let Some((family, evidence)) = ace_step::classify(keys, arch, shapes, &file) {
+                return (Some(family), Some(evidence));
+            }
+        }
+    }
+    let by_header = parsed.and_then(|(keys, arch, shapes)| {
         let declared = !arch.is_empty();
         all.iter()
             .find(|f| declared && f.architectures.iter().any(|a| arch.starts_with(a.as_str())))
@@ -854,14 +892,17 @@ pub fn detect(category: &str, path: &Path, base: Option<&str>) -> Option<String>
                 })
             })
     });
-    by_header
-        .or_else(|| {
-            base.and_then(|b| {
-                all.iter()
-                    .find(|f| f.bases.iter().any(|x| x.eq_ignore_ascii_case(b)))
+    (
+        by_header
+            .or_else(|| {
+                base.and_then(|b| {
+                    all.iter()
+                        .find(|f| f.bases.iter().any(|x| x.eq_ignore_ascii_case(b)))
+                })
             })
-        })
-        .map(|f| f.id.clone())
+            .map(|f| f.id.clone()),
+        None,
+    )
 }
 
 #[cfg(test)]

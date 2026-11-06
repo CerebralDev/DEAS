@@ -143,6 +143,7 @@
 .aio-setup > .aio-decision-area { flex: 1; min-height: 0; }
 .aio-topbar { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 4px; margin-bottom: 4px; flex: none; }
 .aio-topbar .aio-tabs { flex: 1; margin: 0; gap: 3px; }
+.aio-topbar .aio-utility-tabs { flex: 0 1 auto; justify-content: flex-end; margin-left: auto; }
 .aio-topbar .repo-links { margin-left: auto; flex: none; padding-top: 2px; }
 /* In the topbar the cluster aligns as a unit; the studio-quick auto margin belongs to the Studio toolbar only. */
 .aio-topbar .studio-quick { margin-left: 0; padding-top: 2px; }

@@ -90,7 +90,7 @@ describe('automatic-first installation — read-only mock IPC fixtures',()=>{
  });
  it('puts Backend/Logs after Comfy and directly exposes backend settings and provider authorization',()=>{
   mount();
-  expect([...document.querySelectorAll('.aio-tabs > [role="tab"]')].map(el=>el.textContent)).toEqual(['Studio','Library','Prompt Forge','Chat','TVE','Monitoring','Run Plan','Comfy','Backend','Logs']);
+  expect([...document.querySelectorAll('.aio-tabs > [role="tab"]')].map(el=>el.textContent)).toEqual(['Studio','Library','Prompt Forge','Chat','TVE','Comfy','Monitoring','Run Plan','Backend','Logs']);
   fireEvent.click(screen.getByRole('tab',{name:'Backend'}));
   expect(screen.getByLabelText('Language')).toBeTruthy();
   expect(screen.getByRole('region',{name:'Provider authorization'})).toBeTruthy();
@@ -102,7 +102,8 @@ describe('automatic-first installation — read-only mock IPC fixtures',()=>{
   render(<I18nProvider><AiOSetup studio={<input aria-label="Studio draft" defaultValue="keep me"/>} onConnectExisting={vi.fn()}/></I18nProvider>);
   fireEvent.click(screen.getByRole('tab',{name:'Studio'}));
   const draft=screen.getByLabelText('Studio draft');
-  const tabs=screen.getAllByRole('tab');expect(tabs.map(x=>x.textContent)).toEqual(['Studio','Library','Prompt Forge','Chat','TVE','Monitoring','Run Plan','Comfy','Backend','Logs']);
+  const tabs=screen.getAllByRole('tab');expect(tabs.map(x=>x.textContent)).toEqual(['Studio','Library','Prompt Forge','Chat','TVE','Comfy','Monitoring','Run Plan','Backend','Logs']);
+  expect([...document.querySelectorAll('.aio-utility-tabs > [role="tab"]')].map(el=>el.textContent)).toEqual(['Monitoring','Run Plan','Backend','Logs']);
   fireEvent.click(screen.getByRole('tab',{name:'Comfy'}));
   expect(document.querySelector('.comfy-loading')?.textContent).toContain('Waiting for backend');
   expect(document.querySelector('.comfy-loading .aio-spinner')).not.toBeNull();
@@ -523,6 +524,36 @@ describe('automatic-first installation — read-only mock IPC fixtures',()=>{
 it('numbers the next folder after an unfinished install',()=>{
  expect(nextFolder('C:\deas-environment')).toBe('C:\deas-environment-2');
  expect(nextFolder('/env/deas-environment-2/')).toBe('/env/deas-environment-3');
+});
+
+it.each(['beginner','advanced'] as const)('keeps the %s experience switch only inside Quick Settings',async experience=>{
+ const onExperience=vi.fn();
+ render(<I18nProvider><AiOSetup experience={experience} onExperience={onExperience} onConnectExisting={vi.fn()}/></I18nProvider>);
+ expect(document.querySelector('.experience-switch')).toBeNull();
+ fireEvent.click(screen.getByRole('button',{name:'Quick Settings'}));
+ const switches=document.querySelectorAll('.experience-switch');
+ expect(switches).toHaveLength(1);
+ expect(switches[0].parentElement?.id).toBe('studio-quick-actions');
+ expect(switches[0].nextElementSibling).toBe(screen.getByRole('button',{name:'Reset layout'}));
+ const next=experience==='beginner'?'Advanced':'Beginner';
+ fireEvent.click(screen.getByRole('switch',{name:'Advanced'}));
+ expect(onExperience).toHaveBeenCalledWith(next.toLowerCase());
+});
+
+it('beginner navigation uses the shared tab band without a separate wordmark',async()=>{
+ const onBeginnerPage=vi.fn();
+ render(<I18nProvider><AiOSetup experience='beginner' onExperience={vi.fn()} beginnerPage='generate' onBeginnerPage={onBeginnerPage} onConnectExisting={vi.fn()} onInstalled={vi.fn()}/></I18nProvider>);
+ const tabs=[...document.querySelectorAll('.aio-tabs > [role="tab"]')];
+ expect(tabs.map(el=>el.getAttribute('data-beginner-tab'))).toEqual(['generate','models','collection',null]);
+ expect(tabs.every(el=>el.classList.contains('aio-tab'))).toBe(true);
+ expect(document.querySelector('.beginner-app-logo')).toBeNull();
+ fireEvent.click(tabs[1]);expect(onBeginnerPage).toHaveBeenCalledWith('models');
+ await waitFor(()=>expect(tabs[0].getAttribute('aria-selected')).toBe('true'));
+ const backend=screen.getByRole('tab',{name:'Backend'});
+ expect(backend.closest('.beginner-backend-tabs')).not.toBeNull();
+ fireEvent.click(backend);
+ await waitFor(()=>expect(backend.getAttribute('aria-selected')).toBe('true'));
+ expect(tabs.slice(0,3).every(el=>el.getAttribute('aria-selected')==='false')).toBe(true);
 });
 
 it('a first-run beginner without an installed environment lands on the backend wizard',async()=>{

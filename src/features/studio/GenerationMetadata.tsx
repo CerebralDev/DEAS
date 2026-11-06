@@ -1,6 +1,6 @@
 import { isVideoEnhanceIntent, isVideoIntent, latentUpscaleSize, videoPostFrameRate } from '../../lib/videoIntent';
 import { describeVideoPost } from './TvePostControls';
-import { isMusicIntent } from '../../lib/musicIntent';
+import { isAceMusicIntent, isMusicIntent } from '../../lib/musicIntent';
 import { useContext, useEffect, useState, type ReactNode } from 'react';
 import { isTauri } from '@tauri-apps/api/core';
 import type { MediaItem } from '../../lib/media';
@@ -36,6 +36,7 @@ export function GenerationMetadata({job,media=null,onRestore}:{job:JobStatus|nul
  const duration=generationDuration(job,locale);
  // Image intents list every field; video intents share the sampling rows plus frames/fps and the family block.
  const intent=job?.intent;const v=intent&&isVideoIntent(intent)?intent:undefined;const i=intent&&isImageIntent(intent)?intent:undefined;const m=intent&&isMusicIntent(intent)?intent:undefined;const e=intent&&isVideoEnhanceIntent(intent)?intent:undefined;
+ const ace=m&&isAceMusicIntent(m)?m:undefined;
  const extensionSeconds=v?.family==='minimax-h3'?v.h3.continuity?.durationSeconds:undefined;
  const row=(key:string,value:ReactNode)=><div key={key}><dt>{t(key)}</dt><dd>{value}</dd></div>;
  const audio=(v??m??e)?.audioEnhance;
@@ -46,10 +47,10 @@ export function GenerationMetadata({job,media=null,onRestore}:{job:JobStatus|nul
   {e?<dl data-tve-metadata>{row('studio.tve.source',e.sourceVideo)}{row('studio.tve.post.title',describeVideoPost(e.videoPost))}{row('studio.tve.fps',`${e.frameRate} → ${videoPostFrameRate(e.frameRate,e.videoPost)}`)}{row('studio.run.seed',e.seed)}{audioRow}{timing}{job?.appVersion&&row('studio.run.metadata.version',job?.appVersion)}</dl>
   :m?<dl data-music-metadata>{/* Music has no image "use these settings"; Recent history restores the whole record. */}
    {row('studio.music.style',m.style)}{m.lyrics&&row('studio.music.lyrics',m.lyrics)}{row('studio.run.checkpoint',m.checkpoint)}
-   {row('studio.music.planning',t(`studio.music.${m.planning}`))}{row('studio.music.maxDuration',`${m.maxDuration} · ${t('studio.music.durationHint')}`)}
+   {ace?<>{row('studio.plan.family',ace.family)}{row('studio.run.textEncoder',ace.diffusion?.textEncoder??t('studio.plan.checkpointParts'))}{ace.diffusion?.textEncoder2&&row('studio.run.textEncoder2',ace.diffusion.textEncoder2)}{row('studio.run.vae',ace.diffusion?.vae??t('studio.plan.checkpointParts'))}{row('studio.music.maxDuration',m.maxDuration)}</>:<>{row('studio.music.planning',t(`studio.music.${m.planning}`))}{row('studio.music.maxDuration',`${m.maxDuration} · ${t('studio.music.durationHint')}`)}</>}
    {m.mode==='cover'&&<>{row('studio.music.source',m.sourceAudio)}{row('studio.music.audioEncoder',m.audioEncoder)}</>}
    {row('studio.run.seed',m.seed)}{row('studio.run.steps',m.steps)}{row('studio.run.cfg',m.cfg)}{row('studio.recipe.sampler',m.sampler)}{row('studio.recipe.scheduler',m.scheduler)}
-   {audioRow}{row('studio.music.generationSettings',JSON.stringify(m.generation))}{m.mode==='t2m'&&m.abc&&row('studio.music.abcSettings',JSON.stringify(m.abc))}
+   {audioRow}{ace?Object.entries(ace.ace).map(([k,v])=>row(`studio.music.ace.${k}`,typeof v==='boolean'?t(v?'studio.plan.yes':'studio.plan.no'):v)):row('studio.music.generationSettings',JSON.stringify(m.generation))}{!ace&&m.mode==='t2m'&&m.abc&&row('studio.music.abcSettings',JSON.stringify(m.abc))}
    {timing}{job?.appVersion&&row('studio.run.metadata.version',job?.appVersion)}
   </dl>:v?<>{onRestore&&job&&<button type="button" className="wb-dock-action" data-metadata-apply onClick={()=>onRestore(job)}>{t('studio.run.metadata.apply')}</button>}<dl>
    {row('studio.run.positive',v.positivePrompt)}{v.negativePrompt&&row('studio.run.negative',v.negativePrompt)}{row('studio.run.checkpoint',v.model)}{row('studio.run.resolution.title',`${v.width} × ${v.height} · ${extensionSeconds===undefined?`${v.frames} ${t('studio.run.video.frames')} · `:''}${v.frameRate} fps`)}

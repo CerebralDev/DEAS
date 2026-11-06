@@ -30,12 +30,14 @@ const studio: SearchView = 'studio';
 
 export const searchIndex: readonly SearchEntry[] = [
   // Beginner experience
+  { view: studio, studioTab: 'generate', beginnerTab: 'generate', tab: 'beginner.navigation', section: 'beginner.generate', label: 'studio.layout.prompt', target: '[data-beginner-prompt-resize]', aliases: ['prompt height', 'resize', 'preview divider'], reason: 'beginner.switchHint' },
+  { view: studio, studioTab: 'generate', beginnerTab: 'generate', tab: 'beginner.navigation', section: 'beginner.generate', label: 'studio.layout.promptCollapse', target: '[data-pane-toggle="prompt"]', aliases: ['expand prompt', 'hide prompt', 'collapse'], reason: 'beginner.switchHint' },
   { view: studio, studioTab: 'generate', beginnerTab: 'generate', tab: 'beginner.navigation', section: 'beginner.generate', label: 'beginner.generate', target: '[data-beginner-tab="generate"]', aliases: ['create', 'prompt', 'generate'] },
   { view: studio, studioTab: 'generate', beginnerTab: 'models', tab: 'beginner.navigation', section: 'beginner.models', label: 'beginner.models', target: '[data-beginner-tab="models"]', aliases: ['model library', 'discover models'] },
   { view: studio, studioTab: 'generate', beginnerTab: 'collection', tab: 'beginner.navigation', section: 'beginner.collection', label: 'beginner.collection', target: '[data-beginner-tab="collection"]', aliases: ['gallery', 'my creations'] },
   { view: studio, studioTab: 'generate', beginnerTab: 'generate', tab: 'beginner.navigation', section: 'beginner.generate', label: 'studio.run.resolution.aspect', target: '[data-beginner-aspect]', aliases: ['format', 'ratio', 'portrait', 'landscape'] },
   { view: studio, studioTab: 'generate', beginnerTab: 'generate', tab: 'beginner.navigation', section: 'beginner.generate', label: 'studio.run.resolution.title', target: '[data-beginner-resolution]', aliases: ['quality', 'size', 'megapixels'] },
-  { view: studio, studioTab: 'generate', beginnerTab: 'generate', tab: 'beginner.navigation', section: 'beginner.backend', label: 'beginner.backend', target: '.beginner-backend', aliases: ['engine', 'backend setup'] },
+  { view: studio, studioTab: 'generate', beginnerTab: 'generate', tab: 'beginner.navigation', section: 'settings.button', label: 'settings.button', target: '.beginner-backend', aliases: ['engine', 'backend setup'] },
   { view: studio, studioTab: 'generate', tab: 'beginner.navigation', section: 'beginner.experience', label: 'beginner.experience', target: '.experience-switch', aliases: ['beginner', 'advanced', 'mode'] },
   { view: 'backend', tab: 'settings.button', section: 'studio.quick.title', label: 'theme.ui.mouseDoorKnockFourTimesToInviteThe', target: '[data-theme-mouse-door]', aliases: ['mouse', 'cheese', 'easter egg'] },
   { view: 'backend', tab: 'settings.button', section: 'studio.quick.title', label: 'theme.ui.refresh', target: '[data-theme-action="refresh"]', aliases: ['reload themes', 'theme packs'], reason: 'theme.ui.chooseEnvironment' },
@@ -51,6 +53,25 @@ export const searchIndex: readonly SearchEntry[] = [
   { view: studio, studioTab: 'generate', tab: 'setup.tab.studio', section: 'studio.run.settings', label: 'studio.recipe.sampler', target: '[data-pick="studio.recipe.sampler"]' },
   { view: studio, studioTab: 'generate', tab: 'setup.tab.studio', section: 'studio.run.settings', label: 'studio.recipe.scheduler', target: '[data-pick="studio.recipe.scheduler"]' },
   { view: studio, studioTab: 'generate', tab: 'setup.tab.studio', section: 'studio.run.settings', label: 'studio.run.seed', target: '[data-seed]' },
+  // Music authoring
+  {view:studio,studioTab:'generate',tab:'setup.tab.studio',section:'studio.run.pipe.t2m',label:'studio.music.ace.shift',target:'[data-ace-setting="shift"]',aliases:['ACE-Step','music','shift'],reason:'studio.run.pipe.noRecipe'},
+  {view:studio,studioTab:'generate',tab:'setup.tab.studio',section:'studio.run.pipe.t2m',label:'studio.music.ace.lyricsStrength',target:'[data-ace-setting="lyricsStrength"]',aliases:['ACE-Step','music','lyricsStrength'],reason:'studio.run.pipe.noRecipe'},
+  {view:studio,studioTab:'generate',tab:'setup.tab.studio',section:'studio.run.pipe.t2m',label:'studio.music.ace.bpm',target:'[data-ace-setting="bpm"]',aliases:['ACE-Step','music','bpm'],reason:'studio.run.pipe.noRecipe'},
+  {view:studio,studioTab:'generate',tab:'setup.tab.studio',section:'studio.run.pipe.t2m',label:'studio.music.ace.timeSignature',target:'[data-ace-setting="timeSignature"]',aliases:['ACE-Step','music','timeSignature'],reason:'studio.run.pipe.noRecipe'},
+  {view:studio,studioTab:'generate',tab:'setup.tab.studio',section:'studio.run.pipe.t2m',label:'studio.music.ace.language',target:'[data-ace-setting="language"]',aliases:['ACE-Step','music','language'],reason:'studio.run.pipe.noRecipe'},
+  {view:studio,studioTab:'generate',tab:'setup.tab.studio',section:'studio.run.pipe.t2m',label:'studio.music.ace.keyScale',target:'[data-ace-setting="keyScale"]',aliases:['ACE-Step','music','keyScale'],reason:'studio.run.pipe.noRecipe'},
+  {view:studio,studioTab:'generate',tab:'setup.tab.studio',section:'studio.run.pipe.t2m',label:'studio.music.ace.generateAudioCodes',target:'[data-ace-setting="generateAudioCodes"]',aliases:['ACE-Step','music','generateAudioCodes'],reason:'studio.run.pipe.noRecipe'},
+  {view:studio,studioTab:'generate',tab:'setup.tab.studio',section:'studio.run.pipe.t2m',label:'studio.music.ace.lmCfg',target:'[data-ace-setting="lmCfg"]',aliases:['ACE-Step','music','lmCfg'],reason:'studio.run.pipe.noRecipe'},
+  {view:studio,studioTab:'generate',tab:'setup.tab.studio',section:'studio.run.pipe.t2m',label:'studio.music.ace.temperature',target:'[data-ace-setting="temperature"]',aliases:['ACE-Step','music','temperature'],reason:'studio.run.pipe.noRecipe'},
+  {view:studio,studioTab:'generate',tab:'setup.tab.studio',section:'studio.run.pipe.t2m',label:'studio.music.ace.topP',target:'[data-ace-setting="topP"]',aliases:['ACE-Step','music','topP'],reason:'studio.run.pipe.noRecipe'},
+  {view:studio,studioTab:'generate',tab:'setup.tab.studio',section:'studio.run.pipe.t2m',label:'studio.music.ace.topK',target:'[data-ace-setting="topK"]',aliases:['ACE-Step','music','topK'],reason:'studio.run.pipe.noRecipe'},
+  {view:studio,studioTab:'generate',tab:'setup.tab.studio',section:'studio.run.pipe.t2m',label:'studio.music.ace.minP',target:'[data-ace-setting="minP"]',aliases:['ACE-Step','music','minP'],reason:'studio.run.pipe.noRecipe'},
+  {view:studio,studioTab:'generate',tab:'setup.tab.studio',section:'studio.run.pipe.t2m',label:'studio.music.maxDuration',target:'[data-music-duration]',aliases:['ACE-Step','music'],reason:'studio.run.pipe.noRecipe'},
+  {view:studio,studioTab:'generate',tab:'setup.tab.studio',section:'studio.run.pipe.t2m',label:'studio.music.style',target:'[data-music-prompt="style"]',aliases:['ACE-Step','music'],reason:'studio.run.pipe.noRecipe'},
+  {view:studio,studioTab:'generate',tab:'setup.tab.studio',section:'studio.run.pipe.t2m',label:'studio.music.lyrics',target:'[data-music-prompt="lyrics"]',aliases:['ACE-Step','music'],reason:'studio.run.pipe.noRecipe'},
+  {view:studio,studioTab:'generate',tab:'setup.tab.studio',section:'studio.run.pipe.t2m',label:'studio.run.textEncoder',target:'[data-run-component="textEncoders"] select',aliases:['ACE-Step','music'],reason:'studio.run.pipe.noRecipe'},
+  {view:studio,studioTab:'generate',tab:'setup.tab.studio',section:'studio.run.pipe.t2m',label:'studio.run.textEncoder2',target:'[data-run-component="textEncoders2"] select',aliases:['ACE-Step','music'],reason:'studio.run.pipe.noRecipe'},
+  {view:studio,studioTab:'generate',tab:'setup.tab.studio',section:'studio.run.pipe.t2m',label:'studio.run.vae',target:'[data-run-component="vaes"] select',aliases:['ACE-Step','music'],reason:'studio.run.pipe.noRecipe'},
   // Studio · prompts and Run
   { view: studio, studioTab: 'generate', tab: 'setup.tab.studio', section: 'search.section.prompts', label: 'studio.run.positive', target: '#run-positive', aliases: ['prompt', 'text'] },
   { view: studio, studioTab: 'generate', tab: 'setup.tab.studio', section: 'search.section.prompts', label: 'studio.run.negative', target: '#run-negative', aliases: ['prompt', 'exclude'] },
@@ -96,8 +117,8 @@ export const searchIndex: readonly SearchEntry[] = [
   { view: studio, studioTab: 'tve', tab: 'studio.tab.tve', section: 'studio.audioEnhance.title', label: 'studio.audioEnhance.save', target: '[data-audio-enhance="tve"] [data-audio-enhance-run]', aliases: ['audio', 'sound'], reason: 'studio.audioEnhance.hint' },
   { view: studio, studioTab: 'tve', tab: 'studio.tab.tve', section: 'studio.audioEnhance.title', label: 'studio.audioEnhance.cancel', target: '[data-audio-enhance="tve"] [data-audio-enhance-cancel]', aliases: ['audio', 'sound'], reason: 'studio.audioEnhance.hint' },
   { view: studio, studioTab: 'tve', tab: 'studio.tab.tve', section: 'studio.audioEnhance.title', label: 'studio.audioEnhance.installCancel', target: '[data-audio-enhance="tve"] [data-audio-enhance-install-cancel]', aliases: ['audio', 'sound'], reason: 'studio.audioEnhance.hint' },
-  { view: studio, studioTab: 'generate', dockTab: 'post', tab: 'setup.tab.studio', section: 'studio.audioEnhance.title', label: 'studio.audioEnhance.engines', target: '[data-audio-enhance="post"] [data-audio-enhance-engines] summary', aliases: ['audio', 'engine', 'runtime', 'install'], reason: 'studio.audioEnhance.modelsMissing' },
-  { view: studio, studioTab: 'tve', tab: 'studio.tab.tve', section: 'studio.audioEnhance.title', label: 'studio.audioEnhance.engines', target: '[data-audio-enhance="tve"] [data-audio-enhance-engines] summary', aliases: ['audio', 'engine', 'runtime', 'install'], reason: 'studio.audioEnhance.modelsMissing' },
+  { view: studio, studioTab: 'generate', dockTab: 'post', tab: 'setup.tab.studio', section: 'studio.audioEnhance.title', label: 'studio.audioEnhance.engines', target: '[data-audio-enhance="post"] [data-audio-enhance-engines]', aliases: ['audio', 'engine', 'runtime', 'install'], reason: 'studio.audioEnhance.modelsMissing' },
+  { view: studio, studioTab: 'tve', tab: 'studio.tab.tve', section: 'studio.audioEnhance.title', label: 'studio.audioEnhance.engines', target: '[data-audio-enhance="tve"] [data-audio-enhance-engines]', aliases: ['audio', 'engine', 'runtime', 'install'], reason: 'studio.audioEnhance.modelsMissing' },
   { view: studio, studioTab: 'generate', dockTab: 'post', tab: 'setup.tab.studio', section: 'studio.audioEnhance.title', label: 'studio.audioEnhance.device', target: '[data-audio-enhance="post"] [data-audio-enhance-device]', aliases: ['audio', 'device', 'GPU', 'CUDA', 'CPU', 'automatic'], reason: 'studio.audioEnhance.deviceHint' },
   { view: studio, studioTab: 'tve', tab: 'studio.tab.tve', section: 'studio.audioEnhance.title', label: 'studio.audioEnhance.device', target: '[data-audio-enhance="tve"] [data-audio-enhance-device]', aliases: ['audio', 'device', 'GPU', 'CUDA', 'CPU', 'automatic'], reason: 'studio.audioEnhance.deviceHint' },
   // TVE
@@ -178,7 +199,7 @@ export interface RevealOutcome {
 
 /** Opens collapsed ancestors, scrolls to the control and flashes it; reports a currently disabled control. */
 export function revealTarget(target: string): RevealOutcome {
-  if(target.startsWith('[data-theme-action='))document.querySelector<HTMLButtonElement>('.studio-quick > button[aria-expanded="false"]')?.click();
+  if(target==='.experience-switch'||target.startsWith('[data-theme-action='))document.querySelector<HTMLButtonElement>('.studio-quick > button[aria-expanded="false"]')?.click();
   const element = document.querySelector<HTMLElement>(target);
   if (!element) return { state: 'missing' };
   for (let parent = element.parentElement; parent; parent = parent.parentElement) {

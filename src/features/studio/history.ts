@@ -1,8 +1,9 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { isImageIntent, type JobIntent, type JobStatus } from '../../lib/jobs';
+import { safeOutputPrefix } from '../../lib/outputNaming';
 import type { RecipeAllowlist } from '../../lib/execution';
 import { defaultVideoOutput, isVideoEnhanceIntent, isVideoIntent, videoFrames } from '../../lib/videoIntent';
-import { isMusicIntent } from '../../lib/musicIntent';
+import { aceDurationStep, aceMusicProfile, isAceMusicIntent, isAceSettings, isMusicIntent, type AceStepMusicIntent } from '../../lib/musicIntent';
 import { defaultOptions, type OptionsPref } from './OptionsPanel';
 import builtinFamilies from '../../families/builtin.json' with { type: 'json' };
 
@@ -54,11 +55,39 @@ export function historyInputSelectionContext(endpoint:string,inputRoot?:string):
  return JSON.stringify([namespace,(inputRoot??'').replace(/\\/g,'/').replace(/\/+$/,'')]);
 }
 
+/** Reject incompatible restored ACE data instead of filling missing fields from current defaults. */
+function restorableAce(intent:AceStepMusicIntent):boolean {
+ const raw=intent as unknown as Record<string,unknown>,profile=aceMusicProfile(intent.family);
+ if(!profile||intent.version!==1||intent.mode!=='t2m'||intent.planning!=='off'||!isAceSettings(intent.ace))return false;
+ if(Object.keys(raw).some(k=>!['recipeId','version','family','mode','planning','checkpoint','style','lyrics','seed','maxDuration','steps','cfg','sampler','scheduler','outputPrefix','ace','diffusion','audioEnhance'].includes(k)&&raw[k]!==undefined))return false;
+ if(!safeOutputPrefix(intent.outputPrefix))return false;
+ if(['checkpoint','sampler','scheduler','outputPrefix'].some(k=>typeof raw[k]!=='string'||!(raw[k] as string).trim()))return false;
+ if(typeof intent.style!=='string'||typeof intent.lyrics!=='string'||!Number.isSafeInteger(intent.seed)||intent.seed<0)return false;
+ if(!Number.isInteger(intent.steps)||intent.steps<1||intent.steps>10000||!Number.isFinite(intent.cfg)||intent.cfg<0||intent.cfg>100)return false;
+ const ticks=intent.maxDuration/aceDurationStep(intent.family);
+ if(!Number.isFinite(intent.maxDuration)||intent.maxDuration<1||intent.maxDuration>1000||Math.abs(ticks-Math.round(ticks))>1e-7)return false;
+ const clock=builtinFamilies.find(f=>f.id===intent.family)?.music;
+ if(profile.version==='1.0'&&clock&&Math.floor(intent.maxDuration*clock.sampleRate/clock.samplesPerLatent)!==Math.round(ticks))return false;
+ if(intent.diffusion!==undefined){
+  if(profile.version!=='1.5')return false;
+  const d=intent.diffusion;
+  if(!d||typeof d!=='object'||Object.keys(d).some(k=>!['textEncoder','textEncoder2','vae'].includes(k)))return false;
+  if([d.textEncoder,d.vae,...(profile.version==='1.5'?[d.textEncoder2]:[])].some(v=>typeof v!=='string'||!v.trim()))return false;
+  if(d.textEncoder===d.textEncoder2)return false;
+ }
+ if(intent.audioEnhance!==undefined){
+  const a=intent.audioEnhance;
+  if(!a||typeof a!=='object'||Object.keys(a).some(k=>!['mode','profile','device'].includes(k))||!['clean','deep','stems'].includes(a.mode)||!['mix','speech'].includes(a.profile)||a.device!==undefined&&!['auto','cpu','cuda'].includes(a.device))return false;
+ }
+ return true;
+}
+
 /** Pure authoring projection; deliberately performs no discovery, uploads or execution. */
 export function historyRestore(record:HistoryRecord,context:RestoreContext):HistoryRestore {
  const intent=structuredClone(record.intent),video=isVideoIntent(intent),image=isImageIntent(intent);
  const unsupported:string[]=[],unavailable:string[]=[];
  const environmentMismatch=origin(context.endpoint)!==record.backendOrigin;
+ if(isMusicIntent(intent)&&(intent.family==='yue2'?Object.hasOwn(intent,'ace')||Object.hasOwn(intent,'diffusion'):!isAceMusicIntent(intent)||!restorableAce(intent)))return {intent,pipeline:'t2m',options:structuredClone(defaultOptions),references:[],unsupported:['music intent'],unavailable,environmentMismatch,backendOrigin:record.backendOrigin};
  // TVE enhance jobs have no authoring controls in Studio; the record stays readable, not restorable.
  if(isVideoEnhanceIntent(intent))return {intent,pipeline:'v2v',options:structuredClone(defaultOptions),references:[],unsupported:['video-enhance'],unavailable,environmentMismatch,backendOrigin:record.backendOrigin};
  // This schema records no original input-root identity or backend namespace.
@@ -85,12 +114,25 @@ export function historyRestore(record:HistoryRecord,context:RestoreContext):Hist
  let pipeline:HistoryRestore['pipeline']='t2i';
  if(isMusicIntent(intent)){
   pipeline=intent.mode;
-  for(const node of ['YuE2GenerateMusic','EmptyYuE2LatentAudio','VAEDecodeAudio','SaveAudioAdvanced',...(intent.planning==='off'?[]:intent.mode==='cover'?['LoadAudio','AudioEncoderLoader','SheetSage2AudioToABC']:['YuE2GenerateABC'])])if(!context.allow?.nodes.includes(node))unavailable.push(node);
-  if(intent.mode==='cover'){
-   source=resolve(intent.sourceAudio);
-   if(!context.allow?.audioEncoders?.includes(intent.audioEncoder))unavailable.push(`audioEncoder: ${intent.audioEncoder}`);
+  if(isAceMusicIntent(intent)){
+   const recipe=builtinFamilies.find(f=>f.id===intent.family)!.music!;
+   const original=recipe.version==='1.0';
+   const nodes=['VAEDecodeAudio','SaveAudioAdvanced','KSampler','ConditioningZeroOut',recipe.encode,recipe.latent,recipe.patch,...(original?['LatentOperationTonemapReinhard','LatentApplyOperationCFG']:[]),...(intent.diffusion?['UNETLoader','DualCLIPLoader','VAELoader']:['CheckpointLoaderSimple'])];
+   for(const node of nodes)if(!context.allow?.nodes.includes(node))unavailable.push(node);
+   if(modelFamily!==intent.family)unavailable.push(`family: ${intent.family}`);
+   if(intent.diffusion){
+    if(!context.allow?.dualClipTypes?.includes('ace'))unavailable.push('DualCLIPLoader: ace');
+    for(const name of [intent.diffusion.textEncoder,intent.diffusion.textEncoder2])if(name&&!context.allow?.dualTextEncoders?.includes(name))unavailable.push(`textEncoder: ${name}`);
+    if(!context.allow?.vaes?.includes(intent.diffusion.vae))unavailable.push(`vae: ${intent.diffusion.vae}`);
+   }
+  }else{
+   for(const node of ['YuE2GenerateMusic','EmptyYuE2LatentAudio','VAEDecodeAudio','SaveAudioAdvanced',...(intent.planning==='off'?[]:intent.mode==='cover'?['LoadAudio','AudioEncoderLoader','SheetSage2AudioToABC']:['YuE2GenerateABC'])])if(!context.allow?.nodes.includes(node))unavailable.push(node);
+   if(intent.mode==='cover'){
+    source=resolve(intent.sourceAudio);
+    if(!context.allow?.audioEncoders?.includes(intent.audioEncoder))unavailable.push(`audioEncoder: ${intent.audioEncoder}`);
+   }
+   if(modelFamily!=='yue2')unavailable.push('family: yue2');
   }
-  if(modelFamily!=='yue2')unavailable.push('family: yue2');
  }else if(image){
   pipeline=intent.inputImage?'i2i':'t2i';
   if(intent.inputImage)source=resolve(intent.inputImage);

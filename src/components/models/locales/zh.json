@@ -1,4 +1,9 @@
 {
+  "modelMeta.evidence": "识别依据",
+  "modelMeta.evidence.header": "根据头部元数据或张量结构识别。",
+  "modelMeta.evidence.filename": "根据文件名推断变体，未经头部信息确认。",
+  "modelMeta.evidence.unresolved": "无法确定变体。使用模型专属默认值前，请指定准确的模型系列。",
+  "modelMeta.evidence.conflict": "模型身份信息存在冲突。请检查文件并指定准确的系列。",
   "modelMeta.title": "编辑元数据…",
   "modelMeta.filename": "文件名",
   "modelMeta.path": "完整路径",

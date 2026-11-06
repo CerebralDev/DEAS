@@ -37,6 +37,8 @@ Noise suppression can remove wanted quiet detail. Separation can create bleed/ar
 
 ## Installation and provenance
 
+**Optional audio engines** is always expanded in Studio Post-Processing and TVE. Both installation buttons remain visible; an installed engine’s button is disabled. Checking capabilities or running an installation temporarily blocks installation actions too. Downloads still require explicit confirmation.
+
 **Clean** needs compatible FFmpeg and FFprobe on the native application's PATH. They are external tools, not guaranteed bundled installer assets.
 
 **Deep** installs an optional pinned DeepFilterNet native executable. Official v0.5.6 Linux/Windows releases include the default model, so the default engine does not require a separate model archive. Its code is dual MIT/Apache-2.0. The wrapper must pad/flush and trim exact samples: upstream delay compensation alone does not preserve the final partial hop.

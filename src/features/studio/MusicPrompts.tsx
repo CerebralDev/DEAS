@@ -10,15 +10,15 @@ export const musicDialects:Record<MusicField,string>={style:'YuE2 Song Style',ly
 export const MUSIC_TEXT_LIMIT=16384;
 
 /** Two independent YuE2 editors (Style, Lyrics) in the `.wb-prompts` slot: no negative prompt, no image references. */
-export function MusicPrompts({endpoint,root,style,lyrics,onStyle,onLyrics,actions}:{
- endpoint:string;root?:string;style:string;lyrics:string;
+export function MusicPrompts({endpoint,root,style,lyrics,onStyle,onLyrics,actions,writerEnabled=true}:{
+ endpoint:string;root?:string;style:string;lyrics:string;writerEnabled?:boolean;
  onStyle:(v:string)=>void;onLyrics:(v:string)=>void;
  /** Copy/clear buttons shared with the image prompts (Workbench owns clipboard feedback). */
  actions:(field:MusicField,value:string,set:(v:string)=>void)=>ReactNode;
 }){
  const {t}=useI18n();const [expanded,setExpanded]=useState<MusicField|null>(null);
  const fields=[{id:'style' as const,value:style,set:onStyle},{id:'lyrics' as const,value:lyrics,set:onLyrics}];
- const writer=(f:typeof fields[number])=><ForgeButton key={f.id} endpoint={endpoint} root={root} dialect={musicDialects[f.id]} value={f.value} onApply={f.set}/>;
+ const writer=(f:typeof fields[number])=>writerEnabled&&<ForgeButton key={f.id} endpoint={endpoint} root={root} dialect={musicDialects[f.id]} value={f.value} onApply={f.set}/>;
  const selected=fields.find(f=>f.id===expanded);
  return <>
   {fields.map(f=>{const title=t(`studio.music.${f.id}`);return <div className="wb-prompt" key={f.id} data-music-field={f.id}>

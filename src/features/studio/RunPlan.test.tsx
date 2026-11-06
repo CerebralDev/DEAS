@@ -78,3 +78,21 @@ test('music plans show input/ABC/generate stages from the music intent and no im
  expect(meta.textContent).toContain('bossa nova');expect(meta.textContent).toContain('song.wav');expect(meta.textContent).toContain('Melody');
  expect(document.querySelector('[data-metadata-apply]')).toBeNull();
 });
+
+const aceIntent={recipeId:'music-generation',version:1,family:'ace-step-1-5-xl-sft',mode:'t2m',planning:'off',checkpoint:'ace-xl.safetensors',style:'jazz 猫',lyrics:'',seed:42,maxDuration:30,steps:37,cfg:4.25,sampler:'euler',scheduler:'simple',outputPrefix:'raw/audio/exact',ace:{shift:2.5,lyricsStrength:1,bpm:123,timeSignature:'3',language:'de',keyScale:'D minor',generateAudioCodes:false,lmCfg:3.5,temperature:0.7,topP:0.8,topK:12,minP:0.03},diffusion:{textEncoder:'text.safetensors',textEncoder2:'code.safetensors',vae:'audio-vae.safetensors'},audioEnhance:{mode:'clean',profile:'mix'}} as const;
+
+test('ACE plan shows exact family, split components, diffusion and LM settings, FLAC and postprocessing without ABC',()=>{
+ localStorage.setItem('deas.locale.v1','en');
+ const before=JSON.stringify(aceIntent),view=render(<I18nProvider><RunPlan intent={aceIntent} pipeline="t2m" notices={[]} outputRoot="/audio"/></I18nProvider>);
+ expect([...view.container.querySelectorAll('[data-plan-stage]')].map(el=>el.getAttribute('data-plan-stage'))).toEqual(['model','prompt','generate','audioEnhance','output']);
+ const model=view.container.querySelector('[data-plan-stage="model"]')!;
+ for(const value of [aceIntent.family,aceIntent.checkpoint,...Object.values(aceIntent.diffusion)])expect(model.textContent).toContain(value);
+ const generate=view.container.querySelector('[data-plan-stage="generate"]')!;
+ for(const value of ['37','4.25','euler','simple','2.5','123','D minor','3.5','0.03'])expect(generate.textContent).toContain(value);
+ expect(view.container.querySelector('[data-plan-stage="output"]')?.textContent).toContain('FLAC');
+ expect(view.container.querySelector('[data-plan-stage="output"]')?.textContent).toContain('raw/audio/exact');
+ expect(view.container.textContent).not.toMatch(/YuE2|ABC|SheetSage/);expect(JSON.stringify(aceIntent)).toBe(before);
+ expect(JSON.parse(view.container.querySelector('[data-plan-intent]')!.textContent!)).toEqual(aceIntent);
+ view.rerender(<I18nProvider><RunPlan intent={{...aceIntent,diffusion:undefined}} pipeline="t2m" notices={[]}/></I18nProvider>);
+ expect(view.container.querySelector('[data-plan-stage="model"]')?.textContent).not.toContain('code.safetensors');
+});

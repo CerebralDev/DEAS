@@ -1,4 +1,9 @@
 {
+  "modelMeta.evidence": "Algılama dayanağı",
+  "modelMeta.evidence.header": "Başlık meta verileri veya tensör yapısından tanımlandı.",
+  "modelMeta.evidence.filename": "Varyant dosya adından çıkarıldı; başlık tarafından doğrulanmadı.",
+  "modelMeta.evidence.unresolved": "Varyant tanımlanamadı. Modele özgü varsayılanları kullanmadan önce tam model ailesini belirtin.",
+  "modelMeta.evidence.conflict": "Model kimliği bulguları çelişiyor. Dosyayı kontrol edip tam ailesini belirtin.",
   "modelMeta.title": "Meta veriyi düzenle…",
   "modelMeta.filename": "Dosya adı",
   "modelMeta.path": "Tam yol",

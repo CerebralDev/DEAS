@@ -45,6 +45,8 @@ export function itemFromEntry(entry:MediaEntry):MediaItem|null {
 }
 /** In-app drag of a dock tile (HTML5 DnD); external file drops carry no such entry. */
 export const MEDIA_DRAG='application/x-deas-media';
+// wry reports OS drop positions in physical pixels on Windows WebView2 but already-logical pixels on Linux WebKitGTK; scaling both by devicePixelRatio misses targets on Linux.
+export const dropCssPoint=(p:{x:number;y:number})=>/Windows/i.test(navigator.userAgent)?{x:p.x/window.devicePixelRatio,y:p.y/window.devicePixelRatio}:p;
 export const MEDIA_IMAGE_DRAG='application/x-deas-image';
 export function dragItem(dt:DataTransfer,item:MediaItem){
  // Default image URIs are intercepted as native file drops by WebKitGTK/Wry.

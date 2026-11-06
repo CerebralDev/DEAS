@@ -1,4 +1,9 @@
 {
+  "modelMeta.evidence": "検出の根拠",
+  "modelMeta.evidence.header": "ヘッダーメタデータまたはテンソル構造から識別しました。",
+  "modelMeta.evidence.filename": "ファイル名から推定したバリアントです。ヘッダーでは確認できていません。",
+  "modelMeta.evidence.unresolved": "バリアントが不明です。モデル固有の初期値を使う前に正確なファミリーを指定してください。",
+  "modelMeta.evidence.conflict": "モデル識別情報が矛盾しています。ファイルを確認し、正確なファミリーを指定してください。",
   "modelMeta.title": "メタデータを編集…",
   "modelMeta.filename": "ファイル名",
   "modelMeta.path": "正確なパス",

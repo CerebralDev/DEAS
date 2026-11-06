@@ -9,7 +9,9 @@ export type BeginnerPage = 'generate' | 'models' | 'collection';
 export function ExperienceSwitch({value,onChange}:{value:Experience;onChange:(value:Experience)=>void}) {
  const {t}=useI18n();
  return <div className="experience-switch" role="group" aria-label={t('beginner.experience')}>
-  {(['beginner','advanced'] as const).map(id=><button key={id} type="button" aria-pressed={value===id} onClick={()=>onChange(id)}>{t(`beginner.${id}`)}</button>)}
+  <button type="button" role="switch" aria-label={t('beginner.advanced')} aria-checked={value==='advanced'} onClick={()=>onChange(value==='advanced'?'beginner':'advanced')}>
+   <span>{t('beginner.beginner')}</span><span className="experience-track" aria-hidden="true"><span/></span><span>{t('beginner.advanced')}</span>
+  </button>
  </div>;
 }
 

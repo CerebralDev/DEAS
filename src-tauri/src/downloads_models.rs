@@ -555,6 +555,9 @@ pub struct LocalModel {
     pub family: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub detected_family: Option<String>,
+    /// Automatic ACE identity evidence; declarations do not upgrade it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub family_evidence: Option<crate::model_families::FamilyEvidence>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub family_override: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -676,6 +679,15 @@ fn checked_metadata(category: &str, path: &Path) -> Result<Option<CachedMetadata
 /// Resolve only the owned backend's registered namespace, in backend search order.
 /// No headers, hashes, provider requests or machine-wide path search.
 pub(crate) fn validate_selected(roots: &[PathBuf], field: &str, name: &str) -> Result<(), String> {
+    validate_selected_family(roots, field, name, None)
+}
+
+pub(crate) fn validate_selected_family(
+    roots: &[PathBuf],
+    field: &str,
+    name: &str,
+    family: Option<&str>,
+) -> Result<(), String> {
     let categories: &[&str] = match field {
         "checkpoints" => &["checkpoints"],
         "diffusionModels" | "ggufDiffusionModels" => &["diffusion_models", "unet"],
@@ -709,8 +721,33 @@ pub(crate) fn validate_selected(roots: &[PathBuf], field: &str, name: &str) -> R
                 Err(e) => return Err(format!("MODEL_METADATA_INVALID: {e}")),
                 Ok(_) => {}
             }
-            checked_metadata(category, &path)
+            let cache = checked_metadata(category, &path)
                 .map_err(|e| format!("MODEL_METADATA_INVALID: {name}: {e}"))?;
+            if let Some(expected) = family {
+                let source = Source::open(&path)?;
+                let detected = cache
+                    .as_ref()
+                    .and_then(|c| c.family_override.clone())
+                    .or_else(|| {
+                        crate::model_families::detect_with_evidence(
+                            category,
+                            &source.dir.path.join(&source.name),
+                            None,
+                        )
+                        .0
+                    });
+                let checkpoint_parts = field != "checkpoints"
+                    || crate::model_families::ace_checkpoint_has_companions(
+                        &source.dir.path.join(&source.name),
+                    );
+                source.verify()?;
+                if detected.as_deref() != Some(expected) {
+                    return Err("MODEL_FAMILY_MISMATCH: ACE intent does not match source-bound model identity".into());
+                }
+                if !checkpoint_parts {
+                    return Err("MODEL_COMPONENTS_MISSING: ACE checkpoint needs embedded text encoders and VAE; put split weights in diffusion_models and select their components".into());
+                }
+            }
             return Ok(());
         }
     }
@@ -737,7 +774,7 @@ fn describe(category: &str, base: &Path, path: &Path) -> Result<LocalModel, Stri
     let cache = metadata.ok().flatten();
     let info = cache.as_ref().and_then(CachedMetadata::model_info);
     let family_override = cache.as_ref().and_then(|c| c.family_override.clone());
-    let detected_family = crate::model_families::detect(
+    let (detected_family, family_evidence) = crate::model_families::detect_with_evidence(
         category,
         &header_path,
         info.as_ref()
@@ -748,6 +785,12 @@ fn describe(category: &str, base: &Path, path: &Path) -> Result<LocalModel, Stri
     } else {
         family_override.clone().or_else(|| detected_family.clone())
     };
+    let family_evidence = family_evidence.or_else(|| {
+        family
+            .as_deref()
+            .filter(|id| id.starts_with("ace-step"))
+            .map(|_| crate::model_families::FamilyEvidence::Unresolved)
+    });
     let component =
         crate::model_families::detect_component(category, &header_path).map(str::to_owned);
     let integrity = crate::model_families::intact(&header_path)
@@ -772,6 +815,7 @@ fn describe(category: &str, base: &Path, path: &Path) -> Result<LocalModel, Stri
         component,
         family,
         detected_family,
+        family_evidence,
         family_override,
         metadata_error,
         integrity,
@@ -1486,6 +1530,134 @@ mod tests {
         assert_eq!(scan(root.path()).unwrap()[0], reset);
         assert_eq!(HASH_READS.with(|n| n.get()), hashes);
         assert_eq!(Source::open(&path).unwrap().stamp, before);
+    }
+
+    #[test]
+    fn ace_selected_family_matches_effective_source_metadata() {
+        let (root, path) = family_fixture("diffusion_models");
+        let roots = [root.path().to_owned()];
+        let name = path.file_name().unwrap().to_str().unwrap();
+        assert!(validate_selected_family(
+            &roots,
+            "diffusionModels",
+            name,
+            Some("ace-step-1-5-turbo")
+        )
+        .unwrap_err()
+        .contains("MODEL_FAMILY_MISMATCH"));
+        write_family(&path, Some("ace-step-1-5-turbo")).unwrap();
+        assert!(validate_selected_family(
+            &roots,
+            "diffusionModels",
+            name,
+            Some("ace-step-1-5-turbo")
+        )
+        .is_ok());
+        assert!(validate_selected_family(
+            &roots,
+            "diffusionModels",
+            name,
+            Some("ace-step-1-5-base")
+        )
+        .is_err());
+        write_family(&path, None).unwrap();
+        assert!(validate_selected_family(
+            &roots,
+            "diffusionModels",
+            name,
+            Some("ace-step-1-5-turbo")
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn ace_aio_checkpoint_requires_embedded_vae_and_text_encoders() {
+        for (vae, text) in [(false, false), (false, true), (true, false), (true, true)] {
+            let (root, path) = family_fixture("checkpoints");
+            // Synthetic explicit architecture; real official AIO exports use both namespaces.
+            let mut head =
+                serde_json::json!({"__metadata__":{"modelspec.architecture":"ace-step-1-5-turbo"}});
+            let tensor = serde_json::json!({"dtype":"F32","shape":[0],"data_offsets":[0,0]});
+            if vae {
+                head["vae.decoder.layers.0.bias"] = tensor.clone();
+            }
+            if text {
+                head["text_encoders.qwen3_06b.logit_scale"] = tensor;
+            }
+            let header = head.to_string();
+            let mut bytes = (header.len() as u64).to_le_bytes().to_vec();
+            bytes.extend(header.as_bytes());
+            std::fs::write(&path, bytes).unwrap();
+            let result = validate_selected_family(
+                &[root.path().to_owned()],
+                "checkpoints",
+                "unknown.safetensors",
+                Some("ace-step-1-5-turbo"),
+            );
+            if vae && text {
+                assert!(result.is_ok());
+            } else {
+                assert!(result.unwrap_err().contains("MODEL_COMPONENTS_MISSING"));
+            }
+        }
+    }
+
+    #[test]
+    fn ace_family_scan_declare_reset_evidence_never_hashes() {
+        use crate::model_families::FamilyEvidence;
+        let (root, path) = family_fixture("checkpoints");
+        // Synthetic explicit architecture, not a claimed producer metadata convention.
+        let text = serde_json::json!({"__metadata__": {"modelspec.architecture": "ace-step-1-5"}})
+            .to_string();
+        let mut bytes = (text.len() as u64).to_le_bytes().to_vec();
+        bytes.extend(text.as_bytes());
+        std::fs::write(&path, bytes).unwrap();
+        let hashes = HASH_READS.with(|n| n.get());
+        let before = Source::open(&path).unwrap().stamp;
+        let automatic = scan(root.path()).unwrap().remove(0);
+        assert_eq!(automatic.detected_family.as_deref(), Some("ace-step-1-5"));
+        assert_eq!(automatic.family_evidence, Some(FamilyEvidence::Unresolved));
+        assert_eq!(
+            serde_json::to_value(&automatic).unwrap()["familyEvidence"],
+            "unresolved"
+        );
+        let families: Value =
+            serde_json::from_str(include_str!("../../src/families/builtin.json")).unwrap();
+        for id in families
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|f| f["id"].as_str())
+            .filter(|id| id.starts_with("ace-step"))
+        {
+            let declared = write_family(&path, Some(id)).unwrap();
+            assert_eq!(declared.family.as_deref(), Some(id));
+            assert_eq!(declared.family_override.as_deref(), Some(id));
+            assert_eq!(declared.detected_family, automatic.detected_family);
+            assert_eq!(declared.family_evidence, automatic.family_evidence);
+            assert!(declared.info.is_none());
+            assert_eq!(scan(root.path()).unwrap()[0], declared);
+            let reset = write_family(&path, None).unwrap();
+            assert_eq!(reset, automatic);
+            assert_eq!(scan(root.path()).unwrap()[0], reset);
+        }
+        write_family(&path, Some("ace-step-1-5-turbo")).unwrap();
+        let replacement = path.with_extension("new");
+        std::fs::copy(&path, &replacement).unwrap();
+        std::fs::rename(replacement, &path).unwrap();
+        let stale = scan(root.path()).unwrap().remove(0);
+        assert!(stale.metadata_error.is_some());
+        assert!(stale.family.is_none());
+        assert_eq!(stale.detected_family, automatic.detected_family);
+        assert_eq!(write_family(&path, None).unwrap(), automatic);
+        assert_eq!(HASH_READS.with(|n| n.get()), hashes);
+        assert_ne!(Source::open(&path).unwrap().stamp, before);
+        let (_root, other) = family_fixture("checkpoints");
+        let non_ace = describe("checkpoints", other.parent().unwrap(), &other).unwrap();
+        assert!(serde_json::to_value(non_ace)
+            .unwrap()
+            .get("familyEvidence")
+            .is_none());
     }
 
     #[test]

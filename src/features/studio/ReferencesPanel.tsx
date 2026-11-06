@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { useI18n } from '../../i18n/I18nProvider';
-import { describeMedia, draggedItem, itemFromEntry, MEDIA_DRAG, normalizedMediaPath, relativeMediaPath, type MediaItem } from '../../lib/media';
+import { describeMedia, dropCssPoint, draggedItem, itemFromEntry, MEDIA_DRAG, normalizedMediaPath, relativeMediaPath, type MediaItem } from '../../lib/media';
 import type { RefModEntry } from '../../lib/jobs';
 import { labelCharacters, readPeopleBoxes, type PeopleBox, type H3Reference } from '../../lib/forge';
 import type { H3Context } from '../forge/ForgeButton';
@@ -172,7 +172,7 @@ export function ReferencesPanel({endpoint='',root,refs,onChange,family,seconds,l
  useEffect(()=>{
   if(!isTauri())return;
   let alive=true,unlisten:(()=>void)|undefined;
-  const inside=(p:{x:number;y:number})=>{const r=box.current?.getBoundingClientRect(),x=p.x/devicePixelRatio,y=p.y/devicePixelRatio;return !!r&&Array.from(document.querySelectorAll('dialog[open]')).every(modal=>modal.contains(box.current))&&x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom;};
+  const inside=(p:{x:number;y:number})=>{const r=box.current?.getBoundingClientRect(),{x,y}=dropCssPoint(p);return !!r&&Array.from(document.querySelectorAll('dialog[open]')).every(modal=>modal.contains(box.current))&&x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom;};
   void getCurrentWebview().onDragDropEvent(e=>{
    if(e.payload.type==='leave'){setHovering(false);return;}
    setHovering(e.payload.type!=='drop'&&inside(e.payload.position));

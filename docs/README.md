@@ -6,7 +6,7 @@
 
 ## Start and use DEAS
 
-Top-level tabs: Studio · Library · Prompt Forge · Chat · TVE · Run Plan · Comfy · Backend · Logs.
+Top-level tabs: Studio · Library · Prompt Forge · Chat · TVE · Comfy on the left; Monitoring · Run Plan · Backend · Logs on the right.
 
 | Feature, tab or action | Guide |
 | --- | --- |

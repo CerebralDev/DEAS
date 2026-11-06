@@ -309,10 +309,73 @@
     "lora": []
   },
   {
-    "id": "ace-step", "name": "ACE-Step (audio)", "loader": "diffusion", "pipelines": [],
+    "id": "ace-step", "name": "ACE-Step (version unresolved)", "loader": "diffusion", "pipelines": [],
     "architectures": ["ace-step"], "bases": [],
-    "model": [["lyric.encoder.layers"]],
-    "lora": []
+    "model": [], "lora": []
+  },
+  {
+    "id": "ace-step-1-0", "name": "ACE-Step 1.0", "loader": "checkpoint", "pipelines": ["t2m"],
+    "music": {"version": "1.0", "steps": 50, "cfg": 5, "sampler": "euler", "scheduler": "simple", "shift": 5, "sampleRate": 44100, "samplesPerLatent": 4096, "patch": "ModelSamplingSD3", "encode": "TextEncodeAceStepAudio", "latent": "EmptyAceStepLatentAudio"},
+    "architectures": ["ace-step-1-0"], "bases": [],
+    "model": [], "lora": []
+  },
+  {
+    "id": "ace-step-1-5", "name": "ACE-Step 1.5 (variant unresolved)", "loader": "diffusion", "pipelines": [],
+    "architectures": ["ace-step-1-5"], "bases": [],
+    "model": [], "lora": []
+  },
+  {
+    "id": "ace-step-1-5-xl", "name": "ACE-Step 1.5 XL (variant unresolved)", "loader": "diffusion", "pipelines": [],
+    "architectures": ["ace-step-1-5-xl"], "bases": [],
+    "model": [], "lora": []
+  },
+  {
+    "id": "ace-step-1-5-base", "name": "ACE-Step 1.5 Base", "loader": "diffusion", "pipelines": ["t2m"],
+    "music": {"version": "1.5", "steps": 50, "cfg": 7, "sampler": "euler", "scheduler": "simple", "shift": 1, "sampleRate": 48000, "samplesPerLatent": 1920, "patch": "ModelSamplingAuraFlow", "encode": "TextEncodeAceStepAudio1.5", "latent": "EmptyAceStep1.5LatentAudio"},
+    "clipType": "ace", "textEncoders": ["qwen_0.6b_ace15", "qwen_1.7b_ace15", "qwen_4b_ace15"], "vaes": ["ace_1.5_vae"],
+    "clip": {"loader": "dual", "encoders": ["qwen_0.6b_ace15", "qwen_1.7b_ace15"]},
+    "architectures": ["ace-step-1-5-base"], "bases": [],
+    "model": [], "lora": []
+  },
+  {
+    "id": "ace-step-1-5-sft", "name": "ACE-Step 1.5 SFT", "loader": "diffusion", "pipelines": ["t2m"],
+    "music": {"version": "1.5", "steps": 50, "cfg": 7, "sampler": "euler", "scheduler": "simple", "shift": 1, "sampleRate": 48000, "samplesPerLatent": 1920, "patch": "ModelSamplingAuraFlow", "encode": "TextEncodeAceStepAudio1.5", "latent": "EmptyAceStep1.5LatentAudio"},
+    "clipType": "ace", "textEncoders": ["qwen_0.6b_ace15", "qwen_1.7b_ace15", "qwen_4b_ace15"], "vaes": ["ace_1.5_vae"],
+    "clip": {"loader": "dual", "encoders": ["qwen_0.6b_ace15", "qwen_1.7b_ace15"]},
+    "architectures": ["ace-step-1-5-sft"], "bases": [],
+    "model": [], "lora": []
+  },
+  {
+    "id": "ace-step-1-5-turbo", "name": "ACE-Step 1.5 Turbo", "loader": "diffusion", "pipelines": ["t2m"],
+    "music": {"version": "1.5", "steps": 8, "cfg": 1, "sampler": "euler", "scheduler": "simple", "shift": 3, "sampleRate": 48000, "samplesPerLatent": 1920, "patch": "ModelSamplingAuraFlow", "encode": "TextEncodeAceStepAudio1.5", "latent": "EmptyAceStep1.5LatentAudio"},
+    "clipType": "ace", "textEncoders": ["qwen_0.6b_ace15", "qwen_1.7b_ace15", "qwen_4b_ace15"], "vaes": ["ace_1.5_vae"],
+    "clip": {"loader": "dual", "encoders": ["qwen_0.6b_ace15", "qwen_1.7b_ace15"]},
+    "architectures": ["ace-step-1-5-turbo"], "bases": [],
+    "model": [], "lora": []
+  },
+  {
+    "id": "ace-step-1-5-xl-base", "name": "ACE-Step 1.5 XL Base", "loader": "diffusion", "pipelines": ["t2m"],
+    "music": {"version": "1.5", "steps": 50, "cfg": 6, "sampler": "euler", "scheduler": "simple", "shift": 3, "sampleRate": 48000, "samplesPerLatent": 1920, "patch": "ModelSamplingAuraFlow", "encode": "TextEncodeAceStepAudio1.5", "latent": "EmptyAceStep1.5LatentAudio"},
+    "clipType": "ace", "textEncoders": ["qwen_0.6b_ace15", "qwen_1.7b_ace15", "qwen_4b_ace15"], "vaes": ["ace_1.5_vae"],
+    "clip": {"loader": "dual", "encoders": ["qwen_0.6b_ace15", "qwen_4b_ace15"]},
+    "architectures": ["ace-step-1-5-xl-base"], "bases": [],
+    "model": [], "lora": []
+  },
+  {
+    "id": "ace-step-1-5-xl-sft", "name": "ACE-Step 1.5 XL SFT", "loader": "diffusion", "pipelines": ["t2m"],
+    "music": {"version": "1.5", "steps": 50, "cfg": 7, "sampler": "euler", "scheduler": "simple", "shift": 3, "sampleRate": 48000, "samplesPerLatent": 1920, "patch": "ModelSamplingAuraFlow", "encode": "TextEncodeAceStepAudio1.5", "latent": "EmptyAceStep1.5LatentAudio"},
+    "clipType": "ace", "textEncoders": ["qwen_0.6b_ace15", "qwen_1.7b_ace15", "qwen_4b_ace15"], "vaes": ["ace_1.5_vae"],
+    "clip": {"loader": "dual", "encoders": ["qwen_0.6b_ace15", "qwen_4b_ace15"]},
+    "architectures": ["ace-step-1-5-xl-sft"], "bases": [],
+    "model": [], "lora": []
+  },
+  {
+    "id": "ace-step-1-5-xl-turbo", "name": "ACE-Step 1.5 XL Turbo", "loader": "diffusion", "pipelines": ["t2m"],
+    "music": {"version": "1.5", "steps": 8, "cfg": 1, "sampler": "euler", "scheduler": "simple", "shift": 3, "sampleRate": 48000, "samplesPerLatent": 1920, "patch": "ModelSamplingAuraFlow", "encode": "TextEncodeAceStepAudio1.5", "latent": "EmptyAceStep1.5LatentAudio"},
+    "clipType": "ace", "textEncoders": ["qwen_0.6b_ace15", "qwen_1.7b_ace15", "qwen_4b_ace15"], "vaes": ["ace_1.5_vae"],
+    "clip": {"loader": "dual", "encoders": ["qwen_0.6b_ace15", "qwen_4b_ace15"]},
+    "architectures": ["ace-step-1-5-xl-turbo"], "bases": [],
+    "model": [], "lora": []
   },
   {
     "id": "yue2", "name": "YuE2", "loader": "checkpoint", "pipelines": ["t2m", "cover"],

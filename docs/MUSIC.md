@@ -1,8 +1,31 @@
-# Music — YuE2 text-to-music and melody covers
+# Music — Text to Music with YuE2 and ACE-Step
 
 [Documentation index](README.md) · [Studio](STUDIO.md) · [Open work](PLAN.md#43-music-yue2)
 
-Studio → Generate offers two music pipelines for YuE2 checkpoints. Both compile to the ComfyUI core YuE2 nodes natively; no custom node pack is needed for generation.
+Studio → Generate offers **Music (Text to Music)** for YuE2 and resolved ACE-Step models, plus **Music (Cover Music)** for YuE2. Recipes compile natively to ComfyUI core nodes; no custom node pack is required for generation.
+
+## ACE-Step Text to Music
+
+Select **Music (Text to Music)** and an ACE-Step model in the existing model picker. There is no second required variant selector. Header/shape detection distinguishes original 1.0, 1.5 and XL, including the observed `ace-step-1_5` export alias when matching 1.5 tensor structure is present. Base/SFT/Turbo share tensor structures, so an explicit architecture declaration or a conservative filename fallback identifies the training variant. Unknown/conflicting identities stay blocked; **Edit meta…** shows header versus filename evidence and lets you declare the exact family or reset to automatic detection. A declaration does not upgrade filename evidence to header confirmation.
+
+Original 1.0 uses an all-in-one checkpoint under `checkpoints`, its AceT5/MusicDCAE path, lyrics strength and its original sampling/tonemap nodes. ACE-Step 1.5 accepts an all-in-one checkpoint or split weights under `diffusion_models`/`unet`. Split models expose the existing Components controls: `ace_1.5_vae.safetensors`, `qwen_0.6b_ace15.safetensors`, and the code LM (`qwen_1.7b_ace15.safetensors` by default for regular models, `qwen_4b_ace15.safetensors` for XL). XL describes the diffusion model, not the code-LM size. Native preparation checks that local AIO checkpoints actually contain the embedded VAE/text-encoder namespaces and refuses bare split weights misplaced under `checkpoints`. All split components must be listed by the backend and the `ace` dual-encoder loader type must be available; missing actual graph nodes/components block Run. No download starts implicitly.
+
+| Variant | Steps | Diffusion CFG | Shift |
+| --- | --- | --- | --- |
+| Original 1.0 | 50 | 5 | 5 |
+| 1.5 Base / SFT | 50 | 7 | 1 |
+| 1.5 Turbo | 8 | 1 | 3 |
+| 1.5 XL Base | 50 | 6 | 3 |
+| 1.5 XL SFT | 50 | 7 | 3 |
+| 1.5 XL Turbo | 8 | 1 | 3 |
+
+All use `euler` / `simple` as starting values. Regular Base/SFT's 50 steps is DEAS's starting choice inside the manufacturer's recommended 32–64 range, not a claimed single upstream default. Other rows follow the official Comfy templates; sources and distinctions are in [MODEL_DEFAULTS](MODEL_DEFAULTS.md#ace-step-variant-specific-reference-settings). First model selection applies the variant profile; returning to an edited model restores its overrides. A checkpoint-only change preserves current Style/Lyrics, including deliberately empty text. Queued jobs retain their submitted snapshot.
+
+ACE-Step 1.5 provides BPM, time signature, language, key, optional audio-code generation and separate LM sampling controls. LM CFG starts at 2, temperature at 0.85, top-p at 0.9, top-k at 0 and min-p at 0; these are not diffusion CFG. Original 1.0 instead exposes lyrics strength (initially 1). The YuE2 ABC/SheetSage2 controls and YuE2-only writing hammers are not used for ACE-Step.
+
+Duration is displayed and submitted on the model's latent clock: 1.5 uses 0.04 seconds (1920 samples at 48 kHz); original uses 4096 samples at 44.1 kHz. Editing duration snaps before display/submission; the compiler rejects off-grid values rather than silently changing them. Original's nominal 120-second starting request is shown as its representable latent-derived duration, not falsely labelled exactly 120. The joint latent-node bound is 1–1000 seconds. These checks establish graph timing, not measured decoder/output length without a model run.
+
+ACE-Step shares the native FLAC saver, job queue, optional audio post-processing, metadata and history/Run Plan. Cover/Repaint is not enabled for ACE-Step. Real ComfyUI CPU schema validation uses scratch filename fixtures without loading weights; it does not prove model inference or perceptual output quality. Real-model and native Windows runtime acceptance remain outstanding in [PLAN](PLAN.md).
 
 ## Selecting a music pipeline
 

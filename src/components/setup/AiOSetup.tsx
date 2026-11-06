@@ -21,7 +21,7 @@ import { filesPresent, readFolders, type Folders } from '../../lib/settings';
 import { authProviders } from '../../features/downloads/DownloadPluginPanel';
 import { readAuthStatus, verifyAuthToken } from '../../lib/downloads';
 import { forgetPref, isBoolean, isString, readPref, usePref, writePref } from '../../lib/preferences';
-import {ExperienceSwitch,ExperienceWelcome,type Experience,type BeginnerPage} from '../../features/beginner/Experience';
+import {ExperienceWelcome,type Experience,type BeginnerPage} from '../../features/beginner/Experience';
 // Root of the last successful install; restored on start only while its deas-install.json still exists.
 const installedKey='install.root';
 const unfinishedInstall='unfinished DEAS installation';
@@ -305,21 +305,22 @@ export function AiOSetup({ experience='advanced',onExperience,beginnerPage='gene
   catch(e){setTechnicalError(String(e));}finally{setBusy(false);}
  };
  return <section className={`aio-setup${beginner?' is-beginner':''}${view==='comfy'?' is-comfy':''}${inBackend?' is-backend':''}`} aria-label={t('setup.region')} data-workspace-view={view}>
-  <div className="aio-topbar"> {beginner&&<div className="beginner-app-logo"><span aria-hidden="true"/><strong>{'DEAS'}</strong><small>{t('beginner.studioLabel')}</small></div>}{beginner?<div className="aio-tabs" role="tablist" aria-label={t('beginner.navigation')}>{(['generate','models','collection'] as const).map(id=><button type="button" role="tab" key={id} className="aio-tab" data-beginner-tab={id} aria-selected={view==='studio'&&beginnerPage===id} onClick={()=>{onStudioTab?.('generate');onBeginnerPage?.(id);setView('studio');}}>{t(`beginner.${id}`)}</button>)}</div>:<div className="aio-tabs" role="tablist" aria-label={t('setup.decisions')}>
+  <div className="aio-topbar">{beginner?<div className="aio-tabs" role="tablist" aria-label={t('beginner.navigation')}>{(['generate','models','collection'] as const).map(id=><button type="button" role="tab" key={id} className="aio-tab" disabled={folderPickerBusy} data-beginner-tab={id} aria-selected={view==='studio'&&beginnerPage===id} onClick={()=>{onStudioTab?.('generate');onBeginnerPage?.(id);setView('studio');}}>{t(`beginner.${id}`)}</button>)}</div>:<><div className="aio-tabs" role="tablist" aria-label={t('setup.decisions')}>
    <button type="button" role="tab" data-node="studio" className="aio-tab" disabled={folderPickerBusy} data-studio-tab="generate" aria-selected={view==='studio'&&studioTab==='generate'} onClick={()=>{onStudioTab?.('generate');setView('studio');}}>{t('setup.tab.studio')}</button>
    <button type="button" role="tab" data-node="optional-downloads" className="aio-tab" disabled={folderPickerBusy} aria-selected={view==='downloads'} onClick={()=>setView('downloads')}>{t('downloads.title')}</button>
    <button type="button" role="tab" data-studio-tab="forge" className="aio-tab" disabled={folderPickerBusy} aria-selected={view==='studio'&&studioTab==='forge'} onClick={()=>{onStudioTab?.('forge');setView('studio');window.dispatchEvent(new Event('deas:forge-open'));}}>{t('studio.tab.forge')}</button>
    <button type="button" role="tab" data-studio-tab="chat" className="aio-tab" disabled={folderPickerBusy} aria-selected={view==='studio'&&studioTab==='chat'} onClick={()=>{onStudioTab?.('chat');setView('studio');window.dispatchEvent(new Event('deas:forge-open'));}}>{t('studio.tab.chat')}</button>
    <button type="button" role="tab" data-studio-tab="tve" className="aio-tab" title={t('studio.tve.title')} disabled={folderPickerBusy} aria-selected={view==='studio'&&studioTab==='tve'} onClick={()=>{onStudioTab?.('tve');setView('studio');}}>{t('studio.tab.tve')}</button>
+   <button type="button" role="tab" data-node="comfy" className="aio-tab" disabled={folderPickerBusy} aria-selected={view==='comfy'} onClick={()=>setView('comfy')}>{t('setup.tab.comfy')}</button>
+  </div><div className="aio-tabs aio-utility-tabs" role="tablist" aria-label={t('studio.tab.utilities')}>
    <button type="button" role="tab" data-studio-tab="monitor" className="aio-tab" title={t('monitoring.title')} disabled={folderPickerBusy} aria-selected={view==='studio'&&studioTab==='monitor'} onClick={()=>{onStudioTab?.('monitor');setView('studio');}}>{t('monitoring.tab')}</button>
    <button type="button" role="tab" data-studio-tab="map" className="aio-tab" disabled={folderPickerBusy} aria-selected={view==='studio'&&studioTab==='map'} onClick={()=>{onStudioTab?.('map');setView('studio');}}>{t('studio.tab.map')}</button>
-   <button type="button" role="tab" data-node="comfy" className="aio-tab" disabled={folderPickerBusy} aria-selected={view==='comfy'} onClick={()=>setView('comfy')}>{t('setup.tab.comfy')}</button>
    <button type="button" role="tab" data-node="settings" className="aio-tab" disabled={folderPickerBusy} aria-selected={inBackend} onClick={()=>setView('backend')}>{t('settings.button')}</button>
    <button type="button" role="tab" data-node="logs" className="aio-tab" disabled={folderPickerBusy} aria-selected={view==='logs'} onClick={()=>setView('logs')}>{t('logs.title')}</button>
-  </div>}
-{onExperience&&<ExperienceSwitch value={experience} onChange={onExperience}/>}
-{beginner&&<button type="button" className="beginner-backend" onClick={()=>setView('backend')} title={t('beginner.backendHint')}>{t('beginner.backend')}</button>}
-<QuickSettings root={installedRoot||undefined}/><ThemeAmbient/><GlobalSearch onNavigate={searchNavigate}/><RepoLinks canStar={verified.includes('github')}/></div>
+  </div></>}
+
+{beginner&&<div className="aio-tabs beginner-backend-tabs" role="tablist" aria-label={t('settings.button')}><button type="button" role="tab" data-node="settings" className="aio-tab beginner-backend" disabled={folderPickerBusy} aria-selected={inBackend} onClick={()=>setView('backend')}>{t('settings.button')}</button></div>}
+<QuickSettings root={installedRoot||undefined} experience={experience} onExperience={onExperience}/><ThemeAmbient/><GlobalSearch onNavigate={searchNavigate}/><RepoLinks canStar={verified.includes('github')}/></div>
   {inBackend&&<div className="backend-overview" aria-label={t('setup.overview')}>
    <span data-backend-installed className={installed?'is-set':undefined}>{installed&&<span aria-hidden="true">✓ </span>}{t('setup.backendLifecycle.title')} · <span>{t(installed?'setup.tab.installed':'setup.overview.missing')}</span>{(backendStatus?.state==='starting'||backendStatus?.state==='running')&&<small data-backend-state> · {t(backendStatus.state==='running'?'setup.backendStarted':'setup.backendStarting')}</small>}</span>
    {authProviders.filter(p=>configured.includes(p.id)).map(p=><span key={p.id} className="is-set" title={t('downloads.auth.set')} data-provider-configured={p.id}><span aria-hidden="true">✓ </span>{p.label} · {t('downloads.auth.set')}</span>)}

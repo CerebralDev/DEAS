@@ -56,9 +56,9 @@ function AudioEnhanceControls({ source, name, scope, disabled = false, automatic
       </>}
       {automatic && <small>{t('studio.audioEnhance.automatic')}</small>}
       <small>{t('studio.audioEnhance.hint')}</small>
-      <details data-audio-enhance-engines><summary>{t('studio.audioEnhance.engines')}</summary>
-      {(['deep', 'stems'] as const).map(value => !capabilities?.[value] && <button key={value} type="button" className="wb-dock-action" data-audio-enhance-install={value} disabled={busy || !!installing || checking || !isTauri()} onClick={() => { if (window.confirm(t(value === 'stems' ? 'studio.audioEnhance.stemsInstallConsent' : 'studio.audioEnhance.installConsent', { mode: t(`studio.audioEnhance.${value}`) }))) void settings.install(value); }}>{t('studio.audioEnhance.install', { mode: t(`studio.audioEnhance.${value}`) })}</button>)}
-      </details>
+      <div className="wb-option" data-audio-enhance-engines role="group" aria-label={t('studio.audioEnhance.engines')}><span>{t('studio.audioEnhance.engines')}</span>
+      {(['deep', 'stems'] as const).map(value => <button key={value} type="button" className="wb-dock-action" data-audio-enhance-install={value} disabled={!!capabilities?.[value] || busy || !!installing || checking || !isTauri()} onClick={() => { if (window.confirm(t(value === 'stems' ? 'studio.audioEnhance.stemsInstallConsent' : 'studio.audioEnhance.installConsent', { mode: t(`studio.audioEnhance.${value}`) }))) void settings.install(value); }}>{t('studio.audioEnhance.install', { mode: t(`studio.audioEnhance.${value}`) })}</button>)}
+      </div>
       {installing && <><small role="status" data-audio-enhance-install-status>{t('studio.audioEnhance.installing', { mode: t(`studio.audioEnhance.${installing}`) })}{settings.installStatus?.running && <> · {t('studio.audioEnhance.installProgress', { stage: settings.installStatus.stage, downloaded: settings.installStatus.downloaded, total: settings.installStatus.total || '—' })}</>}</small><button type="button" className="wb-dock-action" data-audio-enhance-install-cancel onClick={() => void settings.cancelInstall()}>{t('studio.audioEnhance.installCancel')}</button></>}
       {settings.error && <small role="alert">{settings.error}</small>}
       {checking && <small role="status">{t('studio.audioEnhance.checking')}</small>}

@@ -20,6 +20,7 @@ def set_locale(page, locale, back):
 
 
 FIXTURE = r"""
+localStorage.setItem('deas.pref.interface.experience', JSON.stringify('advanced'));
 window.isTauri=true;
 window.__collection={calls:[],unexpected:[],paths:[],polls:0,release:0};
 const f=window.__collection;
@@ -78,6 +79,8 @@ window.__TAURI_INTERNALS__={convertFileSrc:path=>{f.paths.push(path);return png;
  if(command==='native_install_plan')return {id:'fixture-plan',request:args.request,steps:[],warnings:[],unsupportedOptions:[],canExecute:true};
  if(command==='native_startup_phase'||command==='native_startup_ready')return null;
  if(command==='native_prompt_spellcheck')return null;
+ if(command==='native_spellcheck_status')return {available:true,installed:true};
+ if(command==='native_wildcard_library')return JSON.stringify({categories:[]});
  if(command==='native_auth_status')return [];
  if(command==='native_update_check')return {app:null,comfy:false,nodepack:false};
  if(command==='native_repo_stars')return {count:0,starred:null};

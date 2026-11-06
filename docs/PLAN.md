@@ -28,7 +28,7 @@ An item is only as accepted as its strongest evidence. Keep the levels separate 
 
 | Area | State (0.1.66) | Open |
 | --- | --- | --- |
-| Shell, navigation, layout | Implemented. Tabs: Studio, Library, Prompt Forge, Chat, TVE, Run Plan, Comfy, Backend, Logs. Shared viewport gate `npm run test:layout` | Windows/native visual acceptance |
+| Shell, navigation, layout | Implemented. Creative tabs left: Studio, Library, Prompt Forge, Chat, TVE, Comfy; utility tabs right: Monitoring, Run Plan, Backend, Logs. Shared viewport gate `npm run test:layout` | Windows/native visual acceptance |
 | Provisioning (installer) | Partial. Immutable consented plans, Linux/Windows x86_64 CPU/NVIDIA baseline, pinned ComfyUI-GGUF, checked reopening, foreign-install takeover, explicit Upgrade/Reinstall | §4.8 |
 | Owned backend lifecycle | Implemented, bounded. Approved ownership, default-on autostart, explicit Stop, Windows Job Object / Linux process group; graceful maintenance stop and previous-state resume | Native Windows graceful-stop/update/move acceptance, real GPU restart matrix, crash/power-loss recovery |
 | Downloads and Library | Partial. Catalogs, providers, managed placement, integrity, cancellation, Scan Files | Resume, free-space UX, §4.7 backlog, broad authenticated-provider acceptance |
@@ -218,7 +218,20 @@ Constraints kept from the implementation plan: signatures from one checkpoint do
 
   **F2 — video families.** Extend the existing `wan` family first (`jobs_video.rs`, `videoIntent.ts` discriminated union): t2v high/low-noise pair, VACE FLF2V + inpaint, Animate 2 motion transfer, SCAIL-2 character replacement, Wan Dancer, S2V, HuMo, Camera, Fun-Control, Bernini-R. Then new families: HunyuanVideo (+I2V/SkyReels, 1.5, Image 2.1 + refiner, SR distilled), LTX 2.5 (Gemma4 encoder, int8), CogVideoX (+VOID inpaint), Mochi, Cosmos, Kandinsky5 video. Each new family is data (class + template + slots + frame grid/fps in the family entry); a template is added only where the graph shape is genuinely new. SeedVR2 video upscale is a post-processing node, not a generation family.
 
-  **F3 — audio.** Stable Audio 3 (medium/base), ACE-Step 1.5 (ACE-Step is detected without a pipeline today), MiniMax Music 3. The YuE2 split-form item above is folded in, not duplicated.
+  **F3 — audio.** Stable Audio 3 (medium/base), MiniMax Music 3. The YuE2 split-form item above is folded in, not duplicated. ACE-Step is the owner's explicitly prioritized next music integration, split below rather than enabled by a picker-only change.
+
+  **F3a — ACE-Step identity: native acceptance remaining.** Header/shape architecture classification, conservative filename-based variants, unresolved/conflicting evidence, six-locale Edit meta evidence and source-bound family declaration/reset are implemented and covered by native/unit/Chromium fixtures; evidence belongs in `VERIFICATION.md`. Remaining acceptance before executable integration is called supported:
+
+  - [ ] Exercise model listing, declaration/reset and filename/header evidence in the real Linux WebKitGTK and Windows WebView2 app with an operator-selected local model. The inspected upstream headers do not encode Base/SFT/Turbo; a filename result must remain visibly weaker than header identity. No implicit model downloads or generation.
+
+  **F3b — ACE-Step Text to Music: real-model/native acceptance remaining.** The implementation and source-linked defaults now live in the existing Text to Music path; implementation details and source/gate evidence belong in `MUSIC.md`, `MODEL_DEFAULTS.md` and `VERIFICATION.md`. No new required variant selector or separate execution transport. Outstanding acceptance, not missing UI/compiler wiring:
+
+  - [ ] With explicitly authorized operator-selected local weights, run original 1.0 and representative 1.5 AIO/split Base/SFT/Turbo/XL combinations. Record model identity/provenance, exact submitted controls, initialization/peak RAM/VRAM/time, generated FLAC sample rate/sample count/duration and output quality. Schema validation with scratch filename fixtures does not prove model loading or inference.
+  - [ ] Exercise the real Linux WebKitGTK and Windows WebView2 model/component pickers, native FLAC playback/export, history/settings restoration and enabled automatic audio post-processing; verify retained baseline/processed products without restarting foreign services. Windows crosschecks are not runtime acceptance.
+  - [ ] Additional shift/continuous distillations remain excluded until their exact official recipe and defaults are verified. Keep unresolved/conflicting identity blocked, never silently select Turbo; preserve user overrides and authored Style/Lyrics during any future profile migration.
+
+  **F3c — ACE-Step audio-to-audio/Cover/Repaint. Status: deferred, not implemented.** Not part of the initial Text to Music implementation. Original audio editing and newer 1.5 reference-timbre paths need separate graph/intent acceptance; Comfy 1.5 documentation and newer core expose different maturity levels. Do not advertise full Cover/Repaint or manufacturer-only tasks from node presence alone.
+
 
   **F4 — perception/3D (lowest priority).** SAM 3.1 masking (§4.4), RT-DETR v4 pose, Depth Anything 3, MoGe, Marigold, Lotus depth, Hunyuan3D 2/2.1, Trellis2, TripoSplat, BiRefNet. These need their own pipelines, not t2i, and only after F0–F2.
 
