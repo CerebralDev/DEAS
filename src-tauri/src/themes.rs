@@ -434,8 +434,8 @@ fn open_local_file(path: &Path) -> Result<(), String> {
     #[cfg(windows)]
     let mut command = {
         let mut command = std::process::Command::new("cmd");
-        let path = path.to_string_lossy();
-        command.args(["/C", "start", "", path.as_str()]);
+        let path = path.to_string_lossy().into_owned();
+        command.args(["/C", "start", ""]).arg(path);
         command
     };
     #[cfg(target_os = "macos")]
