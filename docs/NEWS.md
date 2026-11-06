@@ -1,6 +1,8 @@
 # News
 
-## Unreleased
+## 0.2.18 BETA
+
+- **Audio enhancement is ready when you open the tab.** Processing options load immediately, **Enhance audio and save…** accepts bookmarked (symlinked) folders, and enhanced video keeps the container and audio codec your TVE/video-combine output picked instead of forcing MKV/FLAC.
 
 - **Use output pictures in Prompt Forge.** Generated reference images and first/last frames are readable by Forge, Cast and Find people without moving them manually into input. Vision controls explain when images are sent.
 

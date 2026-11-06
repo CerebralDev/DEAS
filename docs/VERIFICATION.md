@@ -1,6 +1,6 @@
 # DEAS verification — native baseline, optional capabilities and languages
 
-## Forge input/output picture transport (0.2.18, unreleased)
+## Forge input/output picture transport (0.2.18, shipped)
 
 - Frontend typecheck, all 144 core tests and all 1,531 UI tests (76 files) passed. Reference-panel coverage includes output first/last frames and input/output Find people without implicit analysis, plus Linux/Windows path spelling.
 - Independent source review found one standalone output-root identity issue; changing media roots now clears selected pictures and invalidates drafts. Its two regressions failed before the fix; all 113 Forge/canvas tests and typecheck passed after it.
@@ -27,13 +27,13 @@ Linux is a host-linked build with measured direct GLIBC floor **2.39** and `ldd`
 
 Canonical local files: `artifacts/releases/v0.2.17/` (Linux binary, Windows exe, manifest, checksums); build records/scripts/logs are retained under ignored `artifacts/build-records/v0.2.17/`. The byte-identical loose Linux rebuild was removed after verified staging. Quit the old instance and launch the versioned Linux executable. The documentation provenance commit follows the immutable release source/tag.
 
-## HyperFlow H3 Flash native support (unreleased)
+## HyperFlow H3 Flash native support (shipped in 0.2.18)
 
 - New built-in family `minimax-h3-hyperflow` detected from preserved GGUF tensor names (`hyperflow_gate`; the plain MiniMax H3 GGUF signature still wins without that key — fixture test). The video compiler switches only recipe points from family data: `HyperFlowGGUFLoader` for GGUF models, `HyperFlowSigmas` replacing `MiniMaxH3SigmaShift`+`BasicScheduler` (no shift nodes emitted), steps restricted to 4/6/8 and sampler fixed to euler, non-GGUF HyperFlow checkpoints rejected fail-closed (the hub's INT8 convrot partition is diffusers-format for the Python runtime; checked against a real 888-tensor local file, which matches neither DEAS signature and stays unknown). Image intents reject the video-only family; learned latent upscale stays blocked (unverified). Continuity/REF2VA/RefMod gates shared via an H3-variant helper on both sides.
 - Provisioning: `ComfyUI-HyperFlow-Flash` cloned pinned to `20a22ab2b075f3c948eb5dba62637ff89fc0f363` inside the existing ComfyUI-GGUF step (its only pip requirement `gguf` is already installed), recorded as `hyperflowRevision`, verified in `COMFY_PROBE` and the install manifest; `validate_gguf_install` additionally checks the checkout HEAD when present so pre-existing environments stay valid until an upgrade.
 - Gates: targeted Cargo (detection, graph golden for loader/sigma/steps/sampler/format gates, image-rejection, install 54/54) passed; `tsc` clean; Vitest 144 core + 1516 UI passed; offline `tools/validate_video_graphs.py` with the real pack cloned into the owner's ComfyUI v0.43.0 (temporarily; removed after, pinned SHA matched `git ls-remote`) reported **ALL VALID** for ltx, wan, h3, h3_ref2va, ltx_v2v and the new `hyperflow` graph. Real-generation acceptance with a downloaded GGUF checkpoint remains open.
 
-## Theme-authoring consolidation (unreleased)
+## Theme-authoring consolidation (shipped in 0.2.18)
 
 The redundant `theme-packs/classic` palette copies were removed, leaving one canonical `EDIT-THEMES.html` and one `new-theme` starter. Built-in schemes remain the single palette source. `native_theme_folder` was replaced by `native_theme_editor(app, root)`, which validates the environment root, creates the environment `themes/` directory, copies `new-theme` only when absent, and opens the bundled offline editor.
 
@@ -41,7 +41,7 @@ Fresh evidence: Rust theme tests **19 passed / 0 failed**, including no-clobber 
 
 Not exercised: the running packaged application resource directory, Linux/Windows OS browser opening, real Chrome/Edge folder permission and actual saved-file round trip through the native path. These remain acceptance gates in PLAN §4.10.
 
-## Beginner guide illustration removal (unreleased)
+## Beginner guide illustration removal (shipped in 0.2.18)
 
 `src/features/beginner/assets/{anima.png,illustrious.png,krea2.png,moss.webp}` were removed and `ModelGuide.image` made optional. The guide cards use the existing text placeholder; summaries, tags, credits and publisher URLs remain. Source documentation retains publisher links but no bundled-file SHA inventory.
 

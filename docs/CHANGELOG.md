@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.18 BETA (unreleased)
+## 0.2.18 BETA
 
 - **Audio enhancement ready and faithful.** Processing options load when the Post-Processing or TVE tab opens instead of staying greyed until the mode dropdown is clicked again. **Enhance audio and save…** accepts target folders reached through symlinks (bookmark paths) again. Enhanced video products keep the source's container (MKV/MP4/MOV/WebM) and audio codec (plus bitrate where the container reports one) instead of always re-encoding to MKV/FLAC, so TVE and video-combine output settings survive the audio stage; the video stream already stayed byte-identical.
 
@@ -9,8 +9,6 @@
 - **HyperFlow reference pipelines verified and constrained.** Multi-reference → Video exposes image references and submits REF2VA; Image → Video retains first/last-frame FL2VA behavior. HyperFlow GGUF accepts image references only (up to nine), not video/audio references; unsupported restored rows remain removable. Native validation rejects mixed references and the unsupported video-to-video pipeline is no longer advertised.
 
 - **HyperFlow H3 Flash video support.** DEAS now recognizes `VideoRebirthAI/hyperflow-h3-flash` GGUF checkpoints (`hyperflow_gate` tensor signature → family `minimax-h3-hyperflow`) and runs them through the normal MiniMax H3 video flow: same Director pipelines (T2VA/I2VA/L2VA/FL2VA/REF2VA), Continuity and RefMods, with the pack's `HyperFlowGGUFLoader` replacing the plain GGUF loader and `HyperFlowSigmas` replacing the sigma-shift/scheduler chain. Sampling is pinned to the model's distilled schedule: 4, 6 (default) or 8 steps with euler at CFG 1, no negative prompt; shift fields are hidden and learned latent upscale stays disabled (unverified). HyperFlow checkpoints load as GGUF only — the hub's INT8 convrot partition is diffusers-shape data for the upstream Python runtime and cannot load in any ComfyUI build. The ComfyUI-HyperFlow-Flash node pack (pinned source revision) is provisioned with the ComfyUI-GGUF step and verified in the backend probe.
-
-## Unreleased
 
 - **Integrated theme editing without palette duplication.** Quick Settings **Open themes folder** is replaced by **Edit themes**. DEAS bundles one offline `EDIT-THEMES.html` and one `new-theme` starter, creates the starter in the selected environment only when absent, opens the editor, and leaves an existing starter unchanged. The nine built-in colour schemes remain compiled into DEAS and are no longer duplicated as supplied `theme-packs/classic` folders or per-theme HTML editors.
 - **Smaller Beginner guide bundle.** The four publisher illustration assets used by the Beginner Models cards were removed. Guides, tags, prompting advice, credits and external source links remain; cards use the existing local placeholder.
