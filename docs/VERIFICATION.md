@@ -1,5 +1,14 @@
 # DEAS verification — native baseline, optional capabilities and languages
 
+## Release 0.2.18 (published)
+
+- Published 2026-11-06 as GitHub release `v0.2.18` (tag pinned to source commit `be92680492ad04e22f5cab8bd02be37e60d8aefa`, source tree `721de5709b92735baf6b64bcde81eb09b4e5203e`, annotated local tag mirrored to gitea). Verify/Release Actions remain disabled at repository level, so this is a disclosed local unsigned build (CachyOS host, rustc 1.97.0, node v26.13.0), built from a clean git worktree at the release commit — never from the concurrent-session working tree. No NSIS/deb/AppImage in this fallback set.
+- Assets (all four re-downloaded from the release and `sha256sum -c`-verified server-side): `deas-linux-amd64` `aa46af65b8aa3be006181b4d42e55bfd4545d7ad85b3e6db2e0109020435446f`; `deas.exe` `b2e911153f00e211dd0648d3af80eb904a11df1b5b4c1503930f9983740526ac`; `BUILD-MANIFEST.json` `7431b823ecbb3400620a83be7f0e0f6434349a6a96149d97b3595e87f5c8c406`; `SHA256SUMS` records all three.
+- Linux binary: glibc floor from the binary itself is **2.39** (build host, not the 22.04 runner baseline — users on Debian 12/Ubuntu 22.04 must build from source until runners return); `ldd` reported zero missing libraries; both binaries embed the current `dist/assets/index-tev7AdJ8.js`.
+- Gates on the exact release commit: `npm run typecheck` + full Vitest `1533 passed (1533)` / `76 files`, `cargo fmt --check`, `cargo clippy --locked --release --lib --bins -- -D warnings`, serial `cargo test --locked -- --test-threads=1` `790 passed; 0 failed; 58 ignored`, `cargo xwin check --locked --all-targets --target x86_64-pc-windows-msvc` and `cargo xwin clippy --all-targets -- -D warnings` — all green. The xwin gates caught an MSVC-only compile error (`Cow::as_str`, unstable on the pinned toolchain) introduced with the theme-editor commit; fixed in `a35a2a4` before tagging.
+- Windows provenance: cross-built MSVC exe (benign `LNK4099` missing external CRT PDB warnings); cross-compile success is not Windows runtime acceptance — first real launch is the acceptance test.
+- Real-FFmpeg audio regressions ran on this commit (`audio_real_ffmpeg` + the eight `audio_post --ignored` jobs): MKV and MP4 containers and the source audio codec survive enhancement; video packets stay byte-identical.
+
 ## Forge input/output picture transport (0.2.18, shipped)
 
 - Frontend typecheck, all 144 core tests and all 1,531 UI tests (76 files) passed. Reference-panel coverage includes output first/last frames and input/output Find people without implicit analysis, plus Linux/Windows path spelling.
