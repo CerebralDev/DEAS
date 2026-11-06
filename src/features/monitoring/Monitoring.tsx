@@ -31,7 +31,7 @@ const metrics=[
 export function describeIntent(intent:JobIntent|VideoEnhanceIntentV1):{pipeline:string;model:string;size:string;steps:number|null;seed:number|null} {
  if(isVideoEnhanceIntent(intent))return {pipeline:'video-enhance',model:'',size:'',steps:null,seed:intent.seed};
  if(isMusicIntent(intent))return {pipeline:`music/${intent.mode}`,model:intent.checkpoint,size:`${intent.maxDuration}s`,steps:null,seed:intent.seed};
- if(isVideoIntent(intent))return {pipeline:`${intent.family}${intent.family==='minimax-h3'?`/${intent.h3.mode}`:''}`,model:intent.model,size:`${intent.width}×${intent.height} · ${intent.frames}f @ ${intent.frameRate}`,steps:intent.steps,seed:intent.seed};
+ if(isVideoIntent(intent))return {pipeline:`${intent.family}${intent.family==='minimax-h3'||intent.family==='minimax-h3-hyperflow'?`/${intent.h3.mode}`:''}`,model:intent.model,size:`${intent.width}×${intent.height} · ${intent.frames}f @ ${intent.frameRate}`,steps:intent.steps,seed:intent.seed};
  return {pipeline:intent.inputImage?'i2i':'t2i',model:intent.checkpoint,size:`${intent.width}×${intent.height}`,steps:intent.steps,seed:intent.seed};
 }
 /** queued = admission → start; running = start → generation end (or last observation while no end is known). */

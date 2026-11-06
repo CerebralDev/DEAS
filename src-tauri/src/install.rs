@@ -42,6 +42,10 @@ const COMFY: &str = "https://github.com/comfyanonymous/ComfyUI.git";
 const NODEPACK: &str = "https://github.com/darksidewalker/ComfyUI-DaSiWa-Nodes.git";
 const GGUF: &str = "https://github.com/city96/ComfyUI-GGUF.git";
 const GGUF_REVISION: &str = "6ea2651e7df66d7585f6ffee804b20e92fb38b8a";
+/// HyperFlow Flash node pack for MiniMax H3 HyperFlow GGUF checkpoints; provisioning pins the
+/// inspected SHA and its sole pip requirement (`gguf`) already comes from ComfyUI-GGUF.
+const HYPERFLOW: &str = "https://github.com/Video-Rebirth/ComfyUI-HyperFlow-Flash.git";
+const HYPERFLOW_REVISION: &str = "20a22ab2b075f3c948eb5dba62637ff89fc0f363";
 #[path = "install_torch.rs"]
 pub(crate) mod torch_profile;
 // --help exits before imports. Initialize actual core/nodes without binding a
@@ -53,7 +57,7 @@ sys.argv=['main.py','--disable-auto-launch','--cpu']
 import main,nodes
 main.start_comfyui()
 required={'MiniMaxH3Director','MiniMaxH3DirectorGuide','DaSiWaH3ContinuityAppend','DaSiWaH3ContinuityPublish'} if selected=='nodes' else set()
-if gguf: required.update({'UnetLoaderGGUF','CLIPLoaderGGUF','DualCLIPLoaderGGUF'})
+if gguf: required.update({'UnetLoaderGGUF','CLIPLoaderGGUF','DualCLIPLoaderGGUF','HyperFlowGGUFLoader','HyperFlowSigmas'})
 missing=required-set(nodes.NODE_CLASS_MAPPINGS)
 assert not missing, 'Missing selected nodes: '+', '.join(sorted(missing))
 print(json.dumps({'coreImported':True,'selectedNodes':sorted(required),'generationReady':False}))
@@ -1432,8 +1436,8 @@ async fn head(
     )
 }
 // Reject redirected custom-node/Git directories before touching the owned checkout.
-fn gguf_target(comfy: &Path) -> Result<PathBuf, String> {
-    let node = comfy.join("custom_nodes/ComfyUI-GGUF");
+fn node_target(comfy: &Path, name: &str) -> Result<PathBuf, String> {
+    let node = comfy.join(format!("custom_nodes/{name}"));
     for path in [
         comfy.to_owned(),
         comfy.join("custom_nodes"),
@@ -1446,15 +1450,17 @@ fn gguf_target(comfy: &Path) -> Result<PathBuf, String> {
                 {
                     use std::os::windows::fs::MetadataExt;
                     if meta.file_attributes() & 0x400 != 0 {
-                        return Err("ComfyUI-GGUF directories must not be reparse points".into());
+                        return Err(format!("{name} directories must not be reparse points"));
                     }
                 }
                 if !meta.is_dir() || meta.file_type().is_symlink() {
-                    return Err("ComfyUI-GGUF directories must be regular owned directories".into());
+                    return Err(format!(
+                        "{name} directories must be regular owned directories"
+                    ));
                 }
             }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-            Err(e) => return Err(format!("Cannot validate ComfyUI-GGUF directory: {e}")),
+            Err(e) => return Err(format!("Cannot validate {name} directory: {e}")),
         }
     }
     Ok(node)
@@ -1494,7 +1500,7 @@ pub(crate) fn validate_gguf_install(plan: &Plan, root: &Path) -> Result<(), Stri
             1024 * 1024,
         )?)
         .map_err(|e| format!("Invalid ComfyUI-GGUF install manifest: {e}"))?;
-        let node = gguf_target(&root.join("ComfyUI"))?;
+        let node = node_target(&root.join("ComfyUI"), "ComfyUI-GGUF")?;
         let head = crate::backend::read_owned(&node.join(".git/HEAD"), 1024)?;
         if manifest["ggufRevision"] != reference
             || std::str::from_utf8(&head)
@@ -1508,6 +1514,22 @@ pub(crate) fn validate_gguf_install(plan: &Plan, root: &Path) -> Result<(), Stri
             );
         }
         validate_gguf_sources(&node, reference)?;
+        // The HyperFlow pack carries a revision pin only (no source manifest yet); an older
+        // environment without the checkout stays valid until an upgrade provisions it.
+        let hyperflow = node_target(&root.join("ComfyUI"), "ComfyUI-HyperFlow-Flash")?;
+        if hyperflow.join(".git").is_dir() {
+            let head = crate::backend::read_owned(&hyperflow.join(".git/HEAD"), 1024)?;
+            if std::str::from_utf8(&head)
+                .map_err(|e| e.to_string())?
+                .trim()
+                != HYPERFLOW_REVISION
+            {
+                return Err(
+                    "ComfyUI-HyperFlow-Flash install does not match its pinned revision; re-provision required"
+                        .into(),
+                );
+            }
+        }
         Ok(())
     })();
     result.inspect_err(|error| {
@@ -1586,7 +1608,13 @@ fn foreign_nodes(plan: &Plan) -> Option<String> {
         })
         .map(|entry| entry.file_name().to_string_lossy().into_owned())
         .filter(|name| {
-            !["ComfyUI-GGUF", "ComfyUI-DaSiWa-Nodes", "__pycache__"].contains(&name.as_str())
+            ![
+                "ComfyUI-GGUF",
+                "ComfyUI-DaSiWa-Nodes",
+                "ComfyUI-HyperFlow-Flash",
+                "__pycache__",
+            ]
+            .contains(&name.as_str())
         })
         .collect();
     names.sort();
@@ -1940,13 +1968,14 @@ async fn packages(
         .await?;
     }
     let mut gguf_revision = None;
+    let mut hyperflow_revision = None;
     // Legacy immutable plans keep their original dependency scope.
     if let Some(reference) = plan.gguf_ref.as_deref() {
         if reference.len() != 40 || !reference.bytes().all(|b| b.is_ascii_hexdigit()) {
             return Err("Invalid immutable ComfyUI-GGUF revision".into());
         }
         step(inner, "gguf");
-        let node = gguf_target(comfy)?;
+        let node = node_target(comfy, "ComfyUI-GGUF")?;
         if node.join(".git").exists() {
             crate::backend::read_owned(&node.join(".git/config"), 1024 * 1024)?;
         }
@@ -1979,7 +2008,28 @@ async fn packages(
         )
         .await
         .map_err(|e| format!("Required ComfyUI-GGUF dependencies failed: {e}"))?;
+        // The HyperFlow Flash node pack rides the same step; it needs no pip install of its
+        // own (requirements.txt pins `gguf`, which the step above just installed).
+        let hyperflow = node_target(comfy, "ComfyUI-HyperFlow-Flash")?;
+        let hyperflow_fetched = if upgrade || !hyperflow.join(".git").exists() {
+            checkout(
+                git,
+                HYPERFLOW,
+                HYPERFLOW_REVISION,
+                &hyperflow,
+                root,
+                inner,
+                cancel,
+            )
+            .await?
+        } else {
+            head(git, &hyperflow, root, inner, cancel).await?
+        };
+        if hyperflow_fetched != HYPERFLOW_REVISION {
+            return Err("ComfyUI-HyperFlow-Flash revision does not match the pinned source".into());
+        }
         gguf_revision = Some(fetched);
+        hyperflow_revision = Some(hyperflow_fetched);
     }
     let mut node_revision = None;
     if plan
@@ -2093,7 +2143,7 @@ async fn packages(
     )
     .await?;
     cancelled(cancel)?;
-    let manifest = serde_json::json!({"planId":plan.id,"comfyRevision":revision,"nodepackRevision":node_revision,"ggufRevision":gguf_revision,"backend":plan.request.backend,"hardware":plan.hardware,"torchProfile":selected,"python":py,"versions":versions.trim(),"generationReady":false});
+    let manifest = serde_json::json!({"planId":plan.id,"comfyRevision":revision,"nodepackRevision":node_revision,"ggufRevision":gguf_revision,"hyperflowRevision":hyperflow_revision,"backend":plan.request.backend,"hardware":plan.hardware,"torchProfile":selected,"python":py,"versions":versions.trim(),"generationReady":false});
     std::fs::write(
         root.join("deas-install.json"),
         serde_json::to_vec_pretty(&manifest).map_err(|e| e.to_string())?,

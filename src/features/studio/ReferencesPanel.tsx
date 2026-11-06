@@ -143,7 +143,7 @@ export function fromPack(json:unknown,inputRoot:string):{adds:{path:string;media
   ...(x.type!=='image'&&seconds(x.trim_start)!==undefined?{trimStart:seconds(x.trim_start)}:{}),...(x.type!=='image'&&seconds(x.trim_end)!==undefined?{trimEnd:seconds(x.trim_end)}:{}),
   ...(x.type==='image'&&pictureLabels.includes(x.forge_label as string)?{label:x.forge_label as string}:{}),...(typeof x.forge_instructions==='string'&&x.forge_instructions.trim()?{instructions:x.forge_instructions.slice(0,4000)}:{}),...(typeof x.forge_keep==='string'&&x.forge_keep.trim()?{keep:x.forge_keep.slice(0,2000)}:{}),...(typeof x.forge_drop==='string'&&x.forge_drop.trim()?{drop:x.forge_drop.slice(0,2000)}:{})}))};
 }
-const lanes:Record<string,Lane[]>={'minimax-h3':['image','video','audio'],'ltx-2':['image']};
+const lanes:Record<string,Lane[]>={'minimax-h3':['image','video','audio'],'minimax-h3-hyperflow':['image','video','audio'],'ltx-2':['image']};
 
 export function ReferencePeople({r,label,onChange,endpoint,root,inputRoot,allowEmpty=false,prominent=false,title}:{r:VideoRef;label:string;onChange:(x:Partial<VideoRef>)=>void;endpoint:string;root?:string;inputRoot?:string;allowEmpty?:boolean;/** Prompt Forge tab: an always-open titled section instead of a collapsed menu. */prominent?:boolean;title?:string}){
  const {t}=useI18n();const [expanded,setOpen]=useState(false);const open=prominent||expanded;const who=r.who??labelCharacters(label).map(Number);
@@ -161,7 +161,7 @@ export function ReferencePeople({r,label,onChange,endpoint,root,inputRoot,allowE
   :<details className="wb-ref-more" data-ref-people onToggle={e=>setOpen(e.currentTarget.open)}><summary>{t('forge.people')}</summary>{body}</details>;
 }
 
-export interface ReferencesPanelProps { endpoint?:string; root?:string; refs:VideoRef[]; onChange:(refs:VideoRef[])=>void; family:'ltx-2'|'minimax-h3'; /** Video length: LTX reference seconds stay inside it. */ seconds:number; /** Adds references in order (dropped tiles/files, loaded packs); `replace` starts from an empty list. */ onAdd:(adds:RefAdd[],replace?:boolean)=>void; /** ComfyUI input folder: Director packs name files relative to it. */ inputRoot?:string; label:(r:VideoRef,i:number)=>string; /** Append a Director label such as `<Picture 1>` to the prompt. */ onInsert:(label:string)=>void; /** H3 RefMod rows (Director slots 1–8 in order). */ refmods?:RefMod[]; onRefmods?:(rows:RefMod[])=>void; /** Reads the backend's RefMod library on demand. */ library?:()=>Promise<RefModEntry[]> }
+export interface ReferencesPanelProps { endpoint?:string; root?:string; refs:VideoRef[]; onChange:(refs:VideoRef[])=>void; family:'ltx-2'|'minimax-h3'|'minimax-h3-hyperflow'; /** Video length: LTX reference seconds stay inside it. */ seconds:number; /** Adds references in order (dropped tiles/files, loaded packs); `replace` starts from an empty list. */ onAdd:(adds:RefAdd[],replace?:boolean)=>void; /** ComfyUI input folder: Director packs name files relative to it. */ inputRoot?:string; label:(r:VideoRef,i:number)=>string; /** Append a Director label such as `<Picture 1>` to the prompt. */ onInsert:(label:string)=>void; /** H3 RefMod rows (Director slots 1–8 in order). */ refmods?:RefMod[]; onRefmods?:(rows:RefMod[])=>void; /** Reads the backend's RefMod library on demand. */ library?:()=>Promise<RefModEntry[]> }
 /** Multi-reference → Video editor in Director lanes; used inside the References overlay. */
 export function ReferencesPanel({endpoint='',root,refs,onChange,family,seconds,label,onAdd,onInsert,inputRoot,refmods=[],onRefmods,library}:ReferencesPanelProps){
  const {t}=useI18n();
@@ -209,7 +209,7 @@ export function ReferencesPanel({endpoint='',root,refs,onChange,family,seconds,l
    setStatus(t('studio.run.video.packLoaded',{count:String(adds.length)})+(missing?` · ${t('studio.run.video.packMissing',{count:String(missing)})}`:''));
   }catch(e){setError(String(e));}
  };
- const h3=family==='minimax-h3';const c=refCounts(refs);
+ const h3=family!=='ltx-2';const c=refCounts(refs);
  const set=(n:number,x:Partial<VideoRef>)=>onChange(refs.map((r,m)=>m===n?{...r,...x}:r));
  // Order matters only inside a lane (slot numbers), so a move swaps with the nearest item of the same lane.
  const neighbour=(n:number,d:-1|1)=>{for(let m=n+d;m>=0&&m<refs.length;m+=d)if(laneOf(refs[m])===laneOf(refs[n]))return m;return -1;};

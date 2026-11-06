@@ -1,7 +1,9 @@
 import type { AudioEnhanceIntent } from './audioEnhance';
 import type { RunOptions } from './execution';
 /** Video recipe intent (native compiler `jobs_video.rs`), one per model family; the TS side only types it and derives frame counts. */
-export type VideoFamily='ltx-2'|'wan'|'minimax-h3';
+export type VideoFamily='ltx-2'|'wan'|'minimax-h3'|'minimax-h3-hyperflow';
+/** The HyperFlow Flash GGUF variant shares the MiniMax H3 Director block and pipeline semantics. */
+export const isH3Video=(f?:VideoFamily):f is 'minimax-h3'|'minimax-h3-hyperflow'=>f==='minimax-h3'||f==='minimax-h3-hyperflow';
 export const videoCodecs=['Auto','AV1','VP9','H.265 (HEVC)','H.264'] as const;
 export const videoContainers=['Auto','WebM','MKV','MP4','Animated WebP','Animated AVIF'] as const;
 export const bitDepths=['Auto','8-bit','10-bit'] as const;
@@ -72,14 +74,14 @@ export function latentUpscaleSize(family:VideoFamily,size:{width:number;height:n
 export type VideoIntentV1=VideoBase&(
  |{readonly family:'ltx-2';readonly latentUpscale?:LtxLatentUpscale;readonly ltx:{textProjection:string;audioVae:string;passes:1|2|3;spatialUpscaler?:string;keyframes?:{image:string;frame:number;strength:number}[];sourceStrength?:number}}
  |{readonly family:'wan';readonly latentUpscale?:never;readonly wan:{lowModel:string;shiftHigh:number;shiftLow:number;refinerStep:number}}
- |{readonly family:'minimax-h3';readonly latentUpscale?:H3LatentUpscale;readonly h3:{mode:'T2VA'|'I2VA'|'L2VA'|'FL2VA'|'REF2VA';audioVae:string;shiftVideo:number;shiftAudio:number;references:{slot:0|1;image:string}[];media?:H3Media[];continuity?:H3Continuity;inputScaling?:H3Scaling;refmods?:{slot:number;name:string;strength:number;description?:string}[]}});
+ |{readonly family:'minimax-h3'|'minimax-h3-hyperflow';readonly latentUpscale?:H3LatentUpscale;readonly h3:{mode:'T2VA'|'I2VA'|'L2VA'|'FL2VA'|'REF2VA';audioVae:string;shiftVideo:number;shiftAudio:number;references:{slot:0|1;image:string}[];media?:H3Media[];continuity?:H3Continuity;inputScaling?:H3Scaling;refmods?:{slot:number;name:string;strength:number;description?:string}[]}});
 export const isVideoIntent=(i:{recipeId:string}):i is VideoIntentV1=>i.recipeId==='video-generation';
 /** TVE tab: enhance an uploaded source video with the same chain (native `compile_enhance`); the source stays the baseline. */
 export interface VideoEnhanceIntentV1 { readonly audioEnhance?:AudioEnhanceIntent; readonly recipeId:'video-enhance'; readonly version:1; readonly sourceVideo:string; readonly frameRate:number; readonly seed:number; readonly videoPost:VideoPost; readonly output?:Omit<VideoOutput,'imageFormat'|'imageCompression'>; readonly outputPrefix?:string }
 export const isVideoEnhanceIntent=(i:{recipeId:string}):i is VideoEnhanceIntentV1=>i.recipeId==='video-enhance';
 /** Frame counts as the owner's workflows compute them: LTX/Wan `round(s·fps/8)·8+1`, MiniMax H3 `17k+5` at 24 fps (snapped up). */
 export function videoFrames(family:VideoFamily,seconds:number,fps:number):number{
- if(family==='minimax-h3'){const n=Math.max(5,Math.round(seconds*24));return n+(((5-(n%17))%17)+17)%17;}
+ if(isH3Video(family)){const n=Math.max(5,Math.round(seconds*24));return n+(((5-(n%17))%17)+17)%17;}
  return Math.max(family==='wan'?5:9,Math.round(seconds*fps/8)*8+1);
 }
 /** Feed-forward chunk count from the OmniForge/FastFidelity formula; `headroom` 1 ≈ 24 GB … 4 ≈ 8 GB. Undefined = no chunking. */

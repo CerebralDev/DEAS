@@ -37,7 +37,7 @@ export function GenerationMetadata({job,media=null,onRestore}:{job:JobStatus|nul
  // Image intents list every field; video intents share the sampling rows plus frames/fps and the family block.
  const intent=job?.intent;const v=intent&&isVideoIntent(intent)?intent:undefined;const i=intent&&isImageIntent(intent)?intent:undefined;const m=intent&&isMusicIntent(intent)?intent:undefined;const e=intent&&isVideoEnhanceIntent(intent)?intent:undefined;
  const ace=m&&isAceMusicIntent(m)?m:undefined;
- const extensionSeconds=v?.family==='minimax-h3'?v.h3.continuity?.durationSeconds:undefined;
+ const extensionSeconds=v&&(v.family==='minimax-h3'||v.family==='minimax-h3-hyperflow')?v.h3.continuity?.durationSeconds:undefined;
  const row=(key:string,value:ReactNode)=><div key={key}><dt>{t(key)}</dt><dd>{value}</dd></div>;
  const audio=(v??m??e)?.audioEnhance;
  const audioRow=audio&&row('studio.audioEnhance.title',`${t(`studio.audioEnhance.${audio.mode}`)} · ${t(`studio.audioEnhance.${audio.profile}`)}${audio.mode==='stems'?` · ${t(`studio.audioEnhance.device.${audio.device??'auto'}`)}`:''}`);

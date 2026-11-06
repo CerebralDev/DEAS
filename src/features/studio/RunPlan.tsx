@@ -48,7 +48,7 @@ export function RunPlan({intent,pipeline,notices,outputRoot,inputNotes=[]}:{inte
   <p>{t('studio.plan.notice')}</p>
   <ul className="run-plan-notices">{notices.map((s,i)=><li key={i}>{s}</li>)}</ul>
   {!intent?<p role="status">{unknown}</p>:<ol className="run-plan-stages">
-   {(image?.inputImage||image?.imageReference||image?.nativeImageReference||video?.firstFrame||video?.lastFrame||video?.sourceVideo||video?.family==='minimax-h3'&&(video.h3.references.length||video.h3.media?.length)||video?.family==='ltx-2'&&video.ltx.keyframes?.length||inputNotes.length>0)?stage('input',<>
+   {(image?.inputImage||image?.imageReference||image?.nativeImageReference||video?.firstFrame||video?.lastFrame||video?.sourceVideo||(video?.family==='minimax-h3'||video?.family==='minimax-h3-hyperflow')&&(video.h3.references.length||video.h3.media?.length)||video?.family==='ltx-2'&&video.ltx.keyframes?.length||inputNotes.length>0)?stage('input',<>
     {image?.inputImage&&row('studio.run.pipe.input',image.inputImage)}
     {image?.imageReference&&row('studio.run.dock.references',<ul>{image.imageReference.images.map((r,i)=><li key={i}>{r.image} · {r.strength}</li>)}</ul>)}
     {image?.nativeImageReference&&row('studio.run.dock.references',<ul>{image.nativeImageReference.images.map((name,i)=><li key={i}>{name}</li>)}</ul>)}
@@ -58,7 +58,7 @@ export function RunPlan({intent,pipeline,notices,outputRoot,inputNotes=[]}:{inte
     {video?.lastFrame&&row('studio.run.video.lastFrame',video.lastFrame)}
     {video?.sourceVideo&&row('studio.run.video.source',video.sourceVideo)}
     {video?.family==='ltx-2'&&video.ltx.keyframes&&row('studio.run.video.refs',<ul>{video.ltx.keyframes.map((r,i)=><li key={i}>{r.image} · {t('studio.plan.frames')}: {r.frame} · {t('studio.run.video.refStrength')}: {r.strength}</li>)}</ul>)}
-    {video?.family==='minimax-h3'&&row('studio.run.video.refs',<ul>{video.h3.references.map((r,i)=><li key={`r${i}`}>{r.image} · {t('studio.plan.slot')}: {r.slot}</li>)}{video.h3.media?.map((r,i)=><li key={`m${i}`}>{r.file} · {r.type} · {t('studio.plan.slot')}: {r.slot}{r.mediaMode&&<> · {t(`studio.run.video.mode.${r.mediaMode}`)}</>}</li>)}</ul>)}
+    {(video?.family==='minimax-h3'||video?.family==='minimax-h3-hyperflow')&&row('studio.run.video.refs',<ul>{video.h3.references.map((r,i)=><li key={`r${i}`}>{r.image} · {t('studio.plan.slot')}: {r.slot}</li>)}{video.h3.media?.map((r,i)=><li key={`m${i}`}>{r.file} · {r.type} · {t('studio.plan.slot')}: {r.slot}{r.mediaMode&&<> · {t(`studio.run.video.mode.${r.mediaMode}`)}</>}</li>)}</ul>)}
     {inputNotes.map((s,i)=><dd key={i}>{s}</dd>)}
    </>):null}
    {stage('model',<>
@@ -78,12 +78,12 @@ export function RunPlan({intent,pipeline,notices,outputRoot,inputNotes=[]}:{inte
     {row(image?.sigmas?'studio.run.opt.sigmas':'studio.recipe.scheduler',image?.sigmas?image.sigmas.join(', '):intent.scheduler)}
     {image?.denoise!==undefined&&row('studio.run.denoise',image.denoise)}
     {image?.h3Edit&&<>{row('studio.run.video.shiftVideo',image.h3Edit.shiftVideo)}{row('studio.run.video.shiftAudio',image.h3Edit.shiftAudio)}</>}
-    {video&&<>{video.family==='minimax-h3'&&video.h3.continuity?.durationSeconds!==undefined?row('studio.run.cont.seconds',video.h3.continuity.durationSeconds):<>{row('studio.plan.frames',video.frames)}{row('studio.plan.duration',String((video.frames-1)/video.frameRate))}</>}{row('studio.run.video.fps',video.frameRate)}
+    {video&&<>{(video.family==='minimax-h3'||video.family==='minimax-h3-hyperflow')&&video.h3.continuity?.durationSeconds!==undefined?row('studio.run.cont.seconds',video.h3.continuity.durationSeconds):<>{row('studio.plan.frames',video.frames)}{row('studio.plan.duration',String((video.frames-1)/video.frameRate))}</>}{row('studio.run.video.fps',video.frameRate)}
      {video.chunks&&row('studio.run.opt.chunking',video.chunks)}
      {row('studio.plan.family',video.family)}
      {video.family==='ltx-2'&&<>{row('studio.run.video.passes',<ol>{Array.from({length:video.ltx.passes},(_,n)=><li key={n}>{t('studio.plan.pass',{n:String(n+1)})}{n===0?` · ${intent.steps} · ${intent.sampler}`:` · ${t('studio.plan.nativePass')}`}</li>)}</ol>)}{row('studio.run.video.textProjection',video.ltx.textProjection)}{video.ltx.spatialUpscaler!==undefined&&row('studio.run.video.upscaler',video.ltx.spatialUpscaler)}{video.ltx.sourceStrength!==undefined&&row('studio.run.video.sourceStrength',video.ltx.sourceStrength)}</>}
      {video.family==='wan'&&<>{row('studio.plan.lowModel',video.wan.lowModel)}{row('studio.run.video.shiftHigh',video.wan.shiftHigh)}{row('studio.run.video.shiftLow',video.wan.shiftLow)}{row('studio.run.video.refinerStep',video.wan.refinerStep)}</>}
-     {video.family==='minimax-h3'&&<>{row('studio.plan.mode',video.h3.mode)}{row('studio.run.video.shiftVideo',video.h3.shiftVideo)}{row('studio.run.video.shiftAudio',video.h3.shiftAudio)}{(video.h3.references.length>0||!!video.h3.media?.length)&&row('studio.run.resolution.scaling',video.h3.inputScaling??'Fill and crop')}{video.h3.continuity&&row('studio.run.dock.continuity',data(video.h3.continuity))}</>}
+     {(video.family==='minimax-h3'||video.family==='minimax-h3-hyperflow')&&<>{row('studio.plan.mode',video.h3.mode)}{video.family==='minimax-h3'&&<>{row('studio.run.video.shiftVideo',video.h3.shiftVideo)}{row('studio.run.video.shiftAudio',video.h3.shiftAudio)}</>}{(video.h3.references.length>0||!!video.h3.media?.length)&&row('studio.run.resolution.scaling',video.h3.inputScaling??'Fill and crop')}{video.h3.continuity&&row('studio.run.dock.continuity',data(video.h3.continuity))}</>}
 </>}
    </>)}
    {image?.refine&&stage('refine',<>{row('studio.run.resolution.title',size(image.refine))}{row('studio.run.post.denoise',image.refine.denoise)}{row('studio.run.steps',image.refine.sigmas?image.refine.sigmas.length-1:intent.steps)}{row('studio.run.post.model',image.refine.upscaleModel||t('studio.run.post.lanczos'))}

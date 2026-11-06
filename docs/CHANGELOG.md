@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.18 BETA (unreleased)
+
+- **HyperFlow H3 Flash video support.** DEAS now recognizes `VideoRebirthAI/hyperflow-h3-flash` GGUF checkpoints (`hyperflow_gate` tensor signature → family `minimax-h3-hyperflow`) and runs them through the normal MiniMax H3 video flow: same Director pipelines (T2VA/I2VA/L2VA/FL2VA/REF2VA), Continuity and RefMods, with the pack's `HyperFlowGGUFLoader` replacing the plain GGUF loader and `HyperFlowSigmas` replacing the sigma-shift/scheduler chain. Sampling is pinned to the model's distilled schedule: 4, 6 (default) or 8 steps with euler at CFG 1, no negative prompt; shift fields are hidden and learned latent upscale stays disabled (unverified). HyperFlow checkpoints load as GGUF only — the hub's INT8 convrot partition is diffusers-shape data for the upstream Python runtime and cannot load in any ComfyUI build. The ComfyUI-HyperFlow-Flash node pack (pinned source revision) is provisioned with the ComfyUI-GGUF step and verified in the backend probe.
+
 ## Unreleased
 
 - **Integrated theme editing without palette duplication.** Quick Settings **Open themes folder** is replaced by **Edit themes**. DEAS bundles one offline `EDIT-THEMES.html` and one `new-theme` starter, creates the starter in the selected environment only when absent, opens the editor, and leaves an existing starter unchanged. The nine built-in colour schemes remain compiled into DEAS and are no longer duplicated as supplied `theme-packs/classic` folders or per-theme HTML editors.

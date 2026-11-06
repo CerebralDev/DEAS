@@ -232,6 +232,6 @@ fn gguf_checkout_rejects_external_symlink_without_writes() {
     let comfy = tmp.path().join("ComfyUI");
     std::fs::create_dir(&comfy).unwrap();
     std::os::unix::fs::symlink(outside.path(), comfy.join("custom_nodes")).unwrap();
-    assert!(gguf_target(&comfy).is_err());
+    assert!(node_target(&comfy, "ComfyUI-GGUF").is_err());
     assert_eq!(std::fs::read_dir(outside.path()).unwrap().count(), 0);
 }

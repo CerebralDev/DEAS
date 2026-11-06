@@ -633,6 +633,52 @@ pub(crate) fn h3() -> Value {
 }
 
 #[test]
+fn hyperflow_flash_uses_its_own_loader_and_saved_schedule() {
+    let mut i = h3();
+    i["family"] = json!("minimax-h3-hyperflow");
+    i["model"] = json!("MiniMaxH3/minimax_h3_fl2va_hyperflow_flash_14b-Q4_K_M.gguf");
+    let graph = compile(&i).unwrap();
+    assert_eq!(graph["1"]["class_type"], "HyperFlowGGUFLoader");
+    assert!(graph["1"]["inputs"].get("weight_dtype").is_none());
+    assert_eq!(graph["Z"]["class_type"], "HyperFlowSigmas");
+    assert_eq!(graph["Z"]["inputs"]["model"], json!(["D", 5]));
+    assert_eq!(graph["Z"]["inputs"]["steps"], 4);
+    assert_eq!(graph["B"]["inputs"]["model"], json!(["D", 5]));
+    for n in graph.as_object().unwrap().values() {
+        assert_ne!(n["class_type"], "MiniMaxH3SigmaShift");
+        assert_ne!(n["class_type"], "BasicScheduler");
+    }
+    for steps in [4u64, 6, 8] {
+        let mut ok = i.clone();
+        ok["steps"] = json!(steps);
+        assert!(compile(&ok).is_ok(), "steps {steps}");
+    }
+    for bad in [3u64, 5, 7, 9] {
+        let mut b = i.clone();
+        b["steps"] = json!(bad);
+        assert!(
+            compile(&b).unwrap_err().contains("only samples 4/6/8"),
+            "steps {bad}"
+        );
+    }
+    let mut b = i.clone();
+    b["sampler"] = json!("dpmpp_2m");
+    assert!(compile(&b).unwrap_err().contains("runs euler only"));
+    let mut safetensors = i.clone();
+    safetensors["model"] = json!("MiniMaxH3/hyperflow_int8_convrot.safetensors");
+    assert!(compile(&safetensors).unwrap_err().contains("GGUF only"));
+    let required = requirements(&i);
+    assert!(required
+        .iter()
+        .any(|(key, names)| *key == "ggufDiffusionModels"
+            && names.contains(&"MiniMaxH3/minimax_h3_fl2va_hyperflow_flash_14b-Q4_K_M.gguf")));
+    // Learned latent upscale stays unverified and fail-closed on this variant.
+    let mut u = i.clone();
+    u["latentUpscale"] = json!({"model":"ltxup.safetensors","scale":2,"steps":4,"denoise":0.4});
+    assert!(compile(&u).is_err());
+}
+
+#[test]
 fn rejects_unknown_fields_bad_grids_and_foreign_family_blocks() {
     for (key, value) in [
         ("extra", json!(1)),
@@ -1416,9 +1462,15 @@ fn dump_video_graphs() {
     r["h3"]["mode"] = json!("REF2VA");
     r["h3"]["references"] = json!([]);
     r["h3"]["media"] = json!([{"type":"image","file":"deas-inputs/a.png","slot":0},{"type":"video","file":"deas-input-source.mp4","slot":0,"mediaMode":"video"}]);
+    let mut hf = h3();
+    hf["family"] = json!("minimax-h3-hyperflow");
+    hf["model"] = json!("MiniMaxH3/hyperflow_flash.gguf");
+    hf["steps"] = json!(6);
+    hf["h3"]["references"] = json!([]);
+    hf["h3"]["mode"] = json!("T2VA");
     println!(
         "{}",
-        json!({"ltx":compile(&l).unwrap(),"wan":compile(&w).unwrap(),"h3":compile(&h3()).unwrap(),"ltx_v2v":compile(&v2v).unwrap(),"h3_ref2va":compile(&r).unwrap()})
+        json!({"ltx":compile(&l).unwrap(),"wan":compile(&w).unwrap(),"h3":compile(&h3()).unwrap(),"ltx_v2v":compile(&v2v).unwrap(),"h3_ref2va":compile(&r).unwrap(),"hyperflow":compile(&hf).unwrap()})
     );
 }
 

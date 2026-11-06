@@ -705,6 +705,21 @@ pub(crate) fn compile(i: &Value) -> Result<Value, String> {
         return Err("Unsafe output prefix".into());
     }
     let gguf = is_gguf(i["checkpoint"].as_str().unwrap());
+    // Video-only families (HyperFlow Flash GGUFs) have no image recipe; fail closed instead of
+    // silently compiling them on the plain checkpoint graph.
+    for declared in [
+        object.get("family").and_then(Value::as_str),
+        diffusion
+            .and_then(|d| d.get("family"))
+            .and_then(Value::as_str),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        if crate::model_families::video_only(declared) {
+            return Err(format!("Family {declared} is video-only; no image recipe"));
+        }
+    }
     // The family declares latent/negative/sampling patch; unknown architectures keep the plain graph.
     let recipe = object
         .get("family")

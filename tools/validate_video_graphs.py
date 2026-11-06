@@ -35,7 +35,7 @@ def sub(name, wants):
         if all(k in cand.lower() for k in name):
             return cand
     return pick[wants][0] if pick[wants] else 'MISSING'
-swap = {'LTX2/ltx.safetensors': sub(['ltx'], 'unet'), 'WAN22/high.safetensors': sub(['high'], 'unet'), 'WAN22/low.safetensors': sub(['low'], 'unet'), 'MiniMaxH3/fl2va.safetensors': sub(['h3'], 'unet'),
+swap = {'LTX2/ltx.safetensors': sub(['ltx'], 'unet'), 'WAN22/high.safetensors': sub(['high'], 'unet'), 'WAN22/low.safetensors': sub(['low'], 'unet'), 'MiniMaxH3/fl2va.safetensors': sub(['h3'], 'unet'), 'MiniMaxH3/hyperflow_flash.gguf': 'deas-probe-hyperflow.gguf',
         'gemma_3_12B_it_fp8.safetensors': sub(['gemma'], 'te'), 'ltx-2.3_text_projection_bf16.safetensors': sub(['projection'], 'te'), 'umt5_xxl_fp8.safetensors': sub(['umt5'], 'te'), 'qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors': sub(['minimax'], 'te'),
         'LTX2/video_vae.safetensors': sub(['ltx', 'video'], 'vae'), 'LTX2/audio_vae.safetensors': sub(['ltx', 'audio'], 'vae'), 'Wan/wan_2.1_vae.safetensors': sub(['wan'], 'vae'), 'MiniMaxH3/video_vae.safetensors': sub(['h3', 'video'], 'vae'), 'MiniMaxH3/audio_vae.safetensors': sub(['h3', 'audio'], 'vae'),
         'ltx-2.3-spatial-upscaler-x2-1.1.safetensors': sub(['spatial'], 'lup')}
@@ -50,6 +50,15 @@ shutil.copy(os.path.join(folder_paths.get_input_directory(), image), os.path.joi
 if not os.path.exists(os.path.join(scratch, 'source.mp4')):
     subprocess.run(['ffmpeg', '-loglevel', 'error', '-f', 'lavfi', '-i', 'testsrc=size=320x240:rate=24:duration=1', '-pix_fmt', 'yuv420p', os.path.join(scratch, 'source.mp4')], check=True)
 folder_paths.set_input_directory(scratch)
+# The HyperFlow GGUF loader combo lists only .gguf files; nobody's disk is guaranteed to have
+# one, so drop a probe file into the first writable diffusion_models folder (removed below).
+probe_gguf = None
+for d in folder_paths.get_folder_paths('diffusion_models'):
+    candidate = os.path.join(d, 'deas-probe-hyperflow.gguf')
+    try:
+        open(candidate, 'wb').close(); probe_gguf = candidate; break
+    except OSError:
+        continue
 ok = True
 for family, g in graphs.items():
     text = json.dumps(g)
@@ -66,5 +75,7 @@ for family, g in graphs.items():
         for nid, e in node_errors.items():
             print('NODE', nid, g[nid]['class_type'], json.dumps(e.get('errors'), ensure_ascii=False)[:600])
 print('ALL VALID' if ok else 'INVALID')
+if probe_gguf:
+    os.remove(probe_gguf)
 scratch_directory.cleanup()
 sys.exit(0 if ok else 1)

@@ -4,7 +4,11 @@
 use crate::jobs::{comfy_model_name, model_name, safe_choice, safe_output_prefix, valid_options};
 use serde_json::{json, Value};
 
-pub(crate) const FAMILIES: [&str; 3] = ["ltx-2", "wan", "minimax-h3"];
+pub(crate) const FAMILIES: [&str; 4] = ["ltx-2", "wan", "minimax-h3", "minimax-h3-hyperflow"];
+/// The HyperFlow Flash GGUF variant runs the same DaSiWa Director graph with a different loader and schedule.
+pub(crate) fn is_h3(family: &str) -> bool {
+    family == "minimax-h3" || family == "minimax-h3-hyperflow"
+}
 const FIELDS: [&str; 17] = [
     "recipeId",
     "version",
@@ -64,7 +68,7 @@ const H3_INPUT_SCALING: [&str; 7] = [
     "Long side with divisible crop",
 ];
 /// Every class the three graphs can emit; prepare() checks each against object_info.
-pub(crate) const VIDEO_NODES: [&str; 36] = [
+pub(crate) const VIDEO_NODES: [&str; 38] = [
     "DaSiWaH3TiledUpscale",
     "DualCLIPLoader",
     "LoraLoaderModelOnly",
@@ -98,6 +102,8 @@ pub(crate) const VIDEO_NODES: [&str; 36] = [
     "WanChunkFeedForward",
     "MiniMaxH3Director",
     "MiniMaxH3DirectorGuide",
+    "HyperFlowGGUFLoader",
+    "HyperFlowSigmas",
     "MiniMaxH3SigmaShift",
     "MiniMaxChunkFeedForward",
     "DaSiWa_EnhancedVideoCombine",
@@ -748,6 +754,25 @@ pub(crate) fn validate(i: &Value) -> Result<&str, String> {
     {
         return Err("Unsafe sampler or scheduler".into());
     }
+    let vr = crate::model_families::video_recipe(family);
+    if !vr.step_choices.is_empty() && !vr.step_choices.contains(&steps) {
+        let allowed = vr
+            .step_choices
+            .iter()
+            .map(|s| s.to_string())
+            .collect::<Vec<_>>()
+            .join("/");
+        return Err(format!("Invalid steps: {family} only samples {allowed}"));
+    }
+    if vr
+        .fixed_sampler
+        .is_some_and(|s| i["sampler"].as_str() != Some(s))
+    {
+        return Err(format!(
+            "Invalid sampler: {family} runs {} only",
+            vr.fixed_sampler.unwrap()
+        ));
+    }
     if i.get("chunks")
         .is_some_and(|c| !c.as_u64().is_some_and(|n| (2..=16).contains(&n)))
     {
@@ -788,6 +813,16 @@ pub(crate) fn validate(i: &Value) -> Result<&str, String> {
         if crate::jobs::is_gguf(name.as_str().unwrap_or_default()) {
             return Err("MODEL_FORMAT_UNSUPPORTED: GGUF VAE is unsupported".into());
         }
+    }
+    if family == "minimax-h3-hyperflow"
+        && !crate::jobs::is_gguf(i["model"].as_str().unwrap_or_default())
+    {
+        // The hub's INT8 convrot HyperFlow partition ships as diffusers shards for the Python
+        // runtime; ComfyUI only ever sees the GGUF checkpoints.
+        return Err(
+            "MODEL_FORMAT_UNSUPPORTED: HyperFlow Flash checkpoints load in ComfyUI as GGUF only"
+                .into(),
+        );
     }
     if crate::jobs::is_gguf(i["ltx"]["textProjection"].as_str().unwrap_or_default()) {
         return Err("MODEL_FORMAT_UNSUPPORTED: GGUF text projection is unsupported".into());
@@ -1038,7 +1073,7 @@ fn ltx(i: &Value) -> Value {
     // Multipass samples the first pass at half canvas (OmniForge), then upsamples the latent 2×.
     let (w1, h1) = if passes > 1 { (w / 2, h / 2) } else { (w, h) };
     let mut g = json!({
-        "1":unet_loader(&i["model"]),
+        "1":unet_loader("ltx-2",&i["model"]),
         "C":crate::jobs::dual_clip_loader(&i["textEncoder"], &l["textProjection"], "ltxv"),
         "V":{"class_type":"VAELoader","inputs":{"vae_name":i["vae"]}},
         "AV":{"class_type":"VAELoader","inputs":{"vae_name":l["audioVae"]}},
@@ -1174,8 +1209,8 @@ fn wan(i: &Value) -> Result<Value, String> {
         return Err("Wan 2.2 image-to-video needs a first frame".into());
     }
     let mut g = json!({
-        "1":unet_loader(&i["model"]),
-        "1L":unet_loader(&w["lowModel"]),
+        "1":unet_loader("wan",&i["model"]),
+        "1L":unet_loader("wan",&w["lowModel"]),
         "C":crate::jobs::clip_loader(&i["textEncoder"], &json!("wan")),
         "V":{"class_type":"VAELoader","inputs":{"vae_name":i["vae"]}},
         "2":{"class_type":"CLIPTextEncode","inputs":{"text":i["positivePrompt"],"clip":["C",0]}},
@@ -1288,8 +1323,9 @@ fn h3(i: &Value) -> Value {
             .map(|r| json!({"slot":r["slot"],"name":r["name"],"enabled":true,"strength":r["strength"],"description":r.get("description").cloned().unwrap_or(json!(""))}))
             .collect();
     }
+    let vr = crate::model_families::video_recipe(i["family"].as_str().unwrap_or_default());
     let mut g = json!({
-        "1":unet_loader(&i["model"]),
+        "1":unet_loader(i["family"].as_str().unwrap_or_default(),&i["model"]),
         "C":crate::jobs::clip_loader(&i["textEncoder"], &json!("minimax")),
         "V":{"class_type":"VAELoader","inputs":{"vae_name":i["vae"]}},
         "AV":{"class_type":"VAELoader","inputs":{"vae_name":h["audioVae"]}},
@@ -1315,9 +1351,18 @@ fn h3(i: &Value) -> Value {
         "fl2va_model"
     }] = model;
     g["G"] = json!({"class_type":"MiniMaxH3DirectorGuide","inputs":{"clip":["C",0],"vae":["V",0],"guide":["D",0],"audio_vae":["AV",0]}});
-    g["SS"] = json!({"class_type":"MiniMaxH3SigmaShift","inputs":{"model":["D",5],"shift_video":h["shiftVideo"],"shift_audio":h["shiftAudio"]}});
-    g["Z"] = json!({"class_type":"BasicScheduler","inputs":{"model":["SS",0],"scheduler":i["scheduler"],"steps":i["steps"],"denoise":1.0}});
-    g["B"] = json!({"class_type":"BasicGuider","inputs":{"model":["SS",0],"conditioning":["G",0]}});
+    if let Some(node) = vr.sigma_node {
+        // Distilled checkpoints sample their own stored schedule: the sigma node reads it from
+        // the Director's pass-through model, so no shift or scheduler chain runs.
+        g["Z"] = json!({"class_type":node,"inputs":{"model":["D",5],"steps":i["steps"]}});
+        g["B"] =
+            json!({"class_type":"BasicGuider","inputs":{"model":["D",5],"conditioning":["G",0]}});
+    } else {
+        g["SS"] = json!({"class_type":"MiniMaxH3SigmaShift","inputs":{"model":["D",5],"shift_video":h["shiftVideo"],"shift_audio":h["shiftAudio"]}});
+        g["Z"] = json!({"class_type":"BasicScheduler","inputs":{"model":["SS",0],"scheduler":i["scheduler"],"steps":i["steps"],"denoise":1.0}});
+        g["B"] =
+            json!({"class_type":"BasicGuider","inputs":{"model":["SS",0],"conditioning":["G",0]}});
+    }
     g["5"] = json!({"class_type":"SamplerCustomAdvanced","inputs":{"noise":["N",0],"guider":["B",0],"sampler":["Q",0],"sigmas":["Z",0],"latent_image":["G",1]}});
     // Segment Prepare/Decode serve both Director output modes and are plain decode without capture.
     g["SP"] = json!({"class_type":"DaSiWaH3ContinuitySegmentPrepare","inputs":{"sampled":["5",0],"context":["G",2]}});
@@ -1391,10 +1436,11 @@ fn strs<'a>(v: &[&'a Value]) -> Vec<&'a str> {
     v.iter().filter_map(|x| x.as_str()).collect()
 }
 
-/// GGUF files load through the ComfyUI-GGUF node, which takes no weight_dtype.
-pub(crate) fn unet_loader(name: &Value) -> Value {
+/// GGUF files load through the family's declared GGUF node (HyperFlow GGUFs need their own
+/// loader; they carry no `general.architecture`), which takes no weight_dtype.
+pub(crate) fn unet_loader(family: &str, name: &Value) -> Value {
     if crate::jobs::is_gguf(name.as_str().unwrap_or_default()) {
-        json!({"class_type":"UnetLoaderGGUF","inputs":{"unet_name":name}})
+        json!({"class_type":crate::model_families::video_recipe(family).gguf_loader,"inputs":{"unet_name":name}})
     } else {
         json!({"class_type":"UNETLoader","inputs":{"unet_name":name,"weight_dtype":"default"}})
     }
@@ -1455,7 +1501,7 @@ pub(crate) fn requirements(i: &Value) -> Vec<(&'static str, Vec<&str>)> {
                         .flatten()
                         .filter(|m| {
                             m["type"] == "image"
-                                && !(family == "minimax-h3"
+                                && !(is_h3(family)
                                     && b["mode"] == "REF2VA"
                                     && c_source(b)
                                     && b["continuity"]["useReferences"] != true)

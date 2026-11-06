@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **HyperFlow H3 Flash (fast MiniMax H3) works in the Studio.** Put a `minimax_h3_*_hyperflow_flash_14b-*.gguf` from [VideoRebirthAI/hyperflow-h3-flash](https://huggingface.co/VideoRebirthAI/hyperflow-h3-flash) into `diffusion_models/MiniMaxH3/`: DEAS detects it as a HyperFlow variant, defaults to 6 steps with euler at CFG 1 (4/6/8 selectable) and runs the usual H3 pipelines with Continuity. The node pack installs itself with the ComfyUI update. The INT8-convrot files on that hub are not a ComfyUI format — use the GGUF quants (Q4_K_M ≈ 9 GB).
+
 - **Edit themes from Quick Settings.** DEAS creates a starter theme in your environment only when needed, opens the offline editor, and no longer ships duplicate copies of the built-in palettes. Save a unique theme, refresh, and choose it. [Theme guide](THEME-PACKS.md).
 - **Smaller Beginner guide bundle.** The four large model-guide illustrations were removed. The guide text, tags, credits and publisher links remain.
 

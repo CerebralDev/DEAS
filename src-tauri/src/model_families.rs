@@ -63,6 +63,21 @@ struct Family {
     /// Conditioning node that also carries the latent (Mage-Flow's TextEncodeMageFlowEdit: outputs positive/negative/latent).
     #[serde(default, rename = "encodeNode")]
     encode_node: Option<String>,
+    /// Image/video pipeline ids this family's native recipes implement.
+    #[serde(default)]
+    pipelines: Vec<String>,
+    /// GGUF loader node a variant needs instead of `UnetLoaderGGUF` (HyperFlow GGUFs carry no `general.architecture`).
+    #[serde(default, rename = "ggufLoader")]
+    gguf_loader: Option<String>,
+    /// Sigma node a video recipe emits instead of the sigma-shift + `BasicScheduler` chain.
+    #[serde(default, rename = "videoSigmaNode")]
+    video_sigma_node: Option<String>,
+    /// Sampler the distilled model must run with; anything else fails validation.
+    #[serde(default, rename = "fixedSampler")]
+    fixed_sampler: Option<String>,
+    /// Allowed step counts when the model only samples fixed schedules.
+    #[serde(default, rename = "stepChoices")]
+    step_choices: Vec<u64>,
 }
 
 #[derive(Deserialize, Default)]
@@ -117,6 +132,41 @@ fn recipe_of(f: &'static Family) -> ImageRecipe {
         sigma_node: f.sigma_node.as_deref(),
         encode_node: f.encode_node.as_deref(),
     }
+}
+
+/// Recipe points the video compiler varies per family: loader node for GGUF variants that
+/// ComfyUI-GGUF cannot open on its own, the sigma node replacing the shift/scheduler chain,
+/// the sampler the distilled checkpoint must run with and its allowed step counts.
+pub(crate) struct VideoRecipe {
+    pub(crate) gguf_loader: &'static str,
+    pub(crate) sigma_node: Option<&'static str>,
+    pub(crate) fixed_sampler: Option<&'static str>,
+    pub(crate) step_choices: &'static [u64],
+}
+
+pub(crate) fn video_recipe(id: &str) -> VideoRecipe {
+    let family = families().iter().find(|f| f.id == id);
+    VideoRecipe {
+        gguf_loader: family
+            .and_then(|f| f.gguf_loader.as_deref())
+            .unwrap_or("UnetLoaderGGUF"),
+        sigma_node: family.and_then(|f| f.video_sigma_node.as_deref()),
+        fixed_sampler: family.and_then(|f| f.fixed_sampler.as_deref()),
+        step_choices: family.map(|f| f.step_choices.as_slice()).unwrap_or(&[]),
+    }
+}
+
+/// True for families that declare pipelines but none of them image ones: they exist only as
+/// video recipes and must fail closed in the image compiler.
+pub(crate) fn video_only(id: &str) -> bool {
+    families().iter().any(|f| {
+        f.id == id
+            && !f.pipelines.is_empty()
+            && !f
+                .pipelines
+                .iter()
+                .any(|p| matches!(p.as_str(), "t2i" | "i2i" | "inpaint" | "edit"))
+    })
 }
 
 fn families() -> &'static [Family] {
@@ -1355,6 +1405,53 @@ mod tests {
         assert_eq!(detect("diffusion_models", &odd, None), None);
         // Non-safetensors companion architectures stay unknown for GGUF inputs.
         assert_eq!(detect("vae", &krea, None), None);
+    }
+
+    #[test]
+    fn hyperflow_gguf_variant_wins_over_the_plain_minimax_signature() {
+        let dir = tempfile::tempdir().unwrap();
+        // Real HyperFlow GGUFs carry no general.architecture; write_gguf with "" mirrors that.
+        let h3 = [
+            "model.diffusion_model.video.patch.proj.weight",
+            "model.diffusion_model.audio.patch.proj.weight",
+            "model.diffusion_model.blocks.0.attn.qkv_proj.weight",
+        ];
+        let plain = write_gguf(dir.path(), "minimax.gguf", "", &h3);
+        assert_eq!(
+            detect("diffusion_models", &plain, None).as_deref(),
+            Some("minimax-h3")
+        );
+        let mut keys = h3.to_vec();
+        keys.extend([
+            "model.diffusion_model.hyperflow_gate",
+            "model.diffusion_model.hyperflow_sigmas",
+            "model.diffusion_model.endpoint_time_embedder.proj_in.weight",
+        ]);
+        let hf = write_gguf(
+            dir.path(),
+            "minimax_h3_fl2va_hyperflow_flash_14b-Q4_K_M.gguf",
+            "",
+            &keys,
+        );
+        assert_eq!(
+            detect("diffusion_models", &hf, None).as_deref(),
+            Some("minimax-h3-hyperflow")
+        );
+    }
+
+    #[test]
+    fn hyperflow_video_recipe_points_and_image_guard() {
+        let vr = video_recipe("minimax-h3-hyperflow");
+        assert_eq!(vr.gguf_loader, "HyperFlowGGUFLoader");
+        assert_eq!(vr.sigma_node, Some("HyperFlowSigmas"));
+        assert_eq!(vr.fixed_sampler, Some("euler"));
+        assert_eq!(vr.step_choices, [4, 6, 8]);
+        let plain = video_recipe("minimax-h3");
+        assert_eq!(plain.gguf_loader, "UnetLoaderGGUF");
+        assert!(plain.sigma_node.is_none() && plain.step_choices.is_empty());
+        assert!(video_only("minimax-h3-hyperflow"));
+        assert!(!video_only("minimax-h3"));
+        assert!(!video_only("sdxl"));
     }
 
     #[test]

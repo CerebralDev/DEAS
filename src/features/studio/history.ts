@@ -199,7 +199,7 @@ export function historyRestore(record:HistoryRecord,context:RestoreContext):Hist
    const inferred=high&&low?intent.model.replace(new RegExp(high,'i'),x=>x===x.toUpperCase()?low.toUpperCase():low):'';
    if(inferred!==intent.wan.lowModel)unsupported.push('wan.lowModel');
   }
-  if(intent.family==='minimax-h3'){
+  if(intent.family==='minimax-h3'||intent.family==='minimax-h3-hyperflow'){
    component(intent.h3.audioVae,'vae');
    if(intent.firstFrame||intent.lastFrame)unsupported.push('h3.frame fields');
    if(intent.h3.mode==='REF2VA')pipeline='ref2v';

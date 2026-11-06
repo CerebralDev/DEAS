@@ -7,7 +7,7 @@ import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { useI18n } from '../../i18n/I18nProvider';
 import { isGguf, clipLoaderName, nativeImageReferenceEncoders, type DiagnosticImageIntentV1, type RecipeAllowlist } from '../../lib/execution';
 import { stopWorkbench, stopWorkbenchJob, runWorkbenchJob, readCurrentWorkbench, pollWorkbench, uploadMask, uploadInput, readH3Session, readRefMods, isImageIntent, type JobStatus, type JobIntent, type H3ImportedVideo } from '../../lib/jobs';
-import { chunkCount, defaultVideoOutput, h3LatentChanged, h3LatentDefaults, h3Scalings, isVideoEnhanceIntent, isVideoIntent, latentUpscaleSize, videoFrames, type H3LatentAdvanced, type H3Scaling, type VideoFamily, type VideoIntentV1, type VideoOutput } from '../../lib/videoIntent';
+import { chunkCount, defaultVideoOutput, h3LatentChanged, h3LatentDefaults, h3Scalings, isH3Video, isVideoEnhanceIntent, isVideoIntent, latentUpscaleSize, videoFrames, type H3LatentAdvanced, type H3Scaling, type VideoFamily, type VideoIntentV1, type VideoOutput } from '../../lib/videoIntent';
 import { defaultAbc, defaultMusicGeneration, isMusicIntent, isMusicPipeline, musicBounds, musicMaxDuration, type AbcSettings, type MusicGenerationSettings, type MusicIntentV1, type MusicPlanning } from '../../lib/musicIntent';
 import { MusicPrompts, type MusicField } from './MusicPrompts';
 import { MusicSettings } from './MusicSettings';
@@ -63,7 +63,7 @@ import {BeginnerModels} from '../beginner/BeginnerModels';
 import type {BeginnerPage} from '../beginner/Experience';
 import { NativeVideo, nativeVideo } from './NativeVideo';
 /** Data-only family plugin (also read natively for header detection): loader, runnable pipelines, encoder/VAE file patterns, starting settings. */
-interface Family extends ComponentFamily { id:string; name:string; multiple?:number; temporalLatent?:boolean; imagePrompting?:'revision'|'qwen-image-2.1'|'krea-2'|'moss-image'; loader:string; pipelines:string[]; clipType?:string; /** Two-encoder families (Flux.1, SD3): slot 2 is picked by its filename pattern. */ clip?:{loader:'single'|'dual';encoders?:string[]}; textEncoders?:string[]; textProjections?:string[]; vaes?:string[]; audioVaes?:string[]; defaults?:{width:number;height:number;steps:number;cfg:number;sampler:string;scheduler:string}; sigmas?:number[]; loraFamily?:string; /** Video families: native fps/seconds, fixed fps (H3 is 24), Wan's high→low file-name pair. */ video?:{fps:number;seconds:number;fixedFps?:boolean;lowModel?:[string,string]} }
+interface Family extends ComponentFamily { id:string; name:string; multiple?:number; temporalLatent?:boolean; imagePrompting?:'revision'|'qwen-image-2.1'|'krea-2'|'moss-image'; loader:string; pipelines:string[]; clipType?:string; /** Two-encoder families (Flux.1, SD3): slot 2 is picked by its filename pattern. */ clip?:{loader:'single'|'dual';encoders?:string[]}; textEncoders?:string[]; textProjections?:string[]; vaes?:string[]; audioVaes?:string[]; defaults?:{width:number;height:number;steps:number;cfg:number;sampler:string;scheduler:string}; sigmas?:number[]; loraFamily?:string; /** Video families: native fps/seconds, fixed fps (H3 is 24), Wan's high→low file-name pair. */ video?:{fps:number;seconds:number;fixedFps?:boolean;lowModel?:[string,string]}; /** Per-variant recipe points (HyperFlow Flash). */ ggufLoader?:string; videoSigmaNode?:string; fixedSampler?:string; stepChoices?:number[]; defaultsNote?:string }
 /** Remembered video controls; family rows read only their own keys. */
 interface VideoPref { seconds:number; fps:number; passes:1|2|3; upscaler:string; shiftHigh:number; shiftLow:number; refinerStep:number; shiftVideo:number; shiftAudio:number; audioVae:string; textProjection:string }
 interface LatentPref {enabled:boolean;model:string;scale:number;steps:number;denoise:number;advanced?:H3LatentAdvanced}
@@ -350,6 +350,8 @@ const loadChoices=()=>{if(native&&!choices&&endpoint.trim())void refreshChoices(
  if(f.loader==='diffusion'&&m.category==='checkpoints'&&!aceMusicProfile(f.id))return 'studio.run.family.diffusionFolder';
  if(f.loader==='checkpoint'&&m.category!=='checkpoints')return 'studio.run.family.checkpointFolder';
  if(!f.pipelines.includes(p))return 'studio.run.pipe.noRecipe';
+ // HyperFlow Flash loads in ComfyUI through the GGUF pack node only; the INT8 convrot partition is Python-runtime.
+ if(f.id==='minimax-h3-hyperflow'&&!isGguf(m.name))return 'modelMeta.format';
  // Missing companions block Run, not model selection: users must be able to open their pickers.
  if(videoPipelines.includes(p)&&f.video?.lowModel&&!lowOf(m,f))return 'studio.run.family.noEncoder';
  return '';
@@ -441,7 +443,7 @@ const loadChoices=()=>{if(native&&!choices&&endpoint.trim())void refreshChoices(
  useEffect(()=>{if(latent&&dockTab==='post'&&native&&endpoint.trim())void refreshChoices(false);},[latent,dockTab,native,endpoint,refreshChoices]);
  // Before the capability probe answers, `latentChoices` is empty: that is "backend pending", not a missing model.
  const latentProblems=!latentEnabled?[]:[...(!choices?[]:[...latentNodes.filter(n=>!choices.nodes.includes(n)),...(!latentChoices.includes(latentModel)?[t('studio.run.latent.missing',{name:latentModel||t('studio.run.latent.model')})]:[])]),...(!(videoFamily==='ltx-2'?latentPref.scale===2:latentPref.scale>=1&&latentPref.scale<=8&&Number.isInteger(latentPref.steps)&&latentPref.steps>=1&&latentPref.steps<=100&&latentPref.denoise>=0&&latentPref.denoise<=1)?[t('studio.run.latent.invalid')]:[])];
- const continuityAvailable=videoFamily==='minimax-h3'&&isVideo;
+ const continuityAvailable=isH3Video(videoFamily)&&isVideo;
  const continuityOn=continuityAvailable&&plan.enabled===true;
  const continuityReferences=pipeline==='v2v'||pipeline==='ref2v';
  const continuationWithoutReferences=continuityAvailable&&continuityReferences&&!!nextStep(plan)?.continuity.sourceId&&!plan.useReferences;
@@ -449,14 +451,14 @@ const loadChoices=()=>{if(native&&!choices&&endpoint.trim())void refreshChoices(
  const needsInput=(pipeline==='i2i'||pipeline==='i2v')&&!inputImage?'studio.run.pipe.needsInput'
   :pipeline==='cover'&&!musicSource?.path?'studio.music.needsSource'
   :pipeline==='v2v'&&!(media?.media==='video'&&media.path)?'studio.run.pipe.needsVideo'
-  :pipeline==='ref2v'&&!refs.length&&!(videoFamily==='minimax-h3'&&refmods.length)?'studio.run.pipe.needsRefs'
+  :pipeline==='ref2v'&&!refs.length&&!(isH3Video(videoFamily)&&refmods.length)?'studio.run.pipe.needsRefs'
   :pipeline==='ref2v'?refsProblem(refs):'';
  const fps=family?.video?.fixedFps?family.video.fps:video.fps;
  const frames=videoFamily?videoFrames(videoFamily,video.seconds,fps):0;
  const audioVae=video.audioVae||recommended?.audioVaes[0]||'';
  const textProjection=video.textProjection||recommended?.textProjections[0]||'';
  const lastFrameName=comfyName(lastFrame);
- const lastOnly=videoFamily==='minimax-h3'&&pipeline==='i2v'&&!!media&&lastOnlySrc===media.src&&lastFrame?.src===media.src;
+ const lastOnly=isH3Video(videoFamily)&&pipeline==='i2v'&&!!media&&lastOnlySrc===media.src&&lastFrame?.src===media.src;
  const firstFrame=pipeline==='i2v'&&!lastOnly&&media?.media==='image'?media:null;
  // LoRAs of another known family are hidden; unknown ones stay (their target cannot be checked).
  const loraModels=(models??[]).filter(m=>m.category==='loras'&&(!family||!m.family||m.family===(family.loraFamily??family.id))).sort(byName);
@@ -537,8 +539,9 @@ const loadChoices=()=>{if(native&&!choices&&endpoint.trim())void refreshChoices(
    const encoders=quantizedEncoder?(dual?choices.ggufDualTextEncoders:choices.ggufTextEncoders):choices.textEncoders;
    const types=quantizedEncoder?(dual?choices.ggufDualClipTypes:choices.ggufClipTypes):choices.clipTypes;
    for(const name of [checkpoint,lowModel].filter(Boolean)){
-    const node=isGguf(name)?'UnetLoaderGGUF':'UNETLoader';
+    const node=isGguf(name)?(family?.ggufLoader??'UnetLoaderGGUF'):'UNETLoader';
     if(!choices.nodes.includes(node))unavailable.push(node);
+    if(family?.videoSigmaNode&&!choices.nodes.includes(family.videoSigmaNode))unavailable.push(family.videoSigmaNode);
     if(!(isGguf(name)?choices.ggufDiffusionModels:choices.diffusionModels)?.includes(name))unavailable.push(name);
    }
    for(const node of [loader,'VAELoader'])if(!choices.nodes.includes(node))unavailable.push(node);
@@ -597,7 +600,7 @@ const loadChoices=()=>{if(native&&!choices&&endpoint.trim())void refreshChoices(
   ...historyDraft.unsupported,
   ...(!choices?['capabilities unvalidated']:[]),
   ...(historyDraft.source&&(!(isMusicIntent(historyDraft.intent)?musicSource?.path:media)||!historySourceSelected)?[t('studio.history.missingInput',{name:historyDraft.source.name})]:[]),
-  ...(historyDraft.lastFrame&&(!lastFrame?.path||(videoFamily!=='minimax-h3'&&!lastFrameName))?[t('studio.history.missingInput',{name:historyDraft.lastFrame.name})]:[]),
+  ...(historyDraft.lastFrame&&(!lastFrame?.path||(!isH3Video(videoFamily)&&!lastFrameName))?[t('studio.history.missingInput',{name:historyDraft.lastFrame.name})]:[]),
   ...(historySelectionContext!==historyInputContext?['input context changed']:[]),
   ...(isVideoIntent(historyDraft.intent)&&videoFamily!==historyDraft.intent.family?['video.family']:[]),
   ...(isImageIntent(historyDraft.intent)&&imageRefs.length&&historyDraft.intent.imageReference&&referenceMethod!=='revision'?['imageReference.method']:[]),
@@ -767,7 +770,7 @@ const loadChoices=()=>{if(native&&!choices&&endpoint.trim())void refreshChoices(
     const slots=slotsOf(picks);
     const items=picks.map((r,i)=>({type:r.item.media as 'image'|'video'|'audio',file:nameOf(r.item,true),slot:slots[i],...(r.item.media==='video'?{mediaMode:r.mediaMode}:{}),
      ...(r.item.media!=='image'&&r.trimStart!==undefined?{trimStart:r.trimStart}:{}),...(r.item.media!=='image'&&r.trimEnd!==undefined?{trimEnd:r.trimEnd}:{})}));
-    intent={...base,family:'minimax-h3',h3:{mode:'REF2VA',audioVae,shiftVideo:video.shiftVideo,shiftAudio:video.shiftAudio,references:[],media:items,...scaling,...(cont?{continuity:{...cont.continuity,...(cont.continuity.sourceId?{durationSeconds:seconds}:{})}}:{}),
+    intent={...base,family:vf,h3:{mode:'REF2VA',audioVae,shiftVideo:video.shiftVideo,shiftAudio:video.shiftAudio,references:[],media:items,...scaling,...(cont?{continuity:{...cont.continuity,...(cont.continuity.sourceId?{durationSeconds:seconds}:{})}}:{}),
      ...(includeReferences&&pipeline==='ref2v'&&refmods.length?{refmods:refmods.map((r,i)=>({slot:i+1,name:r.name,strength:r.strength,...(r.description.trim()?{description:r.description.trim()}:{})}))}:{})}};
    }
    else{
@@ -776,7 +779,7 @@ const loadChoices=()=>{if(native&&!choices&&endpoint.trim())void refreshChoices(
     if(pipeline==='i2v'&&!lastOnly&&media?.path)refs.push({slot:0,image:nameOf(media,true)});
     if(lastFrame?.path)refs.push({slot:1,image:nameOf(lastFrame,true)});
     const mode=refs.length===0?'T2VA':refs.length===2?'FL2VA':refs[0].slot===0?'I2VA':'L2VA';
-    intent={...base,family:'minimax-h3',h3:{mode,audioVae,shiftVideo:video.shiftVideo,shiftAudio:video.shiftAudio,references:refs,...(cont?{continuity:cont.continuity}:{}),...(refs.length?scaling:{})}};
+    intent={...base,family:vf,h3:{mode,audioVae,shiftVideo:video.shiftVideo,shiftAudio:video.shiftAudio,references:refs,...(cont?{continuity:cont.continuity}:{}),...(refs.length?scaling:{})}};
    }
    if(vf==='minimax-h3'&&intent.family==='minimax-h3'&&latentEnabled)intent={...intent,latentUpscale:{model:latentModel,scale:latentPref.scale,steps:latentPref.steps,denoise:latentPref.denoise,...(h3LatentChanged(latentPref.advanced)?{advanced:h3LatentChanged(latentPref.advanced)}:{})}};
    return intent;
@@ -802,7 +805,7 @@ const loadChoices=()=>{if(native&&!choices&&endpoint.trim())void refreshChoices(
    const job=await runWorkbenchJob(endpoint,Object.freeze(intent),ticket.admissionEpoch);
    if(activeRun(ticket)){
     setJobs(list=>[job,...list.filter(j=>j.id!==job.id)]);setBrowsed(null);setSelectedOutput(0);setSlider(false);setSelectedJob(job.id);setRecentSeeds(list=>[intent.seed,...list.filter(s=>s!==intent.seed)].slice(0,10));
-    if(cont&&step){planRun.current={jobId:job.id,...step,...(cont.continuity.sourceKind==='video'&&intent.family==='minimax-h3'?{imported:{sourceId:cont.continuity.sourceId,width:intent.width,height:intent.height,modeFamily:intent.h3.mode==='REF2VA'?'ref2va' as const:'fl2va' as const}}:{})};setPlan({...plan,steps:plan.steps.map((x,i)=>i===cont.index?{...x,jobId:job.id}:x)});}
+    if(cont&&step){planRun.current={jobId:job.id,...step,...(cont.continuity.sourceKind==='video'&&(intent.family==='minimax-h3'||intent.family==='minimax-h3-hyperflow')?{imported:{sourceId:cont.continuity.sourceId,width:intent.width,height:intent.height,modeFamily:intent.h3.mode==='REF2VA'?'ref2va' as const:'fl2va' as const}}:{})};setPlan({...plan,steps:plan.steps.map((x,i)=>i===cont.index?{...x,jobId:job.id}:x)});}
    }
    if(cont&&step&&activeRun(ticket)){
     if(job.state==='succeeded')void pinClip(job);
@@ -1024,14 +1027,14 @@ const loadChoices=()=>{if(native&&!choices&&endpoint.trim())void refreshChoices(
  const noEditModel=!allModels.some(m=>!blocked(m,'i2i'));
  // References: LTX keyframes are images; H3 REF2VA also takes videos and audio within the Director limits. Returns why an item cannot be added.
  const isRef=(item:MediaItem)=>refs.some(r=>r.item.src===item.src);
- const refBlock=(item:MediaItem,list=refs)=>videoFamily!=='minimax-h3'?(item.media==='image'?'':'studio.run.video.refImagesOnly'):h3Full(list,item)?'studio.run.video.refFull':'';
+ const refBlock=(item:MediaItem,list=refs)=>!isH3Video(videoFamily)?(item.media==='image'?'':'studio.run.video.refImagesOnly'):h3Full(list,item)?'studio.run.video.refFull':'';
  // Adds in order; already referenced or path-less (browser) items are skipped, refused ones are named with the reason.
  const addRefs=(adds:RefAdd[],replace=false)=>{
   let next=replace?[]:refs;const refused:string[]=[];
   for(const {item,...rest} of adds){if(!item.path||next.some(r=>r.item.src===item.src))continue;
    const ref:VideoRef={item,second:next.length?video.seconds:0,strength:1,mediaMode:'video',...rest};
    // Limits count the reference as it will be used (a pack may bring a sound-only video).
-   const why=videoFamily!=='minimax-h3'?refBlock(item,next):over(refCounts([...next,ref]))?'studio.run.video.refFull':'';
+   const why=!isH3Video(videoFamily)?refBlock(item,next):over(refCounts([...next,ref]))?'studio.run.video.refFull':'';
    if(why)refused.push(`${item.name}: ${t(why)}`);else next=[...next,ref];}
   setRefs(next);setError(refused.join(' · '));
  };
@@ -1039,7 +1042,7 @@ const loadChoices=()=>{if(native&&!choices&&endpoint.trim())void refreshChoices(
  // H3 badges are the Director's own prompt labels, so what the dock shows is what the prompt may reference.
  const refTags=directorTags(refs);
  const refLabel=(r:VideoRef,i:number)=>videoFamily==='ltx-2'?t('studio.run.video.mark.at',{second:String(r.second)}):refTags[i];
- const refsTab=pipeline==='ref2v'&&(videoFamily==='ltx-2'||videoFamily==='minimax-h3');
+ const refsTab=pipeline==='ref2v'&&(videoFamily==='ltx-2'||isH3Video(videoFamily));
  useEffect(()=>{if(!refsTab||planVisible)setReferencesOpen(false);},[refsTab,planVisible]);
  // First/last-frame badges; one image in both roles gets both labels.
  const frameMarks=new Map<string,string>();
@@ -1057,13 +1060,13 @@ const loadChoices=()=>{if(native&&!choices&&endpoint.trim())void refreshChoices(
   :frameVideo&&item.media==='image'?[
    ...(pipeline==='i2v'?[{label:t('studio.run.video.useFirst'),input:true,onClick:()=>{select(item);setLastOnlySrc(null);if(lastFrame?.src===item.src)setLastFrame(null);}}]:[]),
    lastFrame?.src===item.src?{label:t('studio.run.video.removeLast'),onClick:()=>{setLastFrame(null);setLastOnlySrc(null);}}
-    :{label:t('studio.run.video.useLast'),onClick:()=>{if(pipeline==='i2v'&&videoFamily==='minimax-h3'&&(lastOnly||!firstFrame||media?.src===item.src)){select(item);setLastOnlySrc(item.src);}setLastFrame(item);}},
+    :{label:t('studio.run.video.useLast'),onClick:()=>{if(pipeline==='i2v'&&isH3Video(videoFamily)&&(lastOnly||!firstFrame||media?.src===item.src)){select(item);setLastOnlySrc(item.src);}setLastFrame(item);}},
    ...(pipeline==='i2v'?[{label:t('studio.run.video.useBoth'),onClick:()=>{select(item);setLastOnlySrc(null);setLastFrame(item);}}]:[])]
   :pipeline==='v2v'&&item.media==='video'?[{label:t('studio.run.video.useSource'),input:true,onClick:()=>select(item)}]:[];
  const mediaActions=(item:MediaItem):MediaAction[]=>[...inputActions(item),...(item.path&&item.media!=='audio'?[{label:t('studio.run.metadata.apply'),onClick:()=>void applyFileSettings(item,'all'),blocked:(!native||scanning||working||autoPlan||resolving||!!planRun.current)?t('studio.run.metadata.native'):undefined}]:[])];
  const stageMark=media?.path&&marks.get(media.path);
  // MiniMax H3 video: the hammer is the Director's Prompt Forge for this run (same mode/references the intent gets).
- const forgeContext=videoFamily==='minimax-h3'&&isVideo?h3ForgeContext({pipeline,media:lastOnly?null:media,lastFrame,refs,framePeople,sourceAudio,seconds:video.seconds,canvas:outputSize,inputRoot:roots.input}):undefined;
+ const forgeContext=isH3Video(videoFamily)&&isVideo?h3ForgeContext({pipeline,media:lastOnly?null:media,lastFrame,refs,framePeople,sourceAudio,seconds:video.seconds,canvas:outputSize,inputRoot:roots.input}):undefined;
  useEffect(()=>{onH3ForgeAvailable?.(!!forgeContext);},[!!forgeContext,onH3ForgeAvailable]);
  // Insert at the cursor of the positive prompt (else append), like the node's toolbar.
  const insertPrompt=(text:string)=>{const el=document.getElementById('run-positive') as HTMLTextAreaElement|null;const at=el&&document.activeElement===el?el.selectionStart:positive.length;setPositive(positive.slice(0,at)+text+positive.slice(at));};
@@ -1455,7 +1458,7 @@ const promptTools=forgeContext&&<>
        {pipeline==='v2v'&&(videoFamily==='ltx-2'?num('video.sourceStrength',sourceStrength,n=>setSourceStrength(clamp(n,0,1)),0,1,0.05,undefined,true)
         :<label className="wb-field wb-wide"><span><input type="checkbox" style={{width:'auto'}} checked={sourceAudio} onChange={e=>setSourceAudio(e.target.checked)}/>{t('studio.run.video.sourceAudio')}</span></label>)}
        {refsTab&&<button ref={referencesButton} type="button" className="wb-dock-action wb-wide" data-open-references aria-haspopup="dialog" aria-expanded={referencesOpen} onClick={()=>setReferencesOpen(true)} onDragOver={e=>{if(e.dataTransfer.types.includes(MEDIA_DRAG))e.preventDefault();}} onDrop={e=>{const item=draggedItem(e.dataTransfer);if(item){e.preventDefault();addRefs([{item}]);setReferencesOpen(true);}}}>{t('studio.run.dock.references')} · {refs.length}</button>}
-       {videoFamily==='minimax-h3'&&(pipeline==='v2v'||pipeline==='ref2v')&&!/ref2va/i.test(checkpoint)&&<p className="wb-resolution-hint wb-wide">{t('studio.run.video.ref2vaHint')}</p>}
+       {isH3Video(videoFamily)&&(pipeline==='v2v'||pipeline==='ref2v')&&!/ref2va/i.test(checkpoint)&&<p className="wb-resolution-hint wb-wide">{t('studio.run.video.ref2vaHint')}</p>}
        {forgeContext&&onOpenPromptForge&&<button type="button" className="wb-dock-action wb-wide" data-open-prompt-forge onClick={onOpenPromptForge}>{t('studio.tab.forge')}</button>}
        {continuityAvailable&&<button ref={continuityButton} type="button" className="wb-dock-action wb-wide" data-continuity-open aria-haspopup="dialog" aria-expanded={continuityOpen} data-continuity-enabled={continuityOn} onClick={()=>setContinuityOpen(true)}>{t(continuityOn?'studio.run.dock.continuity':'studio.run.dock.continuityOff')}</button>}
        {frameVideo&&<p className="wb-resolution-hint wb-wide">{lastFrame?<>{t('studio.run.video.lastFrame')}: <strong>{lastFrame.name}</strong> <button type="button" aria-label={t('studio.run.cont.remove')} title={t('studio.run.cont.remove')} onClick={()=>setLastFrame(null)}>✕</button></>:t('studio.run.video.lastFrameHint')}</p>}
@@ -1467,8 +1470,8 @@ const promptTools=forgeContext&&<>
        {num('maskBlur',maskBlur,n=>{if(isMaskBlur(n))setMaskBlur(n);},0,31,1,undefined,true)}
        {h3Image&&<>{num('video.shiftVideo',video.shiftVideo,n=>setVideo({...video,shiftVideo:clamp(n,0.01,100)}),0.01,100,0.5)}{num('video.shiftAudio',video.shiftAudio,n=>setVideo({...video,shiftAudio:clamp(n,0.01,100)}),0.01,100,0.5)}</>}
       </>}
-      {num('steps',sigmas?sigmas.length-1:steps,setSteps,1,150,1,sigmas&&t('studio.run.customSchedule.hint'),true)}{num('cfg',cfg,setCfg,0,30,0.5,undefined,true)}
-      {pick('studio.recipe.sampler',sampler,choices?.samplers??[],setSampler,loadChoices)}
+      {family?.stepChoices?<label className="wb-field"><span>{t('studio.run.steps')}</span><select data-num="steps" value={steps} onChange={e=>setSteps(Number(e.target.value))}>{family.stepChoices.map(n=><option key={n} value={n}>{n}</option>)}</select></label>:num('steps',sigmas?sigmas.length-1:steps,setSteps,1,150,1,sigmas&&t('studio.run.customSchedule.hint'),true)}{num('cfg',cfg,setCfg,0,30,0.5,undefined,true)}
+      {family?.fixedSampler?<label className="wb-field"><span>{t('studio.recipe.sampler')}</span><select value={family.fixedSampler} disabled title={family.defaultsNote}><option value={family.fixedSampler}>{family.fixedSampler}</option></select></label>:pick('studio.recipe.sampler',sampler,choices?.samplers??[],setSampler,loadChoices)}
       {sigmas?<label className="wb-field"><span>{t('studio.recipe.scheduler')}</span><select value="custom" disabled title={t('studio.run.customSchedule.hint')}><option value="custom">{t('studio.run.customSchedule')}</option></select></label>
        :pick('studio.recipe.scheduler',scheduler,choices?.schedulers??[],setScheduler,loadChoices)}
       <div className="wb-field wb-seed">
@@ -1609,7 +1612,7 @@ const promptTools=forgeContext&&<>
  </div>
  {visionDownload&&<dialog ref={visionDialog} data-vision-download className="continuity-overlay" aria-label={t("studio.run.reference.dlAsk")} onCancel={e=>{e.preventDefault();closeVisionDownload();}}><header className="continuity-overlay-header"><h2>{t("studio.run.reference.dlAsk")}</h2><button type="button" onClick={closeVisionDownload}>{t("studio.close")}</button></header><div className="wb-dock-panel"><p>{t("studio.run.latent.consent")}</p><DownloadPanel embedded installTarget={root} modelsDir={modelsDir} initialEntryIds={visionIds} filenameFilter={["clip_vision_g.safetensors"]} onStatus={visionDownloadStatus}/></div></dialog>}
  {latentDownload&&<dialog ref={latentDialog} data-latent-upscale-download className="continuity-overlay" aria-label={t('studio.run.latent.download')} onCancel={e=>{e.preventDefault();closeLatentDownload();}}><header className="continuity-overlay-header"><h2>{t('studio.run.latent.download')}</h2><button type="button" onClick={closeLatentDownload}>{t('studio.close')}</button></header><div className="wb-dock-panel"><p>{t('studio.run.latent.consent')}</p><DownloadPanel embedded installTarget={root} modelsDir={modelsDir} initialEntryIds={latentIds} filenameFilter={latentDownload==='minimax-h3'?['minimax_h3_latent_upscaler_3d_conv_v1_bf16.safetensors','MiniMax H3 Latent Upscaler.safetensors','minimax h3 latent upscaler.safetensors','minimax_h3_latent_upscaler.safetensors']:['ltx-2.3-spatial-upscaler-x2-1.1.safetensors','LTX-2.3-Latent-Upscaler.safetensors']} onStatus={latentDownloadStatus}/></div></dialog>}
- {referencesOpen&&refsTab&&!planVisible&&<ReferencesOverlay endpoint={endpoint} root={root} refs={refs} onChange={setRefs} family={videoFamily as 'ltx-2'|'minimax-h3'} seconds={video.seconds} label={refLabel} onAdd={addRefs} inputRoot={roots.input} refmods={refmods} onRefmods={setRefmods} library={native&&endpoint.trim()?()=>readRefMods(endpoint):undefined} onInsert={tag=>setPositive(positive.trim()?`${positive.trimEnd()} ${tag}`:tag)} onClose={()=>{setReferencesOpen(false);referencesButton.current?.focus();}} picker={<MediaPanel toolbar={error?<p role="alert" className="error-message">{backendErrorText(error,t)}</p>:undefined} selected={null} onSelect={toggleRef} roots={roots} outputRevision={outputRevision} controls={{query,onQuery:setQuery,sort,onSort:setSort,view:dockView,onView:setDockView,type:dockType,onType:setDockType}} marks={marks} actions={mediaActions}/>}/> }
+ {referencesOpen&&refsTab&&!planVisible&&<ReferencesOverlay endpoint={endpoint} root={root} refs={refs} onChange={setRefs} family={videoFamily as 'ltx-2'|'minimax-h3'|'minimax-h3-hyperflow'} seconds={video.seconds} label={refLabel} onAdd={addRefs} inputRoot={roots.input} refmods={refmods} onRefmods={setRefmods} library={native&&endpoint.trim()?()=>readRefMods(endpoint):undefined} onInsert={tag=>setPositive(positive.trim()?`${positive.trimEnd()} ${tag}`:tag)} onClose={()=>{setReferencesOpen(false);referencesButton.current?.focus();}} picker={<MediaPanel toolbar={error?<p role="alert" className="error-message">{backendErrorText(error,t)}</p>:undefined} selected={null} onSelect={toggleRef} roots={roots} outputRevision={outputRevision} controls={{query,onQuery:setQuery,sort,onSort:setSort,view:dockView,onView:setDockView,type:dockType,onType:setDockType}} marks={marks} actions={mediaActions}/>}/> }
  {/* Keep H3 editors with their Workbench state; only their DOM lives in the retained Forge tab. */}
  {forgeHost&&forgeContext&&createPortal(<section className="forge-tab" aria-label={t('studio.tab.forge')} data-h3-forge-tab>
   <ForgeButton inline active={forgeActive} endpoint={endpoint} root={root} dialect={dialectOf(model?.family)} value={positive} onApply={setPositive} h3={forgeContext} tools={promptTools}/>

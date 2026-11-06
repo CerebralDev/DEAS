@@ -2547,6 +2547,20 @@ async fn live_mask_upload() {
 }
 
 #[test]
+fn image_compile_rejects_video_only_families() {
+    let mut i = intent();
+    i["family"] = json!("minimax-h3-hyperflow");
+    assert!(
+        compile(&i).unwrap_err().contains("video-only"),
+        "top-level family reached the image graph"
+    );
+    let mut i = intent();
+    i["diffusion"] = json!({"textEncoder":"e.safetensors","clipType":"stable_diffusion","vae":"v.safetensors","family":"minimax-h3-hyperflow"});
+    let e = compile(&i).unwrap_err();
+    assert!(e.contains("video-only"), "diffusion.family: {e}");
+}
+
+#[test]
 fn temporal_latent_tiled_refine_direct_intents_are_rejected() {
     for (family, clip_type) in [("anima", "stable_diffusion"), ("krea-2", "krea2")] {
         for selection in ["family", "diffusion", "clipType"] {
