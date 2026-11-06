@@ -20,7 +20,7 @@ Top-level tabs: Studio · Library · Prompt Forge · Chat · TVE · Comfy on the
 | GGUF models and **Edit meta…** architecture assignment | [GGUF and manual architecture](STUDIO.md#gguf-models-and-manual-architecture-assignment) |
 | Per-pipeline session drafts, prompt counts, spellcheck and tag completion | [Session drafts](STUDIO.md#session-only-pipeline-and-model-drafts-0164-shipped-in-0166) · [Writing aids](STUDIO.md#prompt-writing-aids-0163-shipped-in-0166) |
 | Quick Settings, layout reset and colour schemes | [Layout and Quick Settings](STUDIO.md#layout-last-used-state-and-quick-settings) |
-| Install, refresh and edit local colour/image theme packs | [Theme packs](THEME-PACKS.md) |
+| Create and edit local colour/image theme packs | [Make and edit themes](THEME-PACKS.md) |
 | Beginner experience: generation, model guides and Media page without technical settings | [Beginner mode](BEGINNER-MODE.md) |
 | Music: Text to Music with YuE2 or ACE-Step; Cover Music with YuE2 | [Music](MUSIC.md) |
 | TVE tab: video source inspection and backend video-enhance recipes with paired outputs | [TVE workspace](STUDIO.md#tve-workspace) |

@@ -1,30 +1,82 @@
-# Drop-in theme packs
+# Make and edit DEAS themes
 
 [Documentation index](README.md) · [Studio and Quick Settings](STUDIO.md#layout-last-used-state-and-quick-settings) · [Credits](CREDITS.md)
 
-Theme packs extend DEAS's existing colour picker with local palettes and optional images. They do not change navigation, model recipes, downloads or job execution. The theme-only changes from `DEAS-0.2.13-THEME-PLUGIN-UPDATE.zip` are adapted to the current application; the separate Beginner experience and Windows executable are not imported.
+A theme pack is a small local data folder: one validated `theme.json` manifest plus optional PNG or static WebP images. It cannot contain or execute JavaScript, HTML, CSS or programs. It may change the existing UI's colour tokens and background/cursor/scrollbar images; it does not change models, recipes, navigation, downloads or job execution.
 
-## Install and refresh
+The nine built-in schemes remain compiled into DEAS and are always available. External packs are only changes layered over a built-in `base`. The nine built-ins are therefore **not duplicated** as supplied external packs.
 
-1. Select your existing DEAS environment in Backend. No reinstall or backend restart is needed.
-2. Open **Quick Settings → Open themes folder**. This explicitly creates/opens `<your-environment>/themes`.
-3. Copy individual folders from the repository's `theme-packs/classic/themes` into that directory. For example: `<your-environment>/themes/sage/theme.json`. Do not overwrite an existing customized folder; back it up or give a copy a new unique ID.
-4. Click **Refresh themes**, then choose a theme in Quick Settings. Refresh applies colour/image changes without rebuilding or restarting the backend. Restarting DEAS also scans the folder.
+## Quick Settings flow
 
-Nine palettes are supplied: Sage, Default, Liiti Pink, VOID (legacy ID `voud`), Alluring Abyss, Slimy Teal, Clawy Grey, Android White and Dragon's Hoard. The eight built-in schemes are always available; supplied packs add to the menu and a pack reusing a built-in ID overrides that entry in the selected environment. Deleting a pack folder and refreshing only removes its own entry. The application does not automatically copy or overwrite packs in your environment.
+Open **Quick Settings → Edit themes**.
 
-## Offline editor
+```mermaid
+flowchart LR
+  A["Quick Settings → Edit themes"] --> B{"Is there a themes/new-theme folder?"}
+  B -- "No" --> C["Copy the bundled starter theme"]
+  B -- "Yes" --> D["Keep the existing folder and edits"]
+  C --> E["Open the offline HTML editor"]
+  D --> E
+  E --> F["Choose a folder containing theme.json"]
+  F --> G["Give it a unique Theme ID"]
+  G --> H["Change colors or images"]
+  H --> I["Save theme.json and assets"]
+  I --> J["Quick Settings → Refresh themes"]
+  J --> K["Choose the theme in Colour scheme"]
+```
 
-Every supplied pack contains `theme.json`, `assets/`, `EDIT-THEME.html` and `README.md`. Packs retain attribution/license files when their artwork requires them. Images are optional; the original flat PNG layout remains supported.
+The editor is opened by DEAS but runs in the browser. DEAS never loads or executes the HTML as application code.
 
-1. Open the pack's **EDIT-THEME.html** deliberately in Chrome or Edge, or use the shared `theme-packs/EDIT-THEMES.html`. It works offline; DEAS never executes this HTML.
-2. Click **Choose theme folder** and select the folder containing `theme.json`. Browser permission grants access to that chosen folder, not an upload.
-3. Edit the name, colours and optional PNG/static WebP images — via each row's file button or by dragging a PNG/WebP onto the row (a dashed outline marks a droppable row). The editor has English labels; More colors exposes advanced tokens. Duplicate a pack first and assign a new unique Theme ID to create a separate theme.
-4. Click **Save changes**, then **Refresh themes** in DEAS. Preserve attribution when sharing the complete folder.
+## Create your first theme
 
-The editor backs up the previous manifest and any overwritten images under `backups/`. Undo discards unsaved edits only. Restore by copying the backed-up manifest and any replaced images back to their recorded locations. It checks for external manifest changes before saving and again immediately before publishing. The browser API cannot make that last check/write atomic across processes: do not edit the same pack simultaneously in another program. A failed save may leave a newly copied image; keep backups until recovery is complete. DEAS loads only referenced images.
+1. Select your DEAS environment in **Backend**.
+2. Click **Quick Settings → Edit themes**.
+3. DEAS creates `themes/new-theme` in the selected environment only when absent and opens the editor.
+4. Click **Choose theme folder** and select that `new-theme` folder. The browser asks permission for the chosen folder; nothing is uploaded.
+5. Replace its Theme ID with a unique lowercase value, for example `my-space-blue`. `new-theme` is only the initial template.
+6. Pick a built-in `base` and change only the colours you want. Omitted colours inherit the base palette.
+7. Optionally replace images through the image rows, or drag a PNG/WebP onto a row.
+8. Click **Save changes**.
+9. Return to DEAS and click **Quick Settings → Refresh themes**, then select it under **Colour scheme**.
 
-The preview demonstrates colours/background/cursor, not the full application. Always verify in DEAS. Browsers without directory access offer JSON download for colour-only changes; replace `theme.json` manually. Image replacement requires directory access in Chrome/Edge. Actual browser folder-permission and native desktop click-through remain separate acceptance gates.
+Deleting a custom theme folder and refreshing removes only its entry. A saved theme that cannot be loaded falls back to Default without erasing the saved selection.
+
+## Make another theme or a shareable pack
+
+Duplicate an existing folder inside `<environment>/themes/`, then give the duplicate a unique Theme ID. Sharing means sending the complete theme folder. Keep any third-party artwork's attribution/license files beside it.
+
+A minimal manual theme is valid without images:
+
+```json
+{
+  "schemaVersion": 1,
+  "id": "my-space-blue",
+  "name": "My Space Blue",
+  "author": "Your name",
+  "base": "sage",
+  "colors": {
+    "deep": "#070b18",
+    "panel": "#141b2c",
+    "chalk": "#f0f5ff",
+    "blue": "#91b8ff",
+    "ok": "#8fd7a3",
+    "on-ok": "#102018",
+    "line": "#39445c"
+  }
+}
+```
+
+Folder layout:
+
+```text
+my-space-blue/
+├── theme.json
+└── assets/
+    ├── background.webp
+    └── cursor.png
+```
+
+`theme.json` references them as `assets/background.webp` and `assets/cursor.png`. The older layout may place the PNG/WebP directly in the theme folder instead.
 
 ## Data format (schema version 1)
 
@@ -40,22 +92,54 @@ The preview demonstrates colours/background/cursor, not the full application. Al
 }
 ```
 
-`id` is a unique lowercase slug of letters, digits and hyphens (up to 64 characters); name and author are required bounded text. `base` selects one of the nine compiled scheme IDs, supplying omitted tokens. `colors` accepts supported colour tokens as hex RGB/RRGGBB/RRGGBBAA; the host derives RGB-channel tokens. The authoritative lists and limits live in `src-tauri/src/themes.rs`. The supplied manifests contain the exported palettes.
+- `id`: unique lowercase letters, digits and hyphens, at most 64 characters.
+- `name` and `author`: printable text, at most 120 characters.
+- `base`: one built-in scheme ID—`default`, `sage`, `liiti-pink`, `voud`, `alluring-abyss`, `slimy-teal`, `clawy-grey`, `android-white` or `dragons-hoard`.
+- `colors`: supported colour tokens, using `#RGB`, `#RRGGBB` or `#RRGGBBAA`.
+- `assets`: optional `background`, `cursor` and `scrollbar` roles.
+- Asset filenames are lowercase letters, digits and hyphens with `.png` or `.webp`, either in the theme folder or one level under `assets/`.
+- Cursors use a 3×4 hotspot; 32×32 transparent PNG is recommended.
+- A pack may contain at most 16 assets. Each image may be at most 2 MiB, 4096 pixels per side and 16 MiB decoded. The whole scan has a 16 MiB compressed-image budget.
+- `theme.json` is at most 64 KiB and unknown fields are rejected.
 
-Generic asset roles are `background`, `cursor` and `scrollbar`. Cursors use a 3×4 hotspot (32×32 PNG recommended). Assets may be flat filenames or one level under exactly `assets/`; deeper nesting, backslashes, traversal, URLs, drive syntax, symlinks and Windows reparse points are rejected. Names use lowercase letters, digits and hyphens followed by `.png` or `.webp`. SVG, HTML, CSS and JavaScript are not runtime pack inputs.
+The authoritative limits live in `src-tauri/src/themes.rs`.
 
-## Recovery, safety and diagnostics
+## Offline editor details
 
-Discovery reads only the selected environment's `themes/` directory and creates nothing. A missing directory yields an empty external catalog. Invalid packs are skipped independently; duplicate IDs are rejected together rather than selecting a winner by directory order. One external pack may reuse a compiled ID without duplicating the menu entry.
+The canonical editor is:
 
-The existing `appearance.scheme` preference and IDs remain stable. A missing/rejected selected pack falls back to Default without erasing the saved ID; restoring the folder restores the selection unless another theme was explicitly chosen. Switching clears old colour/image overrides, listeners and timers. Late scans from a previous environment cannot replace the current catalog.
+```text
+theme-packs/EDIT-THEMES.html
+```
 
-Local-window-only commands `native_theme_packs(root)` and `native_theme_folder(root)` use the `allow-native-theme-packs` permission. The root must be an existing absolute environment containing `deas-install.json`. Manifests reject unknown fields and are limited to 64 KiB. Discovery considers at most 128 folder entries, 64 colour overrides and 16 assets per pack. PNG/static WebP assets are decoded and validated: at most 2 MiB per file, 4096 pixels per dimension, 16 MiB decoded, and a 16 MiB compressed-image catalog budget.
+It is bundled with the application. Quick Settings opens it; users do not need to copy a separate per-theme editor.
 
-Invalid scans and folder-open failures report fixed, redacted, rate-limited messages to central Logs. Discovery/selection do not start backends, installations, downloads or jobs. Only the explicit folder action starts the OS folder opener (Explorer or `xdg-open`).
+What the editor does:
+
+- Opens a folder containing `theme.json` through the browser's directory permission.
+- Edits identity, colours and images in memory.
+- Writes new selected images under `assets/` with fresh filenames.
+- Backs up the previous manifest and replaced images in `backups/`.
+- Refuses external edits made to `theme.json` after the folder was opened.
+- Offers JSON download when the browser lacks directory access; image replacement then remains disabled.
+
+Chrome and Edge are the supported browsers for direct folder access. Firefox does not provide the required directory-editing API. The editor is English-only and has no network code.
+
+## Recovery and safety
+
+Before saving:
+
+- The editor creates `backups/theme-<timestamp>.json`.
+- A replaced image is copied into `backups/` under its recorded name.
+
+If DEAS shows a bad result, choose **Default**, restore the backup files into the theme folder, and refresh. An external pack that reuses a built-in ID overrides only that entry in that environment; deleting it restores the built-in behavior.
+
+DEAS rejects parent traversal, absolute paths, URLs, drive syntax, backslashes, symlinked or reparse-point theme paths, malformed JSON and oversize images/manifests. Invalid packs are skipped independently. Duplicate IDs are rejected together instead of choosing one by directory order.
+
+Native commands are `native_theme_packs(root)` and `native_theme_editor(app, root)`, behind `allow-native-theme-packs`. The selected root must be an existing absolute environment. Edit themes creates the environment's `themes/` directory and copies the bundled `new-theme` starter only if that starter folder is absent. It never overwrites an existing `new-theme` folder and never copies the nine built-in schemes.
 
 ## Verification boundaries
 
-See the current [verification journal](VERIFICATION.md) for tests actually run on this adaptation. Source ZIP logs describe the separate older build, not acceptance of this checkout. Rust filesystem tests, component tests and simulated-IPC browser checks do not prove Windows WebView2, Linux GTK/WebKitGTK click-through, real folder permissions or GPU execution.
+Rust filesystem tests, React component tests and the Chromium offline-editor tools verify catalog parsing, no-clobber starter copying, traversal/link rejection, caps and editor save races. They do not prove every OS's browser directory permission dialog or default-browser behavior. Windows WebView2 and Linux WebKitGTK/external browser acceptance remain open in [PLAN.md](PLAN.md).
 
-Pack content integrity is recorded in [`theme-packs/FILES.json`](../theme-packs/FILES.json); attribution and decoder notices are linked from [Credits](CREDITS.md).
+Pack integrity is recorded in [`theme-packs/FILES.json`](../theme-packs/FILES.json).

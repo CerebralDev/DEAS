@@ -40,7 +40,7 @@ export const searchIndex: readonly SearchEntry[] = [
   { view: studio, studioTab: 'generate', beginnerTab: 'generate', tab: 'beginner.navigation', section: 'settings.button', label: 'settings.button', target: '.beginner-backend', aliases: ['engine', 'backend setup'] },
   { view: studio, studioTab: 'generate', tab: 'beginner.navigation', section: 'beginner.experience', label: 'beginner.experience', target: '.experience-switch', aliases: ['beginner', 'advanced', 'mode'] },
   { view: 'backend', tab: 'settings.button', section: 'studio.quick.title', label: 'theme.ui.refresh', target: '[data-theme-action="refresh"]', aliases: ['reload themes', 'theme packs'], reason: 'theme.ui.chooseEnvironment' },
-  { view: 'backend', tab: 'settings.button', section: 'studio.quick.title', label: 'theme.ui.openThemesFolder', target: '[data-theme-action="folder"]', aliases: ['theme directory', 'theme packs'], reason: 'theme.ui.chooseEnvironment' },
+  { view: 'backend', tab: 'settings.button', section: 'studio.quick.title', label: 'theme.ui.editThemes', target: '[data-theme-action="edit"]', aliases: ['theme editor', 'new theme', 'custom theme'], reason: 'theme.ui.chooseEnvironment' },
   // Studio · settings
   { view: studio, studioTab: 'generate', tab: 'setup.tab.studio', section: 'studio.run.settings', label: 'studio.run.pipeline', target: '[data-pipeline]', aliases: ['mode', 'task'] },
   { view: studio, studioTab: 'generate', tab: 'setup.tab.studio', section: 'studio.run.settings', label: 'studio.run.checkpoint', target: '[data-model-picker]', aliases: ['model'], reason: 'search.reason.models' },

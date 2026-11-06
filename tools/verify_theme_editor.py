@@ -83,7 +83,7 @@ def regressions(page,root,manifest,checks):
   page.wait_for_function('()=>window.__decodeHeld')
   if action=='selection':select()
   elif action=='undo':page.locator('#undo').click()
-  elif action=='open':page.locator('#open').click();expect(page.locator('#name')).to_have_value('Sage');expect(page.locator('#status')).to_contain_text('Folder opened')
+  elif action=='open':page.locator('#open').click();expect(page.locator('#name')).to_have_value('New theme');expect(page.locator('#status')).to_contain_text('Folder opened')
   else:save();expect(page.locator('#status')).to_contain_text('Saved.')
   before=page.evaluate('JSON.stringify(model)');before_status=page.locator('#status').inner_text()
   page.evaluate('window.__decodeResume()');page.wait_for_function('()=>window.__decodeDone');page.wait_for_timeout(30)
@@ -138,20 +138,20 @@ def regressions(page,root,manifest,checks):
 
 def verify(browser,url,shots):
  root=Path(__file__).resolve().parents[1]
- manifest=(root/'theme-packs/classic/themes/sage/theme.json').read_text()
+ manifest=(root/'theme-packs/new-theme/theme.json').read_text()
  checks=[];errors=[]
  canonical=(root/'theme-packs/EDIT-THEMES.html').read_bytes()
  copies=list((root/'theme-packs').glob('*/themes/*/EDIT-THEME.html'))
- assert copies and all(path.read_bytes()==canonical for path in copies)
- checks.append('all bundled per-theme offline editors are byte-identical to the canonical editor')
+ assert canonical and not copies
+ checks.append('one canonical offline editor; built-in themes are not duplicated as pack editors')
  context=browser.new_context(viewport={'width':1440,'height':960})
  page=context.new_page();page.on('pageerror',lambda error:errors.append(str(error)))
  page.on('dialog',lambda dialog:dialog.accept())
  page.add_init_script(FIXTURE.replace('__MANIFEST__',json.dumps(manifest)))
  try:
   page.goto((root/'theme-packs/EDIT-THEMES.html').as_uri(),wait_until='networkidle')
-  page.get_by_role('button',name='Choose theme folder').click();expect(page.locator('#name')).to_have_value('Sage')
-  page.locator('#name').fill('My own Sage');page.locator('#id').fill('my-own-sage')
+  page.get_by_role('button',name='Choose theme folder').click();expect(page.locator('#name')).to_have_value('New theme')
+  page.locator('#name').fill('My custom theme');page.locator('#id').fill('my-custom-theme')
   page.get_by_role('textbox',name='Main buttons hex',exact=True).fill('#123abc')
   webp=page.evaluate("""async()=>{const canvas=document.createElement('canvas');canvas.width=16;canvas.height=16;canvas.getContext('2d').fillRect(0,0,16,16);const blob=await new Promise(r=>canvas.toBlob(r,'image/webp'));return btoa(String.fromCharCode(...new Uint8Array(await blob.arrayBuffer())));}""")
   page.locator('[data-asset=background]').set_input_files({'name':'my-picture.webp','mimeType':'image/webp','buffer':base64.b64decode(webp)})
@@ -160,8 +160,8 @@ def verify(browser,url,shots):
   expect(page.locator('#status')).to_contain_text('Image ready')
   page.get_by_role('button',name='Save changes',exact=True).click();expect(page.locator('#status')).to_contain_text('Saved.')
   written=page.evaluate('JSON.parse(__themeFiles["theme.json"])')
-  assert written['id']=='my-own-sage' and written['name']=='My own Sage'
-  assert written['colors']['ok']=='#123abc' and written['colors']['blue']==json.loads(manifest)['colors']['blue']
+  assert written['id']=='my-custom-theme' and written['name']=='My custom theme'
+  assert written['colors']['ok']=='#123abc' and written['base']=='default'
   assert set(written['assets'])=={'background','cursor'}
   assert written['assets']['background'].startswith('assets/background-') and written['assets']['background'].endswith('.webp')
   assert written['assets']['cursor'].startswith('assets/cursor-') and written['assets']['cursor'].endswith('.png')
@@ -172,7 +172,7 @@ def verify(browser,url,shots):
    page.set_viewport_size({'width':width,'height':960});assert page.evaluate('document.documentElement.scrollWidth<=innerWidth'),width
    page.screenshot(path=str(shots/f'editor-{width}.png'),full_page=True)
   checks.append('desktop and narrow editor bounds')
-  page.locator('#name').fill('Discard me');page.get_by_role('button',name='Undo unsaved changes').click();expect(page.locator('#name')).to_have_value('My own Sage')
+  page.locator('#name').fill('Discard me');page.get_by_role('button',name='Undo unsaved changes').click();expect(page.locator('#name')).to_have_value('My custom theme')
   checks.append('undo unsaved changes')
   page.get_by_role('button',name='Remove background image',exact=True).click();page.get_by_role('button',name='Save changes',exact=True).click();expect(page.locator('#status')).to_contain_text('Saved.')
   assert 'background' not in page.evaluate('JSON.parse(__themeFiles["theme.json"]).assets')
@@ -196,7 +196,7 @@ def verify(browser,url,shots):
  try:
   page.goto((root/'theme-packs/EDIT-THEMES.html').as_uri(),wait_until='networkidle')
   with page.expect_file_chooser() as chooser:page.get_by_role('button',name='Choose theme folder').click()
-  chooser.value.set_files(root/'theme-packs/classic/themes/sage/theme.json')
+  chooser.value.set_files(root/'theme-packs/new-theme/theme.json')
   expect(page.locator('#status')).to_contain_text('Preview mode')
   page.locator('#name').fill('Downloaded theme')
   with page.expect_download() as download:page.get_by_role('button',name='Save changes',exact=True).click()

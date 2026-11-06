@@ -1,15 +1,9 @@
-# Existing DEAS themes — easy editing
+# DEAS theme editor and starter theme
 
-These are the existing real themes, not demo packs. Classic contains Sage and eight original palettes.
+DEAS supplies one offline editor and one starter theme. Built-in colour schemes are not duplicated as external packs.
 
-## Install
+Open **Quick Settings → Edit themes** in DEAS. DEAS creates `new-theme` in the selected environment's `themes/` folder if it is missing and opens this editor in your browser.
 
-Open Quick Settings → Open themes folder in DEAS. Copy the individual theme folders from classic/themes into that environment folder. The result must be themes/sage/theme.json. Click Refresh themes. Deleting an installed pack and refreshing removes it; Default alone remains available for recovery.
+Choose that folder, change its Theme ID to something unique, edit its colors, then click **Save changes**. Duplicate the folder first when you want to keep more than one custom theme. Return to DEAS and click **Refresh themes**.
 
-## Customize
-
-Open EDIT-THEMES.html in Edge or Chrome, or open EDIT-THEME.html inside any supplied theme. Click Choose theme folder, select the installed theme's folder, edit the colors/images, and Save changes. Finally click Refresh themes in DEAS. The editor is offline, makes backups and places images in assets/ automatically. Read the theme's README.md for simple step-by-step instructions.
-
-To create a theme, duplicate an existing folder first, then use the editor to change its name and unique Theme ID. Share the whole folder. No coding is required. Older flat PNG themes still load; you do not need to convert them before using the editor.
-
-Keep attribution/license files with reused artwork. The full schema, limits, recovery and compatibility notes are in [the theme-pack guide](../docs/THEME-PACKS.md). The HTML editor runs only when opened in a browser; DEAS does not execute it as a plugin.
+The editor works offline, backs up previous manifests/images and places new images in `assets/` automatically. Keep attribution/license files when sharing reused artwork. Full examples, schema, limits and recovery notes are in [docs/THEME-PACKS.md](../docs/THEME-PACKS.md). DEAS never executes the HTML as a plugin.

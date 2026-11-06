@@ -89,7 +89,7 @@ test('a colour scheme applies at once, is remembered and survives a reload; Defa
 test('theme controls are searchable before opening Quick Settings and unavailable without a native environment',async()=>{
  localStorage.setItem('deas.locale.v1','en');
  const view=render(<I18nProvider><QuickSettings/></I18nProvider>);
- for(const key of ['theme.ui.refresh','theme.ui.openThemesFolder']){
+ for(const key of ['theme.ui.refresh','theme.ui.editThemes']){
   const entry=searchIndex.find(e=>e.label===key)!;expect(entry).toBeTruthy();
   act(()=>{revealTarget(entry.target);});
   expect(revealTarget(entry.target).state).toBe('disabled');
@@ -98,11 +98,11 @@ test('theme controls are searchable before opening Quick Settings and unavailabl
  expect(invoke).not.toHaveBeenCalled();view.unmount();
 });
 
-test('refresh reloads the environment catalog and opening its folder reports failure without hiding it behind a scan',async()=>{
+test('refresh reloads the environment catalog and opening the editor reports failure without hiding it behind a scan',async()=>{
  localStorage.setItem('deas.locale.v1','en');vi.mocked(isTauri).mockReturnValue(true);
  vi.mocked(invoke).mockImplementation(async command=>{
   if(command==='native_theme_packs')return {directory:'/env/themes',packs:[],warnings:[]};
-  if(command==='native_theme_folder')throw Error('folder unavailable');
+  if(command==='native_theme_editor')throw Error('editor unavailable');
   if(command==='native_spellcheck_status')return {available:true,installed:true};
   throw Error('Unexpected fixture IPC '+command);
  });
@@ -112,9 +112,9 @@ test('refresh reloads the environment catalog and opening its folder reports fai
  expect(invoke).toHaveBeenCalledWith('native_theme_packs',{root:'/env'});
  fireEvent.click(screen.getByRole('button',{name:'Refresh themes'}));
  await waitFor(()=>expect(vi.mocked(invoke).mock.calls.filter(([c])=>c==='native_theme_packs')).toHaveLength(2));
- fireEvent.click(screen.getByRole('button',{name:'Open themes folder'}));
- await screen.findByText('Could not open the themes folder. See Logs.');
- expect(invoke).toHaveBeenCalledWith('native_theme_folder',{root:'/env'});
+ fireEvent.click(screen.getByRole('button',{name:'Edit themes'}));
+ await screen.findByText('Could not open the theme editor. See Logs.');
+ expect(invoke).toHaveBeenCalledWith('native_theme_editor',{root:'/env'});
  expect(vi.mocked(invoke).mock.calls.filter(([c])=>c==='native_theme_packs')).toHaveLength(2);
  view.unmount();await refreshThemePacks();
 });

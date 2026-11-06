@@ -1,10 +1,10 @@
 {
-  "theme.ui.openThemesFolder": "Ouvrir le dossier des thèmes",
   "theme.ui.someThemePacksCouldNotBeLoadedBuilt": "Certains thèmes n’ont pas pu être chargés. Default reste disponible pour rétablir l’affichage. Voir les journaux.",
   "theme.ui.theSavedThemeIsUnavailableDefaultIsShown": "Le thème enregistré est indisponible. Default est affiché jusqu’à sa restauration ou au choix d’un autre thème.",
-  "theme.ui.folderHint": "Placez les dossiers de thèmes dans le dossier themes de votre environnement.",
+  "theme.ui.folderHint": "DEAS crée un dossier de thème de départ et ouvre l’éditeur hors ligne.",
   "theme.ui.chooseEnvironment": "Choisissez votre environnement DEAS dans Backend pour charger les thèmes.",
   "theme.ui.loading": "Chargement des thèmes…",
   "theme.ui.refresh": "Actualiser les thèmes",
-  "theme.ui.folderFailed": "Impossible d’ouvrir le dossier des thèmes. Voir les journaux."
+  "theme.ui.folderFailed": "Impossible d’ouvrir l’éditeur de thèmes. Voir les journaux.",
+  "theme.ui.editThemes": "Modifier les thèmes"
 }

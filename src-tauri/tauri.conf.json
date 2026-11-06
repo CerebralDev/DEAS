@@ -16,5 +16,13 @@
       "assetProtocol": {"enable": true, "scope": {"allow": ["**"], "requireLiteralLeadingDot": false}}
     }
   },
-  "bundle": {"active":true,"targets":["deb","appimage","nsis"],"icon":["icons/icon.png","icons/icon.ico"]}
+  "bundle": {
+    "active": true,
+    "targets": ["deb", "appimage", "nsis"],
+    "resources": {
+      "../theme-packs/EDIT-THEMES.html": "theme-packs/EDIT-THEMES.html",
+      "../theme-packs/new-theme": "theme-packs/new-theme"
+    },
+    "icon": ["icons/icon.png", "icons/icon.ico"]
+  }
 }

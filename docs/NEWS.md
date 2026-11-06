@@ -1,5 +1,9 @@
 # News
 
+## Unreleased
+
+- **Edit themes from Quick Settings.** DEAS creates a starter theme in your environment only when needed, opens the offline editor, and no longer ships duplicate copies of the built-in palettes. Save a unique theme, refresh, and choose it. [Theme guide](THEME-PACKS.md).
+
 ## 0.2.17 BETA
 
 - Monitoring, Run Plan, Backend and Logs are grouped on the right; creative tabs remain on the left.

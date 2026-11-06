@@ -9,6 +9,7 @@ use std::{
     sync::Mutex,
     time::{Duration, Instant},
 };
+use tauri::{path::BaseDirectory, AppHandle, Manager};
 
 const BASES: &[&str] = &[
     "default",
@@ -378,8 +379,79 @@ pub async fn native_theme_packs(root: String) -> Result<ThemeCatalog, String> {
     }
     result
 }
+fn theme_editor_source(app: &AppHandle) -> Result<PathBuf, String> {
+    let source = app
+        .path()
+        .resolve("theme-packs", BaseDirectory::Resource)
+        .map_err(|_| "Theme editor is unavailable".to_string())?;
+    if source.join("EDIT-THEMES.html").is_file() {
+        return Ok(source);
+    }
+    let fallback = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .ok_or("Invalid application source path")?
+        .join("theme-packs");
+    if fallback.join("EDIT-THEMES.html").is_file() {
+        return Ok(fallback);
+    }
+    Err("Theme editor is unavailable".into())
+}
+
+fn copy_folder(source: &Path, target: &Path) -> Result<(), String> {
+    fs::create_dir_all(target).map_err(|_| "Cannot create theme folder")?;
+    for entry in fs::read_dir(source).map_err(|_| "Cannot read bundled theme folder")? {
+        let entry = entry.map_err(|_| "Cannot read bundled theme folder")?;
+        let name = entry.file_name();
+        let destination = target.join(name);
+        if entry.path().is_dir() {
+            copy_folder(&entry.path(), &destination)?;
+        } else {
+            fs::copy(entry.path(), destination).map_err(|_| "Cannot copy bundled theme")?;
+        }
+    }
+    Ok(())
+}
+
+fn ensure_starter_pack(themes: &Path, source: &Path) -> Result<(), String> {
+    let starter = source.join("new-theme");
+    if !starter.is_dir() {
+        return Err("Bundled starter theme is unavailable".into());
+    }
+    let target = themes.join("new-theme");
+    if target.symlink_metadata().is_ok() {
+        return Ok(());
+    }
+    copy_folder(&starter, &target)
+}
+
+fn open_local_file(path: &Path) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    let mut command = {
+        let mut command = std::process::Command::new("xdg-open");
+        command.arg(path);
+        command
+    };
+    #[cfg(windows)]
+    let mut command = {
+        let mut command = std::process::Command::new("cmd");
+        let path = path.to_string_lossy();
+        command.args(["/C", "start", "", path.as_str()]);
+        command
+    };
+    #[cfg(target_os = "macos")]
+    let mut command = {
+        let mut command = std::process::Command::new("open");
+        command.arg(path);
+        command
+    };
+    command
+        .spawn()
+        .map(|_| ())
+        .map_err(|_| "Cannot open the theme editor".to_string())
+}
+
 #[tauri::command]
-pub async fn native_theme_folder(root: String) -> Result<(), String> {
+pub async fn native_theme_editor(app: AppHandle, root: String) -> Result<(), String> {
     let result = tauri::async_runtime::spawn_blocking(move || {
         let directory = environment(&root)?.join("themes");
         if !directory
@@ -389,20 +461,12 @@ pub async fn native_theme_folder(root: String) -> Result<(), String> {
             fs::create_dir(&directory).map_err(|_| "Cannot create themes folder")?;
         }
         plain(&directory, true)?;
-        #[cfg(windows)]
-        let mut command = std::process::Command::new("explorer.exe");
-        #[cfg(target_os = "linux")]
-        let mut command = std::process::Command::new("xdg-open");
-        #[cfg(target_os = "macos")]
-        let mut command = std::process::Command::new("open");
-        command
-            .arg(directory)
-            .spawn()
-            .map_err(|_| "Cannot open themes folder")?;
-        Ok(())
+        let source = theme_editor_source(&app)?;
+        ensure_starter_pack(&directory, &source)?;
+        open_local_file(&source.join("EDIT-THEMES.html"))
     })
     .await
-    .map_err(|_| "Theme folder operation could not complete".to_owned())
+    .map_err(|_| "Theme editor operation could not complete".to_owned())
     .and_then(|result| result);
     if let Err(error) = &result {
         diagnostic(error);

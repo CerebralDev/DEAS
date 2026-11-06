@@ -50,7 +50,7 @@ export function QuickSettings({root,experience='advanced',onExperience}:{root?:s
    <div className="theme-pack-actions">
     <small>{t(root?'theme.ui.folderHint':'theme.ui.chooseEnvironment')}</small>
     <button type="button" data-theme-action="refresh" disabled={!root||!isTauri()||themes.loading} onClick={()=>void refreshThemePacks(root)}>{t(themes.loading?'theme.ui.loading':'theme.ui.refresh')}</button>
-    <button type="button" data-theme-action="folder" disabled={!root||!isTauri()} onClick={()=>{setFolderError(false);void invoke('native_theme_folder',{root}).catch(()=>setFolderError(true));}}>{t('theme.ui.openThemesFolder')}</button>
+    <button type="button" data-theme-action="edit" disabled={!root||!isTauri()} onClick={()=>{setFolderError(false);void invoke('native_theme_editor',{root}).catch(()=>setFolderError(true));}}>{t('theme.ui.editThemes')}</button>
     {folderError&&<p role="status">{t('theme.ui.folderFailed')}</p>}
     {themes.directory&&<small className="theme-pack-directory">{themes.directory}</small>}
     {(themes.error||themes.warnings.length>0)&&<p role="status">{t('theme.ui.someThemePacksCouldNotBeLoadedBuilt')}</p>}

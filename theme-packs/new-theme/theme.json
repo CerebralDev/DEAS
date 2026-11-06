@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "id": "new-theme",
+  "name": "New theme",
+  "author": "You",
+  "base": "default",
+  "colors": {}
+}

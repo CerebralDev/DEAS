@@ -10,15 +10,12 @@ import verify_workspace_layout as layout
 
 
 def packs():
-    result = []
-    root = Path(__file__).resolve().parents[1]/'theme-packs'
-    for file in sorted((root/'classic/themes').glob('*/theme.json')):
-        data = json.loads(file.read_text(encoding='utf-8-sig'))
-        data.pop('schemaVersion')
-        data['assets'] = {key: 'data:image/'+('webp' if name.endswith('.webp') else 'png')+';base64,'+base64.b64encode((file.parent/name).read_bytes()).decode() for key, name in data.get('assets', {}).items()}
-        result.append(data)
-    assert result, 'No theme pack manifests found'
-    return result
+    file = Path(__file__).resolve().parents[1]/'theme-packs/new-theme/theme.json'
+    data = json.loads(file.read_text(encoding='utf-8-sig'))
+    data.pop('schemaVersion')
+    data.setdefault('colors', {})
+    data.setdefault('assets', {})
+    return [data]
 
 
 def verify(browser, url, shots):
@@ -34,8 +31,7 @@ def verify(browser, url, shots):
         else:
             r.continue_()
     page.route('http**/*', route)
-    data = packs()
-    classic = data
+    packs_data = packs()
     fixture = collection.FIXTURE.replace('__MIXED__', 'false').replace('const snapshot=', "f.jobs=[{...job('theme-running','running',7902),progress:{value:25,max:100}}];const snapshot=")
     script = fixture+layout.FIXTURE+'''
 localStorage.setItem('deas.locale.v1','en');
@@ -46,7 +42,7 @@ window.__TAURI_INTERNALS__.invoke=async(c,a)=>{
  if(c==='native_wildcard_library')return JSON.stringify({categories:[]});
  return themeInvoke(c,a);
 };
-'''.replace('__PACKS__', json.dumps(classic))
+'''.replace('__PACKS__', json.dumps(packs_data))
     page.add_init_script(script)
     def quick():
         if not page.locator('#studio-quick-actions').count():
@@ -66,38 +62,37 @@ window.__TAURI_INTERNALS__.invoke=async(c,a)=>{
     try:
         page.goto(url, wait_until='networkidle')
         page.locator('[data-studio-tab="generate"]').click()
-        expect(page.locator('html')).to_have_attribute('data-theme-pack', 'default')
+        assert page.locator('html').get_attribute('data-theme') in (None, 'default')  # built-in fallback
+        assert page.locator('html').get_attribute('data-theme-pack') is None
         page.locator('[data-run-positive]').fill('Keep this prompt while changing themes')
-        for pack in classic:
-            select(pack['id'])
-            expect(page.locator('html')).to_have_attribute('data-theme-pack', pack['id'])
-            assert page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--panel').trim()") == pack['colors']['panel']
-            return_to_studio()
-            expect(page.locator('html')).to_have_attribute('data-theme-pack', pack['id'])
-            expect(page.locator('[data-run-positive]')).to_have_value('Keep this prompt while changing themes')
-        select('android-white')
-        page.evaluate("window.__themePacks=window.__themePacks.filter(p=>p.id!=='android-white')")
+        select('new-theme')
+        expect(page.locator('html')).to_have_attribute('data-theme-pack', 'new-theme')
+        return_to_studio()
+        expect(page.locator('html')).to_have_attribute('data-theme-pack', 'new-theme')
+        expect(page.locator('[data-run-positive]')).to_have_value('Keep this prompt while changing themes')
+
+        page.evaluate('window.__themePacks=[]')
         refresh()
-        assert page.locator('html').get_attribute('data-theme') == 'android-white'  # built-in restored, additive
+        select('android-white')
+        assert page.locator('html').get_attribute('data-theme') == 'android-white'  # built-in remains available
         assert page.locator('html').get_attribute('data-theme-pack') is None
         return_to_studio()
         quick()
         expect(page.locator('[data-scheme="android-white"]')).to_have_count(1)
         page.locator('.studio-quick > button').click()
-        page.evaluate('values=>window.__themePacks=values', data)
+        page.evaluate('values=>window.__themePacks=values', packs_data)
         refresh()
-        expect(page.locator('html')).to_have_attribute('data-theme-pack', 'android-white')
+        select('new-theme')
 
-        select('sage')
-        page.evaluate("window.__themePacks.find(p=>p.id==='sage').colors.ok='#ff0000'")
+        page.evaluate("window.__themePacks.find(p=>p.id==='new-theme').colors.ok='#ff0000'")
         refresh()
         assert page.evaluate("document.documentElement.style.getPropertyValue('--ok')") == '#ff0000'
         page.reload(wait_until='networkidle')
-        expect(page.locator('html')).to_have_attribute('data-theme-pack', 'sage')
+        expect(page.locator('html')).to_have_attribute('data-theme-pack', 'new-theme')
         collection.assert_clean(page, errors)
         forbidden = page.evaluate("__collection.calls.filter(c=>/(_start|_stop|_write|_send|_generate|_run|_submit|_cancel)$/.test(c.command))")
         assert not forbidden, forbidden
-        result = {'status': 'PASS', 'kind': 'Chromium with strict simulated IPC and actual pack manifests/assets', 'checks': ['all supplied classic palettes and navigation retention', 'deleted active Android White pack falls back to the always-available built-in; restoration reapplies the override', 'legacy IDs and reload', 'prompt retention', 'runtime refresh after palette edit', 'no remote requests, writes or generation'], 'screenshots': str(shots)}
+        result = {'status': 'PASS', 'kind': 'Chromium with strict simulated IPC and actual starter manifest', 'checks': ['starter pack applies and navigation is retained', 'built-ins remain available without pack duplication', 'unique starter pack reload', 'prompt retention', 'runtime refresh after palette edit', 'no remote requests, writes or generation'], 'screenshots': str(shots)}
         (shots/'result.json').write_text(json.dumps(result, indent=2)+'\n')
         print(json.dumps(result, indent=2), flush=True)
     finally:

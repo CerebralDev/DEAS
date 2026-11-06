@@ -8,27 +8,38 @@ fn all_existing_theme_packs_are_valid_without_mutating_them() {
         .parent()
         .unwrap()
         .join("theme-packs");
-    for entry in fs::read_dir(source.join("classic").join("themes")).unwrap() {
-        let entry = entry.unwrap();
-        let target = t.path().join("themes").join(entry.file_name());
-        fs::create_dir_all(&target).unwrap();
-        copy_folder(&entry.path(), &target);
-    }
+    fs::create_dir_all(t.path().join("themes")).unwrap();
+    ensure_starter_pack(&t.path().join("themes"), &source).unwrap();
     let result = scan(t.path().to_str().unwrap()).unwrap();
     assert!(result.warnings.is_empty(), "{:?}", result.warnings);
-    assert_eq!(result.packs.len(), 9);
+    assert_eq!(result.packs.len(), 1);
+    assert_eq!(result.packs[0].id, "new-theme");
 }
-fn copy_folder(source: &Path, target: &Path) {
-    fs::create_dir_all(target).unwrap();
-    for file in fs::read_dir(source).unwrap() {
-        let file = file.unwrap();
-        if file.path().is_dir() {
-            copy_folder(&file.path(), &target.join(file.file_name()));
-        } else {
-            fs::copy(file.path(), target.join(file.file_name())).unwrap();
-        }
-    }
+
+#[test]
+fn starter_pack_is_created_once_without_overwriting_user_edits() {
+    let source = env();
+    let target = env();
+    fs::create_dir_all(source.path().join("new-theme")).unwrap();
+    fs::write(
+        source.path().join("new-theme/theme.json"),
+        r#"{"schemaVersion":1,"id":"new-theme","name":"Starter","author":"You","base":"default"}"#,
+    )
+    .unwrap();
+
+    ensure_starter_pack(&target.path().join("themes"), source.path()).unwrap();
+    fs::write(
+        target.path().join("themes/new-theme/theme.json"),
+        r#"{"schemaVersion":1,"id":"my-theme","name":"Edited","author":"You","base":"default"}"#,
+    )
+    .unwrap();
+    ensure_starter_pack(&target.path().join("themes"), source.path()).unwrap();
+
+    let edited = fs::read_to_string(target.path().join("themes/new-theme/theme.json")).unwrap();
+    assert!(edited.contains("my-theme"));
+    assert!(edited.contains("Edited"));
 }
+
 fn env() -> tempfile::TempDir {
     let t = tempfile::tempdir().unwrap();
     fs::write(t.path().join("deas-install.json"), "{}").unwrap();
@@ -330,9 +341,9 @@ fn native_theme_commands_are_local_and_registered() {
             .iter()
             .map(|c| c.as_str().unwrap())
             .collect::<Vec<_>>(),
-        ["native_theme_packs", "native_theme_folder"]
+        ["native_theme_packs", "native_theme_editor"]
     );
-    for command in ["native_theme_packs", "native_theme_folder"] {
+    for command in ["native_theme_packs", "native_theme_editor"] {
         assert!(include_str!("main.rs").contains(&format!("deas::{command},")));
     }
 }

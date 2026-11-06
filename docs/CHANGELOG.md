@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Integrated theme editing without palette duplication.** Quick Settings **Open themes folder** is replaced by **Edit themes**. DEAS bundles one offline `EDIT-THEMES.html` and one `new-theme` starter, creates the starter in the selected environment only when absent, opens the editor, and leaves an existing starter unchanged. The nine built-in colour schemes remain compiled into DEAS and are no longer duplicated as supplied `theme-packs/classic` folders or per-theme HTML editors.
+
 ## 0.2.17 BETA
 
 - **Utility tabs grouped right.** Monitoring, Run Plan, Backend and Logs now form a separate right-side tab group; Studio, Library, Prompt Forge, Chat, TVE and Comfy remain left. Existing tab IDs, views, polling lifetimes and Beginner navigation are unchanged.
