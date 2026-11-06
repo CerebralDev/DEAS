@@ -1,3 +1,14 @@
+pub mod audio_enhance;
+mod audio_runtime;
+mod resources;
+pub use audio_enhance::{
+    native_audio_enhance_cancel, native_audio_enhance_capabilities, native_audio_enhance_export,
+};
+pub use audio_runtime::{
+    native_audio_enhance_install, native_audio_enhance_install_cancel,
+    native_audio_enhance_install_status,
+};
+pub use resources::bind_resource_authority;
 pub mod auth;
 pub mod themes;
 pub use themes::{native_theme_folder, native_theme_packs};
@@ -102,7 +113,7 @@ pub use install::{
     native_install_status, native_install_update, native_torch_update_check,
 };
 pub use logs::{
-    native_logs, native_logs_export, native_logs_people_image_error,
+    native_logs, native_logs_beginner_error, native_logs_export, native_logs_people_image_error,
     native_logs_reference_media_error,
 };
 

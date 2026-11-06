@@ -314,16 +314,14 @@ mod tests {
             (0, 2, 2)
         );
         assert!(active.file.unwrap().ends_with("a.pt"));
-        assert!(
-            monitor
-                .start(
-                    root.path().to_string_lossy().into_owned(),
-                    ScanScope::All,
-                    provider,
-                    None
-                )
-                .is_err()
-        );
+        assert!(monitor
+            .start(
+                root.path().to_string_lossy().into_owned(),
+                ScanScope::All,
+                provider,
+                None
+            )
+            .is_err());
         release.send(()).unwrap();
         tokio::time::timeout(Duration::from_secs(10), async {
             while monitor.status().completed == 0 {
@@ -389,11 +387,9 @@ mod tests {
             scopes: vec!["model".into()],
             anonymous_notice: String::new(),
         };
-        assert!(
-            engine
-                .start("relative".into(), ScanScope::All, provider.clone(), None)
-                .is_err()
-        );
+        assert!(engine
+            .start("relative".into(), ScanScope::All, provider.clone(), None)
+            .is_err());
         let root = tempfile::tempdir().unwrap();
         let missing = root.path().join("missing").to_string_lossy().into_owned();
         engine
@@ -407,16 +403,14 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(engine.status().state, "failed");
-        assert!(
-            engine
-                .start(
-                    root.path().to_string_lossy().into_owned(),
-                    ScanScope::All,
-                    provider,
-                    None
-                )
-                .is_ok()
-        );
+        assert!(engine
+            .start(
+                root.path().to_string_lossy().into_owned(),
+                ScanScope::All,
+                provider,
+                None
+            )
+            .is_ok());
         tokio::time::timeout(Duration::from_secs(5), async {
             while engine.status().state == "running" {
                 tokio::time::sleep(Duration::from_millis(5)).await;

@@ -14,11 +14,11 @@
 //! Conversations live in `<environment>/chats/<id>.json`. Pictures are held for
 //! the turn they arrive in only and never written to disk.
 
-use super::engine::{self, Data, ROUND_TIMEOUT, WriteRequest, data_dir};
+use super::engine::{self, data_dir, Data, WriteRequest, ROUND_TIMEOUT};
 use super::{chat, search, tools};
 use crate::llm::{LlmConfig, Provider};
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -1007,11 +1007,9 @@ mod tests {
         ] {
             assert!(read_guide(&data, "basic", Some(&page)).is_err(), "{page}");
         }
-        assert!(
-            read_guide(&data, "../../secret", None)
-                .unwrap_err()
-                .contains("There is no guide")
-        );
+        assert!(read_guide(&data, "../../secret", None)
+            .unwrap_err()
+            .contains("There is no guide"));
     }
 
     #[test]
@@ -1036,12 +1034,10 @@ mod tests {
             "h3",
             "basic",
         ] {
-            assert!(
-                params["properties"]["name"]["enum"]
-                    .as_array()
-                    .unwrap()
-                    .contains(&json!(name))
-            );
+            assert!(params["properties"]["name"]["enum"]
+                .as_array()
+                .unwrap()
+                .contains(&json!(name)));
             assert!(read_guide(&data, name, None).is_ok());
         }
         for (name, _, text) in DOCS {
@@ -1201,11 +1197,9 @@ mod tests {
             assert_eq!(prompt_route(&data, name), PromptRoute::Missing, "{name}");
         }
         let defs = tool_definitions(&data);
-        assert!(
-            defs[0]["function"]["parameters"]["properties"]["model"]
-                .get("enum")
-                .is_none()
-        );
+        assert!(defs[0]["function"]["parameters"]["properties"]["model"]
+            .get("enum")
+            .is_none());
         let request = SendRequest {
             id: None,
             message: "test".into(),
@@ -1307,11 +1301,9 @@ mod tests {
                 "{target}: {}",
                 result.content
             );
-            assert!(
-                !result
-                    .content
-                    .contains("Which model should this prompt be for?")
-            );
+            assert!(!result
+                .content
+                .contains("Which model should this prompt be for?"));
             assert_eq!(result.prompts.len(), usize::from(simple));
             if simple {
                 assert_eq!(result.prompts[0].target, "basic");
@@ -1406,11 +1398,9 @@ mod tests {
                 .await
                 .expect("Stop must cancel the blocked search before its eight-second timeout");
         assert!(reply.unwrap().content.is_empty());
-        assert!(
-            !events
-                .iter()
-                .any(|e| matches!(e, ChatEvent::Searched { .. } | ChatEvent::Text { .. }))
-        );
+        assert!(!events
+            .iter()
+            .any(|e| matches!(e, ChatEvent::Searched { .. } | ChatEvent::Text { .. })));
         assert!(matches!(events.last(), Some(ChatEvent::Done { .. })));
         let chat_id = id.lock().unwrap().clone().unwrap();
         assert_eq!(load(&root, &chat_id).unwrap().messages.len(), 2);
@@ -1619,10 +1609,8 @@ mod tests {
             context: None,
             search: false,
         };
-        assert!(
-            !system_prompt(&data, &req, false, false)
-                .contains("A prompt for\nanything else, write yourself.")
-        );
+        assert!(!system_prompt(&data, &req, false, false)
+            .contains("A prompt for\nanything else, write yourself."));
     }
 
     /// A real conversation against a live server, printed in full:

@@ -209,11 +209,9 @@ fn running_interrupt_source_backed_launch_proof_and_queue_race() {
         assert!(owner(&base).is_ok());
         lifecycle.stop();
         assert!(owner(&base).is_err());
-        assert!(
-            !crate::logs::native_logs(0)
-                .iter()
-                .any(|e| e.text.contains(&token))
-        );
+        assert!(!crate::logs::native_logs(0)
+            .iter()
+            .any(|e| e.text.contains(&token)));
     }
     let result = Command::new("/usr/bin/python3")
         .args([
@@ -328,11 +326,9 @@ fn image_prompting_install_rejects_linked_files_and_directories() {
     let plugin = directory.join("deas_image_prompting.py");
     std::os::unix::fs::symlink(&foreign, &plugin).unwrap();
     let lifecycle = Lifecycle::default();
-    assert!(
-        lifecycle
-            .launch(approved.clone(), Duration::from_secs(1))
-            .is_err()
-    );
+    assert!(lifecycle
+        .launch(approved.clone(), Duration::from_secs(1))
+        .is_err());
     assert!(locked(&lifecycle.inner).child.is_none());
     assert_eq!(fs::read_to_string(&foreign).unwrap(), "untouched");
     fs::remove_file(plugin).unwrap();
@@ -392,12 +388,10 @@ fn real_owned_child_requires_api_before_running_and_stop_is_exact() {
                 .is_err()
         );
     }
-    assert!(
-        cancellation_owner(
-            &reqwest::Url::parse(&endpoint.replace("127.0.0.1", "localhost")).unwrap()
-        )
-        .is_err()
-    );
+    assert!(cancellation_owner(
+        &reqwest::Url::parse(&endpoint.replace("127.0.0.1", "localhost")).unwrap()
+    )
+    .is_err());
     assert_eq!(
         fs::read_to_string(tmp.path().join("ComfyUI/requests.log")).unwrap(),
         "/object_info\n/system_stats\n"
@@ -424,11 +418,9 @@ fn readiness_timeout_kills_only_owned_process() {
     assert!(status.endpoint.is_none());
     assert!(!status.generation_ready);
     assert!(!Path::new(&format!("/proc/{pid}")).exists());
-    assert!(
-        crate::logs::native_logs(0)
-            .iter()
-            .any(|entry| entry.text.contains("not an API"))
-    );
+    assert!(crate::logs::native_logs(0)
+        .iter()
+        .any(|entry| entry.text.contains("not an API")));
 }
 #[test]
 fn startup_failure_retains_real_logs() {
@@ -453,23 +445,19 @@ fn manifest_tamper_and_symlink_replacement_never_spawn() {
     let (tmp, approved) = fixture(SERVER);
     fs::write(tmp.path().join("deas-install.json"), "{}").unwrap();
     let lifecycle = Lifecycle::default();
-    assert!(
-        lifecycle
-            .launch(approved, Duration::from_secs(1))
-            .unwrap_err()
-            .contains("manifest")
-    );
+    assert!(lifecycle
+        .launch(approved, Duration::from_secs(1))
+        .unwrap_err()
+        .contains("manifest"));
     assert!(locked(&lifecycle.inner).child.is_none());
     let (tmp, approved) = fixture(SERVER);
     let main = tmp.path().join("ComfyUI/main.py");
     fs::rename(&main, tmp.path().join("original.py")).unwrap();
     std::os::unix::fs::symlink(tmp.path().join("original.py"), &main).unwrap();
-    assert!(
-        lifecycle
-            .launch(approved, Duration::from_secs(1))
-            .unwrap_err()
-            .contains("symlink")
-    );
+    assert!(lifecycle
+        .launch(approved, Duration::from_secs(1))
+        .unwrap_err()
+        .contains("symlink"));
 }
 #[test]
 fn drop_cleans_owned_group() {
@@ -646,12 +634,10 @@ fn writable_or_replaced_owned_environment_is_rejected() {
     )
     .unwrap();
     let lifecycle = Lifecycle::default();
-    assert!(
-        lifecycle
-            .launch(approved, Duration::from_secs(1))
-            .unwrap_err()
-            .contains("writable")
-    );
+    assert!(lifecycle
+        .launch(approved, Duration::from_secs(1))
+        .unwrap_err()
+        .contains("writable"));
     assert!(locked(&lifecycle.inner).child.is_none());
     let (tmp, approved) = fixture(SERVER);
     fs::rename(
@@ -665,12 +651,10 @@ fn writable_or_replaced_owned_environment_is_rejected() {
         tmp.path().join("ComfyUI/main.py"),
     )
     .unwrap();
-    assert!(
-        lifecycle
-            .launch(approved, Duration::from_secs(1))
-            .unwrap_err()
-            .contains("identity")
-    );
+    assert!(lifecycle
+        .launch(approved, Duration::from_secs(1))
+        .unwrap_err()
+        .contains("identity"));
 }
 #[test]
 fn foreign_listener_is_never_adopted_or_stopped() {
@@ -711,11 +695,9 @@ fn stop_allows_python_finally_and_drains_shutdown_output_before_restarting() {
         assert_eq!(lifecycle.stop().state, "stopped");
         assert!(started.elapsed() < STOP_GRACE);
         let shutdown_logs = crate::logs::native_logs(before);
-        assert!(
-            shutdown_logs
-                .iter()
-                .any(|e| e.text == "Owned backend shut down gracefully")
-        );
+        assert!(shutdown_logs
+            .iter()
+            .any(|e| e.text == "Owned backend shut down gracefully"));
         assert!(!shutdown_logs.iter().any(|e| e.text.contains("escalating")));
         assert_eq!(
             fs::read_to_string(tmp.path().join("ComfyUI/clean-stop")).unwrap(),
@@ -756,11 +738,9 @@ fn stop_escalates_only_after_grace_when_descendant_ignores_interrupt() {
         assert!(Instant::now() < deadline);
         std::thread::sleep(Duration::from_millis(10));
     }
-    assert!(
-        crate::logs::native_logs(before)
-            .iter()
-            .any(|e| e.text.contains("escalating to forced owned-group cleanup"))
-    );
+    assert!(crate::logs::native_logs(before)
+        .iter()
+        .any(|e| e.text.contains("escalating to forced owned-group cleanup")));
 }
 
 #[test]

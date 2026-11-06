@@ -5,7 +5,7 @@
 //! same round through the managed GGUF worker instead.
 
 use crate::llm::{LlmConfig, LocalRunner, Provider};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
@@ -688,12 +688,10 @@ pub(super) mod tests {
         let picture = user_with_images("look", &["data:image/png;base64,AA".into()], false);
         assert!(round(vec![picture]).await.unwrap_err().contains("pictures"));
         let text = json!({ "role": "user", "content": "write" });
-        assert!(
-            round(vec![text])
-                .await
-                .unwrap_err()
-                .contains("not available")
-        );
+        assert!(round(vec![text])
+            .await
+            .unwrap_err()
+            .contains("not available"));
     }
 
     #[tokio::test]

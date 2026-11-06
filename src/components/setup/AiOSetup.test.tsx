@@ -524,3 +524,13 @@ it('numbers the next folder after an unfinished install',()=>{
  expect(nextFolder('C:\deas-environment')).toBe('C:\deas-environment-2');
  expect(nextFolder('/env/deas-environment-2/')).toBe('/env/deas-environment-3');
 });
+
+it('a first-run beginner without an installed environment lands on the backend wizard',async()=>{
+ const onExperience=vi.fn();
+ const view=render(<I18nProvider><AiOSetup experience='unset' onExperience={onExperience} onConnectExisting={vi.fn()} onInstalled={vi.fn()}/></I18nProvider>);
+ fireEvent.click(await screen.findByRole('button',{name:/A beginner/}));
+ expect(onExperience).toHaveBeenCalledWith('beginner');
+ view.rerender(<I18nProvider><AiOSetup experience='beginner' onExperience={onExperience} onConnectExisting={vi.fn()} onInstalled={vi.fn()}/></I18nProvider>);
+ await waitFor(()=>expect(document.querySelector('.backend-overview')).not.toBeNull());
+ expect(document.querySelector('.aio-studio-host')).toBeNull();
+});

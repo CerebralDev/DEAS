@@ -464,11 +464,9 @@ mod tests {
         assert!(list_media(root.join("raw").to_str().unwrap(), None, Some(&root)).is_err());
         assert_eq!(std::fs::read(root.join("raw")).unwrap(), b"existing file");
         let entries = crate::logs::native_logs(0);
-        assert!(
-            entries
-                .iter()
-                .any(|e| e.text == "ERROR: Media operation=initialize-output-folder failed")
-        );
+        assert!(entries
+            .iter()
+            .any(|e| e.text == "ERROR: Media operation=initialize-output-folder failed"));
     }
     #[test]
     fn thumbnails_are_cached_downscaled_pngs() {

@@ -608,7 +608,7 @@ fn exif(data: &[u8], out: &mut Entries) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use flate2::{Compression, write::ZlibEncoder};
+    use flate2::{write::ZlibEncoder, Compression};
     use std::io::Write;
     use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -628,11 +628,9 @@ mod tests {
             entry.source == crate::logs::Source::Deas
                 && entry.text == "ERROR [media.metadata] read: Media path must be absolute"
         }));
-        assert!(
-            !entries
-                .iter()
-                .any(|entry| entry.text.contains("private-prompt-name"))
-        );
+        assert!(!entries
+            .iter()
+            .any(|entry| entry.text.contains("private-prompt-name")));
     }
     struct Fixture(std::path::PathBuf);
     impl Fixture {
@@ -723,12 +721,10 @@ mod tests {
                 .unwrap();
         }
         assert!(Fixture::new(&bytes).read().unwrap().is_empty());
-        assert!(
-            Fixture::new(b"unsupported media")
-                .read()
-                .unwrap()
-                .is_empty()
-        );
+        assert!(Fixture::new(b"unsupported media")
+            .read()
+            .unwrap()
+            .is_empty());
         assert!(read_metadata(Path::new("relative.png")).is_err());
         assert!(read_metadata(&std::env::temp_dir()).is_err());
     }
@@ -758,12 +754,10 @@ mod tests {
         let mut text = b"bomb\0\0".to_vec();
         text.extend(zlib(&vec![b'x'; MAX_TEXT + 1]));
         insert_chunk(&mut bytes, b"zTXt", &text);
-        assert!(
-            Fixture::new(&bytes)
-                .read()
-                .unwrap_err()
-                .contains("Decompressed")
-        );
+        assert!(Fixture::new(&bytes)
+            .read()
+            .unwrap_err()
+            .contains("Decompressed"));
         let mut bytes = encoded_png();
         for _ in 0..MAX_ENTRIES {
             insert_chunk(&mut bytes, b"tEXt", b"key\0value");
@@ -944,17 +938,13 @@ mod tests {
             assert!(read_metadata(&dir.join(name)).unwrap().is_empty(), "{name}");
         }
         let truncated = std::fs::read(dir.join("core.mkv")).unwrap();
-        assert!(
-            Fixture::new(&truncated[..truncated.len() / 2])
-                .read()
-                .is_ok()
-        ); // tags precede the clusters
+        assert!(Fixture::new(&truncated[..truncated.len() / 2])
+            .read()
+            .is_ok()); // tags precede the clusters
         assert!(Fixture::new(b"\x1a\x45\xdf\xa3\x00").read().is_err());
-        assert!(
-            Fixture::new(b"\0\0\0\x0cftypisom\0\0\0\x02moov")
-                .read()
-                .is_err()
-        );
+        assert!(Fixture::new(b"\0\0\0\x0cftypisom\0\0\0\x02moov")
+            .read()
+            .is_err());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

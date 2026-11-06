@@ -21,6 +21,7 @@ import { filesPresent, readFolders, type Folders } from '../../lib/settings';
 import { authProviders } from '../../features/downloads/DownloadPluginPanel';
 import { readAuthStatus, verifyAuthToken } from '../../lib/downloads';
 import { forgetPref, isBoolean, isString, readPref, usePref, writePref } from '../../lib/preferences';
+import {ExperienceSwitch,ExperienceWelcome,type Experience,type BeginnerPage} from '../../features/beginner/Experience';
 // Root of the last successful install; restored on start only while its deas-install.json still exists.
 const installedKey='install.root';
 const unfinishedInstall='unfinished DEAS installation';
@@ -31,11 +32,12 @@ type UpdateScope=typeof updateScopes[number];
 /** `native_torch_update_check`: exact from → to Torch packages, or why the PyTorch-only update is unavailable. */
 type TorchUpdate={from:string[];to:string[]|null;blocked:string|null};
 /** Keeps the studio/backend alive while top-level views change. */
-export interface AiOSetupProps { /** `inspect` is true for the explicit Connect button, false for the owned backend's automatic handoff. */ onConnectExisting: (baseUrl: string, inspect?: boolean) => void; onInstalled?: (features: readonly FeatureId[]) => void; /** Installed environment root plus its saved folder settings, for the Studio media roots. */ onEnvironment?: (environment: { root: string; folders: Folders } | null) => void; studio?: ReactNode; footer?: ReactNode; studioTab?: 'generate'|'forge'|'chat'|'tve'|'monitor'|'map'; onStudioTab?: (tab:'generate'|'forge'|'chat'|'tve'|'monitor'|'map')=>void; onStudioActiveChange?: (active:boolean)=>void }
+export interface AiOSetupProps { experience?:Experience; onExperience?:(value:Experience)=>void; beginnerPage?:BeginnerPage; onBeginnerPage?:(value:BeginnerPage)=>void; /** `inspect` is true for the explicit Connect button, false for the owned backend's automatic handoff. */ onConnectExisting: (baseUrl: string, inspect?: boolean) => void; onInstalled?: (features: readonly FeatureId[]) => void; /** Installed environment root plus its saved folder settings, for the Studio media roots. */ onEnvironment?: (environment: { root: string; folders: Folders } | null) => void; studio?: ReactNode; footer?: ReactNode; studioTab?: 'generate'|'forge'|'chat'|'tve'|'monitor'|'map'; onStudioTab?: (tab:'generate'|'forge'|'chat'|'tve'|'monitor'|'map')=>void; onStudioActiveChange?: (active:boolean)=>void }
 /** Automatic-only setup: folder + Director, the rest recommended; Start install is the single authorization. */
-export function AiOSetup({ onConnectExisting, onInstalled, onEnvironment, studio, footer, studioTab='generate', onStudioTab, onStudioActiveChange }: AiOSetupProps) {
+export function AiOSetup({ experience='advanced',onExperience,beginnerPage='generate',onBeginnerPage, onConnectExisting, onInstalled, onEnvironment, studio, footer, studioTab='generate', onStudioTab, onStudioActiveChange }: AiOSetupProps) {
  const {t}=useI18n();
  const native=isTauri();
+ const beginner=experience==='beginner';
  const [verified,setVerified]=useState<string[]>([]);
  const [configured,setConfigured]=useState<string[]>([]);const [authRevision,setAuthRevision]=useState(0);
  const [autoStart,setAutoStart]=usePref('backend.autostart',true,isBoolean);
@@ -70,10 +72,11 @@ export function AiOSetup({ onConnectExisting, onInstalled, onEnvironment, studio
  const plan=setupPlan(state);
  const signature=JSON.stringify([plan,folderDraft,takeoverOn,takeoverPath]);
  const planMatches=(['models','input','output'] as const).every(key=>nativePlan?.request.folders?.[key]===folderDraft[key])&&!!nativePlan&&plan?.route==='managed'&&nativePlan.request.storagePath===(takeoverOn&&takeoverPath?takeoverPath:plan.storagePath)&&(nativePlan.request.takeover??false)===takeoverOn&&nativePlan.request.backend===plan.backend&&nativePlan.request.comfyRef===plan.comfyRef&&JSON.stringify(nativePlan.request.features)===JSON.stringify(plan.features)&& (Object.keys(plan.options) as (keyof InstallOptions)[]).every(id=>nativePlan.request.options?.[id]===plan.options[id]);
- const [view,setView]=useState<'studio'|'downloads'|'comfy'|'backend'|'logs'>('backend');
+ const [view,setView]=useState<'studio'|'downloads'|'comfy'|'backend'|'logs'>(beginner?'studio':'backend');
  // Global search only switches the view and the lazy panes; it never writes a setting or submits anything.
  const [searchPanel,setSearchPanel]=useState<{panel:'startup'|'llm'|'auth';nonce:number}|null>(null);
- const searchNavigate=(entry:SearchEntry)=>{setView(entry.view);if(entry.studioTab)onStudioTab?.(entry.studioTab);if(entry.panel)setSearchPanel(p=>({panel:entry.panel!,nonce:(p?.nonce??0)+1}));if(entry.libraryView){const libraryView=entry.libraryView;setTimeout(()=>window.dispatchEvent(new CustomEvent('deas:library-view',{detail:libraryView})),50);}};
+ const searchNavigate=(entry:SearchEntry)=>{if(entry.beginnerTab){onExperience?.('beginner');onStudioTab?.('generate');onBeginnerPage?.(entry.beginnerTab);setView('studio');}else setView(entry.view);if(entry.studioTab&&!entry.beginnerTab)onStudioTab?.(entry.studioTab);if(entry.panel)setSearchPanel(p=>({panel:entry.panel!,nonce:(p?.nonce??0)+1}));if(entry.libraryView){const libraryView=entry.libraryView;setTimeout(()=>window.dispatchEvent(new CustomEvent('deas:library-view',{detail:libraryView})),50);}};
+ useEffect(()=>{if(beginner){onStudioTab?.('generate');setView(installed?'studio':'backend');}},[beginner]);
  // Invalidate retained Studio work in the visibility commit, before deferred reads can redirect.
  useLayoutEffect(()=>{onStudioActiveChange?.(view==='studio');},[view,onStudioActiveChange]);
  const [llmSetupRequest,setLlmSetupRequest]=useState(0);
@@ -301,8 +304,8 @@ export function AiOSetup({ onConnectExisting, onInstalled, onEnvironment, studio
   try{await invoke('native_install_cancel');setStatus(await invoke<NativeInstallStatus>('native_install_status'));}
   catch(e){setTechnicalError(String(e));}finally{setBusy(false);}
  };
- return <section className={`aio-setup${view==='comfy'?' is-comfy':''}${inBackend?' is-backend':''}`} aria-label={t('setup.region')} data-workspace-view={view}>
-  <div className="aio-topbar">  <div className="aio-tabs" role="tablist" aria-label={t('setup.decisions')}>
+ return <section className={`aio-setup${beginner?' is-beginner':''}${view==='comfy'?' is-comfy':''}${inBackend?' is-backend':''}`} aria-label={t('setup.region')} data-workspace-view={view}>
+  <div className="aio-topbar"> {beginner&&<div className="beginner-app-logo"><span aria-hidden="true"/><strong>{'DEAS'}</strong><small>{t('beginner.studioLabel')}</small></div>}{beginner?<div className="aio-tabs" role="tablist" aria-label={t('beginner.navigation')}>{(['generate','models','collection'] as const).map(id=><button type="button" role="tab" key={id} className="aio-tab" data-beginner-tab={id} aria-selected={view==='studio'&&beginnerPage===id} onClick={()=>{onStudioTab?.('generate');onBeginnerPage?.(id);setView('studio');}}>{t(`beginner.${id}`)}</button>)}</div>:<div className="aio-tabs" role="tablist" aria-label={t('setup.decisions')}>
    <button type="button" role="tab" data-node="studio" className="aio-tab" disabled={folderPickerBusy} data-studio-tab="generate" aria-selected={view==='studio'&&studioTab==='generate'} onClick={()=>{onStudioTab?.('generate');setView('studio');}}>{t('setup.tab.studio')}</button>
    <button type="button" role="tab" data-node="optional-downloads" className="aio-tab" disabled={folderPickerBusy} aria-selected={view==='downloads'} onClick={()=>setView('downloads')}>{t('downloads.title')}</button>
    <button type="button" role="tab" data-studio-tab="forge" className="aio-tab" disabled={folderPickerBusy} aria-selected={view==='studio'&&studioTab==='forge'} onClick={()=>{onStudioTab?.('forge');setView('studio');window.dispatchEvent(new Event('deas:forge-open'));}}>{t('studio.tab.forge')}</button>
@@ -313,13 +316,16 @@ export function AiOSetup({ onConnectExisting, onInstalled, onEnvironment, studio
    <button type="button" role="tab" data-node="comfy" className="aio-tab" disabled={folderPickerBusy} aria-selected={view==='comfy'} onClick={()=>setView('comfy')}>{t('setup.tab.comfy')}</button>
    <button type="button" role="tab" data-node="settings" className="aio-tab" disabled={folderPickerBusy} aria-selected={inBackend} onClick={()=>setView('backend')}>{t('settings.button')}</button>
    <button type="button" role="tab" data-node="logs" className="aio-tab" disabled={folderPickerBusy} aria-selected={view==='logs'} onClick={()=>setView('logs')}>{t('logs.title')}</button>
-  </div>
+  </div>}
+{onExperience&&<ExperienceSwitch value={experience} onChange={onExperience}/>}
+{beginner&&<button type="button" className="beginner-backend" onClick={()=>setView('backend')} title={t('beginner.backendHint')}>{t('beginner.backend')}</button>}
 <QuickSettings root={installedRoot||undefined}/><ThemeAmbient/><GlobalSearch onNavigate={searchNavigate}/><RepoLinks canStar={verified.includes('github')}/></div>
   {inBackend&&<div className="backend-overview" aria-label={t('setup.overview')}>
    <span data-backend-installed className={installed?'is-set':undefined}>{installed&&<span aria-hidden="true">✓ </span>}{t('setup.backendLifecycle.title')} · <span>{t(installed?'setup.tab.installed':'setup.overview.missing')}</span>{(backendStatus?.state==='starting'||backendStatus?.state==='running')&&<small data-backend-state> · {t(backendStatus.state==='running'?'setup.backendStarted':'setup.backendStarting')}</small>}</span>
    {authProviders.filter(p=>configured.includes(p.id)).map(p=><span key={p.id} className="is-set" title={t('downloads.auth.set')} data-provider-configured={p.id}><span aria-hidden="true">✓ </span>{p.label} · {t('downloads.auth.set')}</span>)}
   </div>}
   {view!=='comfy'&&detectionError&&<p className="aio-error" role="alert">{t('setup.detectionError')}: {detectionError}</p>}
+  {experience==='unset'&&onExperience&&<ExperienceWelcome onChoose={onExperience}/>}
   <div className={`aio-decision-area${side?'':' is-single'}`}>
   <div className="aio-left">
   {comfyVisited.current&&<div className="comfy-view" hidden={view!=='comfy'}>{(!comfyEndpoint||!comfyLoaded)&&<div className="comfy-loading" role="status"><span className="aio-spinner" aria-hidden="true"/>{t(comfyEndpoint?'setup.comfy.loading':'setup.comfy.waiting')}</div>}{comfyEndpoint&&<iframe ref={comfyFrame} title={t('setup.comfy.title')} src={comfyEndpoint} onLoad={()=>setComfyLoaded(true)} sandbox="allow-scripts allow-same-origin allow-forms allow-downloads allow-modals allow-popups allow-popups-to-escape-sandbox" allow="clipboard-read; clipboard-write; fullscreen"/>}</div>}

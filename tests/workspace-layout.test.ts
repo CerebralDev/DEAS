@@ -23,7 +23,7 @@ test('tabs consume parent space instead of reintroducing independent viewport he
   }
   const workbench = read('src/features/studio/Workbench.tsx');
   assert.doesNotMatch(workbench, /setFit\(|height:\s*fit\b/);
-  assert.match(workbench, /className="workbench-host" hidden=\{planVisible\}/);
+  assert.match(workbench, /className=\{`workbench-host\$\{beginner\?' beginner-mode':''\}`\} hidden=\{planVisible\|\|\(beginner&&beginnerPage!=='generate'\)\}/);
   assert.match(read('src/components/setup/AiOSetup.tsx'), /className="aio-studio-host" hidden=\{view!==\'studio\'\}/);
 });
 

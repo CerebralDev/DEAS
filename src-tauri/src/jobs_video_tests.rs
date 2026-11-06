@@ -47,11 +47,9 @@ fn gguf_video_encoders_and_requirements_follow_the_selected_loader() {
         } else {
             "ggufTextEncoders"
         };
-        assert!(
-            required
-                .iter()
-                .any(|(key, names)| *key == field && names.contains(&"encoder.GGUF"))
-        );
+        assert!(required
+            .iter()
+            .any(|(key, names)| *key == field && names.contains(&"encoder.GGUF")));
         if dual {
             assert!(required.iter().any(|(key, names)| *key == field
                 && names.contains(&i["ltx"]["textProjection"].as_str().unwrap())));
@@ -116,18 +114,14 @@ fn windows_video_models_preserve_ids_but_inputs_stay_portable() {
         }
         i["loras"] = json!([{"name":r"styles\detail.safetensors","strength":0.55}]);
         let graph = compile(&i).unwrap();
-        assert!(
-            graph
-                .as_object()
-                .unwrap()
-                .values()
-                .any(|node| { node["inputs"]["lora_name"] == r"styles\detail.safetensors" })
-        );
-        assert!(
-            serde_json::to_string(&graph)
-                .unwrap()
-                .contains(&serde_json::to_string(&i["model"]).unwrap())
-        );
+        assert!(graph
+            .as_object()
+            .unwrap()
+            .values()
+            .any(|node| { node["inputs"]["lora_name"] == r"styles\detail.safetensors" }));
+        assert!(serde_json::to_string(&graph)
+            .unwrap()
+            .contains(&serde_json::to_string(&i["model"]).unwrap()));
         i["firstFrame"] = json!(r"deas-inputs\image.png");
         assert!(compile(&i).is_err());
     }
@@ -388,14 +382,12 @@ fn latent_post_upscale_h3_wires_prepared_context_and_processed_publish() {
             .1,
         vec!["h3/minimax_h3_latent_upscaler_3d_conv_v1_bf16.safetensors"]
     );
-    assert!(
-        required
-            .iter()
-            .find(|(k, _)| *k == "latentUpscaleModels")
-            .unwrap()
-            .1
-            .is_empty()
-    );
+    assert!(required
+        .iter()
+        .find(|(k, _)| *k == "latentUpscaleModels")
+        .unwrap()
+        .1
+        .is_empty());
 }
 
 #[test]
@@ -568,19 +560,15 @@ fn tve_post_chain_runs_after_the_decode_with_a_source_rate_baseline() {
                 i["frameRate"].clone()
             }
         );
-        assert!(
-            requirements(&i)
-                .iter()
-                .all(|(k, _)| *k != "frameInterpolationModels")
-        );
+        assert!(requirements(&i)
+            .iter()
+            .all(|(k, _)| *k != "frameInterpolationModels"));
         i["videoPost"] = json!({"upscaleModel":"2x.safetensors","frameGeneration":{"engine":"rife","multiplier":3,"model":"rife_v4.26.safetensors"}});
         let g = compile(&i).unwrap();
         assert_eq!(g["PM"]["inputs"]["image"], decoded);
         assert_eq!(g["PF"]["inputs"]["interp_model"], json!(["PFL", 0]));
-        assert!(
-            requirements(&i)
-                .contains(&("frameInterpolationModels", vec!["rife_v4.26.safetensors"]))
-        );
+        assert!(requirements(&i)
+            .contains(&("frameInterpolationModels", vec!["rife_v4.26.safetensors"])));
         assert!(requirements(&i).contains(&("upscaleModels", vec!["2x.safetensors"])));
         i["videoPost"] = json!({});
         assert!(compile(&i).unwrap_err().contains("videoPost"));
@@ -1361,11 +1349,9 @@ fn h3_ref2va_puts_images_videos_and_audio_on_the_director_timeline() {
         item(json!({"type":"video","file":"deas-input-v.mp4","slot":0,"mediaMode":"loop"})),
         item(json!({"type":"video","file":"deas-input-v.mp4","slot":0,"trimStart":5,"trimEnd":2})),
         json!([{"type":"image","file":"deas-inputs/a.png","slot":0},{"type":"image","file":"deas-inputs/b.png","slot":0}]),
-        json!(
-            (0..4)
-                .map(|n| json!({"type":"video","file":"deas-input-v.mp4","slot":n}))
-                .collect::<Vec<_>>()
-        ),
+        json!((0..4)
+            .map(|n| json!({"type":"video","file":"deas-input-v.mp4","slot":n}))
+            .collect::<Vec<_>>()),
     ] {
         let mut bad = i.clone();
         bad["h3"]["media"] = media.clone();
@@ -1505,11 +1491,9 @@ fn h3_ref2va_refmods_reach_the_timeline_and_may_stand_alone() {
         json!([{"slot":1,"name":"a","strength":0}]),
         json!([{"slot":1,"name":"a","strength":1.5}]),
         json!([{"slot":1,"name":"a","strength":1,"enabled":false}]),
-        json!(
-            (1..=9)
-                .map(|n| json!({"slot":n,"name":"a","strength":1}))
-                .collect::<Vec<_>>()
-        ),
+        json!((1..=9)
+            .map(|n| json!({"slot":n,"name":"a","strength":1}))
+            .collect::<Vec<_>>()),
     ] {
         i["h3"]["refmods"] = rows;
         assert!(compile(&i).is_err());

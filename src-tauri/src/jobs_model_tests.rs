@@ -198,12 +198,11 @@ async fn local_declaration_changed_during_observer_connect_fails_before_prompt()
             .await
             .unwrap()
             .unwrap();
-        assert!(
-            jobs.submit(id, true)
-                .await
-                .unwrap_err()
-                .contains("retries are forbidden")
-        );
+        assert!(jobs
+            .submit(id, true)
+            .await
+            .unwrap_err()
+            .contains("retries are forbidden"));
         assert_eq!(posts.load(Ordering::SeqCst), 0);
         task.abort();
     }
@@ -316,11 +315,9 @@ fn gguf_image_models_load_via_gguf_nodes_and_loras_stay_rejected() {
     for name in ["model.gguf", "model.GGUF"] {
         let mut draft = intent();
         draft["checkpoint"] = json!(name);
-        assert!(
-            compile(&draft)
-                .unwrap_err()
-                .contains("GGUF requires a diffusion recipe")
-        );
+        assert!(compile(&draft)
+            .unwrap_err()
+            .contains("GGUF requires a diffusion recipe"));
         draft["diffusion"] =
             json!({"textEncoder":"clip.safetensors","clipType":"wan","vae":"vae.safetensors"});
         let graph = compile(&draft).unwrap();

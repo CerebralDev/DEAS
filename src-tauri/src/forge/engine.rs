@@ -3,16 +3,16 @@
 //! the tag-search and guidance tools, the segment contract, then the
 //! mechanical clean-up. Ported from PromptForge's handleGenerate.
 
-use super::canon::{CanonTable, Corrections, character_block};
+use super::canon::{character_block, CanonTable, Corrections};
 use super::character::{self, Resolved};
 use super::message::{self, Controls};
-use super::pack::{Keys, Pack, PackModel, SEPARATOR, segment_tail};
+use super::pack::{segment_tail, Keys, Pack, PackModel, SEPARATOR};
 use super::refs;
 use super::segments::{self, Segment};
 use super::{chat, clean, tools};
 use crate::llm::{LlmConfig, Provider};
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -1576,16 +1576,14 @@ mod tests {
         assert_eq!(u["section_to_rewrite"], "a fire");
         assert_eq!(u["selected_element"]["name"], "Fire");
         assert_eq!(u["canvas_size"]["width"], 1024.0);
-        assert!(
-            rewrite_messages(
-                "x",
-                &LayoutRewrite {
-                    task: "move".into(),
-                    ..r
-                }
-            )
-            .is_err()
-        );
+        assert!(rewrite_messages(
+            "x",
+            &LayoutRewrite {
+                task: "move".into(),
+                ..r
+            }
+        )
+        .is_err());
     }
 
     /// Boxes drawn in the Layout Studio: the canvas and the boxes reach the model, and the

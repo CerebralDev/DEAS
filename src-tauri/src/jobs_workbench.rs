@@ -61,7 +61,7 @@ impl Jobs {
     }
 
     pub(super) async fn workbench_poll(&self) -> Result<Value, String> {
-        use futures_util::{StreamExt, stream};
+        use futures_util::{stream, StreamExt};
         let Ok(guard) = self.2.clone().try_lock_owned() else {
             return self.workbench_current();
         };
@@ -248,7 +248,7 @@ impl Jobs {
     }
 }
 
-fn report_job(operation: &str, job: &Value) {
+pub(super) fn report_job(operation: &str, job: &Value) {
     // Never forward backend errors, prompts, filenames or endpoints to the shared log.
     let level = if matches!(job["state"].as_str(), Some("unknown" | "failed")) {
         "ERROR"

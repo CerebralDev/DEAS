@@ -13,6 +13,9 @@ fn main() {
     tauri::Builder::default()
         .setup(|app| {
             use tauri::Manager;
+            // The shared Engine Arc is the only authority admissions may consult for owned
+            // backends and environments.
+            deas::bind_resource_authority(app.state::<deas::install::Engine>().inner().clone());
             match app.path().app_data_dir() {
                 Ok(path) => app.state::<deas::jobs::Jobs>().initialize_history(&path),
                 Err(_) => app
@@ -69,6 +72,12 @@ fn main() {
             deas::spellcheck::native_spellcheck_install,
             deas::spellcheck::native_spellcheck_check,
             deas::spellcheck::native_spellcheck_suggest,
+            deas::native_audio_enhance_capabilities,
+            deas::native_audio_enhance_export,
+            deas::native_audio_enhance_cancel,
+            deas::native_audio_enhance_install,
+            deas::native_audio_enhance_install_cancel,
+            deas::native_audio_enhance_install_status,
             deas::native_video_post_inspect,
             deas::native_video_post_inspect_path,
             deas::native_video_post_upload,
@@ -191,6 +200,7 @@ fn main() {
             deas::native_install_cancel,
             deas::native_install_update,
             deas::native_torch_update_check,
+            deas::native_logs_beginner_error,
             deas::native_logs,
             deas::native_logs_export,
             deas::native_logs_people_image_error,
@@ -217,6 +227,9 @@ fn main() {
                 event,
                 tauri::RunEvent::Exit | tauri::RunEvent::ExitRequested { .. }
             ) {
+                app.state::<deas::jobs::Jobs>().cancel_audio_stages();
+                deas::native_audio_enhance_install_cancel();
+                deas::audio_enhance::shutdown();
                 app.state::<deas::install::Engine>().shutdown_backend();
                 let _ = app.state::<deas::downloads::DownloadEngine>().cancel();
             }

@@ -46,16 +46,12 @@ fn package_roundtrip_copies_only_committed_manifest_and_current_input() {
         std::fs::write(root.join(name), b"secret").unwrap();
     }
     let package = folder.path().join("日本語 draft.zip");
-    assert!(
-        !projects
-            .export_package(&saved.id, saved.revision, None)
-            .unwrap()
-    );
-    assert!(
-        projects
-            .export_package(&saved.id, saved.revision, Some(&package))
-            .unwrap()
-    );
+    assert!(!projects
+        .export_package(&saved.id, saved.revision, None)
+        .unwrap());
+    assert!(projects
+        .export_package(&saved.id, saved.revision, Some(&package))
+        .unwrap());
     let original_package = std::fs::read(&package).unwrap();
     let mut zip = zip::ZipArchive::new(std::io::Cursor::new(&original_package)).unwrap();
     assert_eq!(zip.len(), 2);
@@ -64,19 +60,15 @@ fn package_roundtrip_copies_only_committed_manifest_and_current_input() {
     let mut exported_bytes = Vec::new();
     exported_manifest.read_to_end(&mut exported_bytes).unwrap();
     assert_eq!(exported_bytes, std::fs::read(root.join(MANIFEST)).unwrap());
-    assert!(
-        projects
-            .export_package(&saved.id, saved.revision, Some(&package))
-            .is_err()
-    );
+    assert!(projects
+        .export_package(&saved.id, saved.revision, Some(&package))
+        .is_err());
     assert_eq!(std::fs::read(&package).unwrap(), original_package);
     std::fs::remove_file(&source).unwrap();
-    assert!(
-        projects
-            .import_package(Some(&package), None)
-            .unwrap()
-            .is_none()
-    );
+    assert!(projects
+        .import_package(Some(&package), None)
+        .unwrap()
+        .is_none());
     let imported = projects
         .import_package(Some(&package), Some(folder.path()))
         .unwrap()
@@ -115,20 +107,16 @@ fn package_export_rejects_stale_external_changes_and_replaced_locks() {
     let projects = Projects::default();
     let first = projects.create(Some(folder.path())).unwrap().unwrap();
     let output = folder.path().join("output.zip");
-    assert!(
-        projects
-            .export_package(&first.id, 1, Some(&output))
-            .is_err()
-    );
+    assert!(projects
+        .export_package(&first.id, 1, Some(&output))
+        .is_err());
     assert!(!output.exists());
     let manifest = Path::new(&first.root).join(MANIFEST);
     let original = std::fs::read(&manifest).unwrap();
     std::fs::write(&manifest, b"{}").unwrap();
-    assert!(
-        projects
-            .export_package(&first.id, 0, Some(&output))
-            .is_err()
-    );
+    assert!(projects
+        .export_package(&first.id, 0, Some(&output))
+        .is_err());
     std::fs::write(&manifest, original).unwrap();
     std::fs::rename(
         Path::new(&first.root).join(LOCK),
@@ -136,11 +124,9 @@ fn package_export_rejects_stale_external_changes_and_replaced_locks() {
     )
     .unwrap();
     std::fs::write(Path::new(&first.root).join(LOCK), b"").unwrap();
-    assert!(
-        projects
-            .export_package(&first.id, 0, Some(&output))
-            .is_err()
-    );
+    assert!(projects
+        .export_package(&first.id, 0, Some(&output))
+        .is_err());
     assert!(!output.exists());
 }
 
@@ -212,11 +198,9 @@ fn malicious_packages_leave_source_active_and_parent_unchanged() {
     for bad in bads {
         std::fs::write(&archive, &bad).unwrap();
         let before = std::fs::read_dir(folder.path()).unwrap().count();
-        assert!(
-            projects
-                .import_package(Some(&archive), Some(folder.path()))
-                .is_err()
-        );
+        assert!(projects
+            .import_package(Some(&archive), Some(folder.path()))
+            .is_err());
         assert_eq!(std::fs::read_dir(folder.path()).unwrap().count(), before);
         assert_eq!(std::fs::read(&archive).unwrap(), bad);
         assert_eq!(
@@ -249,11 +233,9 @@ fn package_rejects_missing_extra_and_corrupt_managed_media() {
         draft_zip(&[(MANIFEST, &manifest), (name, b"not PNG")]),
     ] {
         std::fs::write(&archive, bytes).unwrap();
-        assert!(
-            projects
-                .import_package(Some(&archive), Some(folder.path()))
-                .is_err()
-        );
+        assert!(projects
+            .import_package(Some(&archive), Some(folder.path()))
+            .is_err());
     }
     let mut corrupt = image;
     corrupt[45] ^= 1;
@@ -266,11 +248,9 @@ fn package_rejects_missing_extra_and_corrupt_managed_media() {
         draft_zip(&[(MANIFEST, &manifest), (&data.input.unwrap().path, &corrupt)]),
     )
     .unwrap();
-    assert!(
-        projects
-            .import_package(Some(&archive), Some(folder.path()))
-            .is_err()
-    );
+    assert!(projects
+        .import_package(Some(&archive), Some(folder.path()))
+        .is_err());
     assert_eq!(
         projects
             .open(Some(Path::new(&saved.root)))
@@ -296,11 +276,9 @@ fn empty_draft_package_roundtrip_and_package_logs_are_redacted() {
     assert!(imported.input.is_none());
     assert!(projects.import_package(None, None).unwrap().is_none());
     for _ in 0..2 {
-        assert!(
-            projects
-                .export_package(&first.id, 42, Some(&package))
-                .is_err()
-        );
+        assert!(projects
+            .export_package(&first.id, 42, Some(&package))
+            .is_err());
     }
     let logs = crate::logs::native_logs(0);
     let own: Vec<_> = logs
@@ -312,10 +290,9 @@ fn empty_draft_package_roundtrip_and_package_logs_are_redacted() {
         })
         .collect();
     assert_eq!(own.len(), 1);
-    assert!(
-        own.iter()
-            .all(|e| !e.text.contains("SECRET") && !e.text.contains(&first.root))
-    );
+    assert!(own
+        .iter()
+        .all(|e| !e.text.contains("SECRET") && !e.text.contains(&first.root)));
 }
 
 #[test]
@@ -338,19 +315,15 @@ fn deflated_draft_imports_but_unreferenced_image_and_oversized_archive_do_not() 
         draft_zip(&[(MANIFEST, &raw), (input_name, b"extra")]),
     )
     .unwrap();
-    assert!(
-        projects
-            .import_package(Some(&source), Some(folder.path()))
-            .is_err()
-    );
+    assert!(projects
+        .import_package(Some(&source), Some(folder.path()))
+        .is_err());
     let huge = std::fs::File::create(&source).unwrap();
     huge.set_len(MAX_PNG + MAX_MANIFEST + 8193).unwrap();
     drop(huge);
-    assert!(
-        projects
-            .import_package(Some(&source), Some(folder.path()))
-            .is_err()
-    );
+    assert!(projects
+        .import_package(Some(&source), Some(folder.path()))
+        .is_err());
     assert_eq!(
         projects
             .open(Some(Path::new(&imported.root)))
@@ -363,7 +336,7 @@ fn deflated_draft_imports_but_unreferenced_image_and_oversized_archive_do_not() 
 #[cfg(target_os = "linux")]
 #[test]
 fn package_files_reject_symlinks_and_failed_parent_writes_preserve_active() {
-    use std::os::unix::fs::{PermissionsExt, symlink};
+    use std::os::unix::fs::{symlink, PermissionsExt};
     let folder = parent();
     let projects = Projects::default();
     let first = projects.create(Some(folder.path())).unwrap().unwrap();
@@ -373,24 +346,18 @@ fn package_files_reject_symlinks_and_failed_parent_writes_preserve_active() {
         .unwrap();
     let linked = folder.path().join("linked.zip");
     symlink(&archive, &linked).unwrap();
-    assert!(
-        projects
-            .import_package(Some(&linked), Some(folder.path()))
-            .is_err()
-    );
-    assert!(
-        projects
-            .export_package(&first.id, 0, Some(&linked))
-            .is_err()
-    );
+    assert!(projects
+        .import_package(Some(&linked), Some(folder.path()))
+        .is_err());
+    assert!(projects
+        .export_package(&first.id, 0, Some(&linked))
+        .is_err());
     let target = folder.path().join("read-only");
     std::fs::create_dir(&target).unwrap();
     std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o500)).unwrap();
-    assert!(
-        projects
-            .import_package(Some(&archive), Some(&target))
-            .is_err()
-    );
+    assert!(projects
+        .import_package(Some(&archive), Some(&target))
+        .is_err());
     std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o700)).unwrap();
     assert_eq!(
         projects
@@ -408,11 +375,9 @@ fn package_files_reject_symlinks_and_failed_parent_writes_preserve_active() {
         .unwrap();
     std::fs::write(&saved.input.as_ref().unwrap().path, b"corrupt").unwrap();
     let destination = folder.path().join("corrupt.zip");
-    assert!(
-        projects
-            .export_package(&saved.id, saved.revision, Some(&destination))
-            .is_err()
-    );
+    assert!(projects
+        .export_package(&saved.id, saved.revision, Some(&destination))
+        .is_err());
     assert!(!destination.exists());
 }
 
@@ -429,18 +394,15 @@ fn window_close_diagnostics_are_fixed_redacted_and_rate_limited() {
         .filter(|e| e.text.contains("Projects operation=window-close "))
         .collect();
     assert_eq!(own.len(), 2);
-    assert!(
-        own.iter()
-            .any(|e| e.text.starts_with("INFO:") && e.text.contains("blocked"))
-    );
-    assert!(
-        own.iter()
-            .any(|e| e.text.starts_with("ERROR:") && e.text.contains("unavailable"))
-    );
-    assert!(
-        own.iter()
-            .all(|e| e.source == crate::logs::Source::Deas && !e.text.contains("SECRET"))
-    );
+    assert!(own
+        .iter()
+        .any(|e| e.text.starts_with("INFO:") && e.text.contains("blocked")));
+    assert!(own
+        .iter()
+        .any(|e| e.text.starts_with("ERROR:") && e.text.contains("unavailable")));
+    assert!(own
+        .iter()
+        .all(|e| e.source == crate::logs::Source::Deas && !e.text.contains("SECRET")));
 }
 
 fn png_chunk(kind: &[u8; 4], payload: &[u8]) -> Vec<u8> {
@@ -638,14 +600,12 @@ fn cancelled_operations_are_distinct_and_errors_are_redacted_and_rate_limited() 
         .collect();
     assert_eq!(errors.len(), 1);
     assert_eq!(errors[0].source, crate::logs::Source::Deas);
-    assert!(
-        own.iter()
-            .any(|e| e.text.contains("operation=import-image") && e.text.contains("cancelled"))
-    );
-    assert!(
-        own.iter()
-            .all(|e| !e.text.contains("DO-NOT-LOG") && !e.text.contains(&first.root))
-    );
+    assert!(own
+        .iter()
+        .any(|e| e.text.contains("operation=import-image") && e.text.contains("cancelled")));
+    assert!(own
+        .iter()
+        .all(|e| !e.text.contains("DO-NOT-LOG") && !e.text.contains(&first.root)));
 }
 
 #[test]
@@ -794,11 +754,9 @@ fn symlinked_parent_root_source_manifest_and_lock_are_rejected() {
     assert!(projects.import_image(&first.id, 0, Some(&link)).is_err());
     let source_dir_link = folder.path().join("source-dir");
     symlink(folder.path(), &source_dir_link).unwrap();
-    assert!(
-        projects
-            .import_image(&first.id, 0, Some(&source_dir_link.join("source.png")))
-            .is_err()
-    );
+    assert!(projects
+        .import_image(&first.id, 0, Some(&source_dir_link.join("source.png")))
+        .is_err());
     projects.close(&first.id).unwrap();
     let manifest = root.join(MANIFEST);
     let saved = std::fs::read(&manifest).unwrap();
@@ -863,11 +821,9 @@ fn project_lock_is_rejected_by_an_independent_process_and_released_on_drop() {
         String::from_utf8_lossy(&child.stdout)
     );
     drop(projects);
-    assert!(
-        Projects::default()
-            .open(Some(Path::new(&first.root)))
-            .is_ok()
-    );
+    assert!(Projects::default()
+        .open(Some(Path::new(&first.root)))
+        .is_ok());
 }
 
 #[test]

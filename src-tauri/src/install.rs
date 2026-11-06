@@ -5,8 +5,8 @@ use std::{
     collections::HashMap,
     path::{Component, Path, PathBuf},
     sync::{
-        Arc, Mutex,
         atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
     },
     time::Duration,
 };
@@ -2157,11 +2157,10 @@ mod tests {
         #[cfg(not(all(any(target_os = "linux", windows), target_arch = "x86_64")))]
         {
             assert!(!plan.can_execute);
-            assert!(
-                plan.unsupported_options
-                    .iter()
-                    .any(|option| option.starts_with("platform:"))
-            );
+            assert!(plan
+                .unsupported_options
+                .iter()
+                .any(|option| option.starts_with("platform:")));
         }
     }
     #[cfg(target_os = "linux")]
@@ -2175,12 +2174,10 @@ mod tests {
         let py = tmp.path().join("venv/bin/python");
         std::os::unix::fs::symlink(&managed, &py).unwrap();
         own_interpreter(tmp.path(), &py).unwrap();
-        assert!(
-            !std::fs::symlink_metadata(&py)
-                .unwrap()
-                .file_type()
-                .is_symlink()
-        );
+        assert!(!std::fs::symlink_metadata(&py)
+            .unwrap()
+            .file_type()
+            .is_symlink());
         assert_eq!(std::fs::read_to_string(&py).unwrap(), "owned interpreter");
         std::fs::remove_file(&py).unwrap();
         std::os::unix::fs::symlink("/usr/bin/python3", &py).unwrap();
@@ -2462,11 +2459,9 @@ mod tests {
         assert!(validate_target("/").is_err());
         assert!(validate_target(&format!("{}/../escape", tmp.path().display())).is_err());
         assert!(validate_ref("--upload-pack=evil").is_err());
-        assert!(
-            extract_verified_uv(b"unverified", tmp.path())
-                .unwrap_err()
-                .contains("checksum")
-        );
+        assert!(extract_verified_uv(b"unverified", tmp.path())
+            .unwrap_err()
+            .contains("checksum"));
         #[cfg(unix)]
         {
             std::os::unix::fs::symlink(tmp.path(), tmp.path().join("link")).unwrap();
@@ -2627,12 +2622,10 @@ mod tests {
             "user data"
         );
         cancel.store(true, Ordering::SeqCst);
-        assert!(
-            run(&git, &["status"], &source, tmp.path(), &inner, &cancel)
-                .await
-                .unwrap_err()
-                .contains("Cancelled")
-        );
+        assert!(run(&git, &["status"], &source, tmp.path(), &inner, &cancel)
+            .await
+            .unwrap_err()
+            .contains("Cancelled"));
     }
     #[cfg(target_os = "linux")]
     #[tokio::test]
@@ -2690,13 +2683,11 @@ mod tests {
             log(&inner, "bounded".repeat(1000));
         }
         assert_eq!(lock(&inner).status.logs.len(), MAX_LOGS);
-        assert!(
-            lock(&inner)
-                .status
-                .logs
-                .iter()
-                .all(|line| line.len() <= 4096)
-        );
+        assert!(lock(&inner)
+            .status
+            .logs
+            .iter()
+            .all(|line| line.len() <= 4096));
     }
 
     #[test]
@@ -2775,16 +2766,14 @@ mod tests {
         r.takeover = true;
         let plan = engine.plan(r).unwrap();
         assert!(plan.request.takeover);
-        assert!(
-            plan.warnings
-                .iter()
-                .any(|w| w.contains("not DEAS-managed") && w.contains("never deleted"))
-        );
-        assert!(
-            plan.steps
-                .iter()
-                .any(|s| s.id == "venv" && s.detail.contains("Delete the existing"))
-        );
+        assert!(plan
+            .warnings
+            .iter()
+            .any(|w| w.contains("not DEAS-managed") && w.contains("never deleted")));
+        assert!(plan
+            .steps
+            .iter()
+            .any(|s| s.id == "venv" && s.detail.contains("Delete the existing")));
     }
 
     #[test]
@@ -2792,21 +2781,17 @@ mod tests {
         let tmp = scratch();
         let engine = Engine::default();
         // Legacy manifests predate `takeover`: plain plans must serialize without the key so reopening stays byte-compatible.
-        assert!(
-            serde_json::to_value(request(tmp.path()))
-                .unwrap()
-                .get("takeover")
-                .is_none()
-        );
+        assert!(serde_json::to_value(request(tmp.path()))
+            .unwrap()
+            .get("takeover")
+            .is_none());
         let mut r = request(tmp.path());
         r.storage_path = tmp.path().to_str().unwrap().into();
         r.takeover = true;
-        assert!(
-            engine
-                .plan(r.clone())
-                .unwrap_err()
-                .contains("ComfyUI folder")
-        );
+        assert!(engine
+            .plan(r.clone())
+            .unwrap_err()
+            .contains("ComfyUI folder"));
         std::fs::create_dir_all(tmp.path().join("ComfyUI")).unwrap();
         std::fs::write(tmp.path().join("ComfyUI/main.py"), "").unwrap();
         assert!(engine.plan(r.clone()).is_ok());
@@ -2851,14 +2836,13 @@ mod tests {
         assert_baseline_platform_support(&plan);
         assert_eq!(serde_json::to_value(&plan.request).unwrap(), original);
         assert_eq!(plan.steps.iter().filter(|s| s.id == "nodes").count(), 1);
-        assert!(
-            plan.steps
-                .iter()
-                .find(|s| s.id == "nodes")
-                .unwrap()
-                .detail
-                .contains("main")
-        );
+        assert!(plan
+            .steps
+            .iter()
+            .find(|s| s.id == "nodes")
+            .unwrap()
+            .detail
+            .contains("main"));
         assert!(!Path::new(&plan.request.storage_path).exists());
         assert_eq!(
             plan.torch.unwrap().index_url,
@@ -3097,12 +3081,10 @@ mod tests {
         .unwrap();
         let python = venv.join("bin/python");
         own_interpreter(tmp.path(), &python).unwrap();
-        assert!(
-            !std::fs::symlink_metadata(&python)
-                .unwrap()
-                .file_type()
-                .is_symlink()
-        );
+        assert!(!std::fs::symlink_metadata(&python)
+            .unwrap()
+            .file_type()
+            .is_symlink());
         run(
             &uv,
             &[

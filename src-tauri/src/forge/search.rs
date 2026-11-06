@@ -379,14 +379,12 @@ mod tests {
             ctx.starts_with("Web search results for \"wan\"")
                 && ctx.contains("[1] Wan 2.2 — wan.video")
         );
-        assert!(
-            as_context(&Found {
-                query: "x".into(),
-                results: vec![],
-                detail: None
-            })
-            .is_none()
-        );
+        assert!(as_context(&Found {
+            query: "x".into(),
+            results: vec![],
+            detail: None
+        })
+        .is_none());
     }
 
     #[test]
@@ -394,16 +392,14 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("deas-chat-search-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
         assert_eq!(read(&dir).search, "off");
-        assert!(
-            write(
-                &dir,
-                &Settings {
-                    search: "searxng".into(),
-                    searxng_url: "nope".into()
-                }
-            )
-            .is_err()
-        );
+        assert!(write(
+            &dir,
+            &Settings {
+                search: "searxng".into(),
+                searxng_url: "nope".into()
+            }
+        )
+        .is_err());
         write(
             &dir,
             &Settings {

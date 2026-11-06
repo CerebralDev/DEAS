@@ -277,16 +277,15 @@ fn immutable_plan_rejects_frontend_forgery() {
     assert_eq!(plan.total_known_bytes, 3);
     let mut forged = r.clone();
     forged.size = Some(1);
-    assert!(
-        e.plan(PlanRequest {
+    assert!(e
+        .plan(PlanRequest {
             provider_id: "fixture".into(),
             resources: vec![forged],
             parent_path: d.path().to_str().unwrap().into(),
             folder_name: "bad".into(),
             authenticated: false
         })
-        .is_err()
-    );
+        .is_err());
     assert!(e.start(plan.id, false, &AuthState::default()).is_err());
 }
 #[cfg(any(target_os = "linux", windows))]
@@ -328,13 +327,11 @@ fn real_stream_digest_bytes_and_status() {
         "fixture license"
     );
     assert!(manifest["plan"]["resources"][0]["sha256"].is_string());
-    assert!(
-        !server
-            .join()
-            .unwrap()
-            .to_lowercase()
-            .contains("authorization:")
-    );
+    assert!(!server
+        .join()
+        .unwrap()
+        .to_lowercase()
+        .contains("authorization:"));
     assert!(e.start(plan.id, true, &AuthState::default()).is_err());
 }
 #[cfg(any(target_os = "linux", windows))]
@@ -378,20 +375,16 @@ async fn foreign_redirect_strips_credential() {
     .await
     .unwrap();
     assert_eq!(response.chunk().await.unwrap().unwrap().as_ref(), b"abc");
-    assert!(
-        redirect
-            .join()
-            .unwrap()
-            .to_lowercase()
-            .contains("authorization: bearer fixture-secret")
-    );
-    assert!(
-        !server
-            .join()
-            .unwrap()
-            .to_lowercase()
-            .contains("authorization:")
-    );
+    assert!(redirect
+        .join()
+        .unwrap()
+        .to_lowercase()
+        .contains("authorization: bearer fixture-secret"));
+    assert!(!server
+        .join()
+        .unwrap()
+        .to_lowercase()
+        .contains("authorization:"));
 }
 #[cfg(any(target_os = "linux", windows))]
 #[test]
@@ -473,10 +466,9 @@ fn absent_destination_leaf_rejects_unsafe_paths_and_start_collisions() {
     for path in ["missing/latent_upscale_models", "CON", "bad.", "bad:"] {
         assert!(e.plan(request(&d.path().join(path), "")).is_err(), "{path}");
     }
-    assert!(
-        e.plan(request(&d.path().join("latent_upscale_models"), "nested"))
-            .is_err()
-    );
+    assert!(e
+        .plan(request(&d.path().join("latent_upscale_models"), "nested"))
+        .is_err());
     assert_eq!(std::fs::read_dir(d.path()).unwrap().count(), 0);
     let file = d.path().join("file");
     std::fs::write(&file, b"keep").unwrap();
@@ -541,8 +533,8 @@ fn absent_destination_leaf_rejects_symlinks_before_plan_and_start() {
         std::fs::remove_file(&target).unwrap();
     }
     symlink(outside.path(), d.path().join("linked models")).unwrap();
-    assert!(
-        e.plan(PlanRequest {
+    assert!(e
+        .plan(PlanRequest {
             parent_path: d
                 .path()
                 .join("linked models/latent_upscale_models")
@@ -551,8 +543,7 @@ fn absent_destination_leaf_rejects_symlinks_before_plan_and_start() {
                 .into(),
             ..request
         })
-        .is_err()
-    );
+        .is_err());
     assert_eq!(std::fs::read_dir(outside.path()).unwrap().count(), 0);
 }
 #[cfg(any(target_os = "linux", windows))]
@@ -692,12 +683,10 @@ async fn official_adapter_shapes_use_real_fixture_transport() {
         let page = providers::list(&p, &r, None, None).await.unwrap();
         assert_eq!(page.resources.len(), 1);
         assert_eq!(page.resources[0].downloadable, downloadable);
-        assert!(
-            server
-                .join()
-                .unwrap()
-                .starts_with(&format!("GET {expected} HTTP/1.1"))
-        );
+        assert!(server
+            .join()
+            .unwrap()
+            .starts_with(&format!("GET {expected} HTTP/1.1")));
         if kind == "civitai" && scope == "search" {
             assert_eq!(page.resources[0].locator.as_deref(), Some("12"));
             assert_eq!(page.resources[0].category.as_deref(), Some("loras"));
@@ -755,18 +744,15 @@ async fn official_adapter_shapes_use_real_fixture_transport() {
         nsfw: false,
     };
     let page = providers::list(&p, &r, None, None).await.unwrap();
-    assert!(
-        page.resources[0]
-            .url
-            .as_deref()
-            .unwrap()
-            .ends_with("/contents/dir/tiny.bin")
-    );
-    assert!(
-        task.join()
-            .unwrap()
-            .starts_with("GET /repos/alice/tiny/contents/dir ")
-    );
+    assert!(page.resources[0]
+        .url
+        .as_deref()
+        .unwrap()
+        .ends_with("/contents/dir/tiny.bin"));
+    assert!(task
+        .join()
+        .unwrap()
+        .starts_with("GET /repos/alice/tiny/contents/dir "));
 }
 #[tokio::test]
 async fn continuation_is_native_opaque_and_bound_to_request() {

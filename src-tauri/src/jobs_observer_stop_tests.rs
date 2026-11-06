@@ -124,11 +124,10 @@ async fn watch_stop_confirmation_and_partial_authority_preserve_execution_state(
     let mut peer = attach_observer(&job).await;
     drop(job);
 
-    assert!(
-        jobs.workbench_stop(false, owner(), interrupt_owner())
-            .await
-            .is_err()
-    );
+    assert!(jobs
+        .workbench_stop(false, owner(), interrupt_owner())
+        .await
+        .is_err());
     peer.ping().await;
     assert!(!peer.is_finished());
     assert_eq!(jobs.workbench_current().unwrap()["admissionEpoch"], 0);
@@ -222,16 +221,15 @@ async fn watch_stop_observer_finishes_while_backend_readback_waits_and_waiter_is
     peer.closed().await;
     let mut stop_result = jobs.lock().unwrap().stop.as_ref().unwrap().clone();
     assert!(held.lock().unwrap().job.as_ref().unwrap().polling);
-    assert!(
-        held.lock()
-            .unwrap()
-            .job
-            .as_ref()
-            .unwrap()
-            .live
-            .try_lock()
-            .is_ok()
-    );
+    assert!(held
+        .lock()
+        .unwrap()
+        .job
+        .as_ref()
+        .unwrap()
+        .live
+        .try_lock()
+        .is_ok());
     waiter.abort();
     assert!(waiter.await.unwrap_err().is_cancelled());
 

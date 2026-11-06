@@ -16,6 +16,46 @@ fn png_bytes(width: u32, height: u32) -> Vec<u8> {
     bytes
 }
 
+#[test]
+fn audio_terminal_output_authority_stays_inside_owned_root() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("outputs");
+    std::fs::create_dir(&root).unwrap();
+    let source = root.join("audio.flac");
+    std::fs::write(&source, b"fLaC-test-retained-file").unwrap();
+    let held = completed("http://127.0.0.1:8188/");
+    {
+        let mut session = held.lock().unwrap();
+        let job = session.job.as_mut().unwrap();
+        job.outputs = vec![json!({"filename":"audio.flac","subfolder":"","type":"output"})];
+        assert!(job.plan.media_root.is_none());
+    }
+    assert!(held.audio_source("job-a", 0).is_err());
+    held.lock().unwrap().job.as_mut().unwrap().plan.media_root =
+        Some(MediaRoot::capture(root.clone()).unwrap());
+    assert_eq!(held.audio_source("job-a", 0).unwrap(), source);
+    assert!(held.audio_source("job-a", 1).is_err());
+    assert!(held.audio_source("foreign-job", 0).is_err());
+    held.lock().unwrap().job.as_mut().unwrap().state = "running";
+    assert!(held.audio_source("job-a", 0).is_err());
+    held.lock().unwrap().job.as_mut().unwrap().state = "succeeded";
+    let outer = Jobs::default();
+    outer.lock().unwrap().workbench.push(Arc::new(held.clone()));
+    assert_eq!(outer.audio_source("job-a", 0).unwrap(), source);
+    #[cfg(unix)]
+    {
+        let external = dir.path().join("outside");
+        std::fs::create_dir(&external).unwrap();
+        std::fs::write(external.join("audio.flac"), b"fLaC-private-external").unwrap();
+        std::os::unix::fs::symlink(&external, root.join("escape")).unwrap();
+        held.lock().unwrap().job.as_mut().unwrap().outputs[0]["subfolder"] = json!("escape");
+        assert!(outer.audio_source("job-a", 0).is_err());
+    }
+    std::fs::rename(&root, dir.path().join("old-output")).unwrap();
+    std::fs::create_dir(&root).unwrap();
+    assert!(outer.audio_source("job-a", 0).is_err());
+}
+
 fn completed(base: &str) -> Jobs {
     let jobs = Jobs::default();
     let intent = super::super::tests::intent();
@@ -286,7 +326,7 @@ fn history_physical_move_succeeds_when_optional_metadata_publication_fails() {
 #[cfg(target_os = "linux")]
 #[test]
 fn owned_completion_root_tracks_launch_not_saved_settings_or_another_instance() {
-    use crate::backend::tests::{SERVER, await_state, fixture};
+    use crate::backend::tests::{await_state, fixture, SERVER};
     let script = SERVER.replace(
         "port=int(args[args.index('--port')+1])",
         "port=int(args[args.index('--port')+1])\nwith open('launch-output.txt','w') as f: f.write(args[args.index('--output-directory')+1])",
@@ -333,10 +373,9 @@ fn owned_completion_root_tracks_launch_not_saved_settings_or_another_instance() 
     std::fs::write(output_a.join("DEAS/run-1/image.png"), png_bytes(1, 1)).unwrap();
     jobs.media_move_ready(&output_a, &output_a.join("DEAS/run-1/image.png"))
         .unwrap();
-    assert!(
-        jobs.media_move_ready(&output_b, &output_b.join("DEAS/run-1/image.png"))
-            .is_err()
-    );
+    assert!(jobs
+        .media_move_ready(&output_b, &output_b.join("DEAS/run-1/image.png"))
+        .is_err());
     save_output(&output_a);
     assert_eq!(MediaRoot::owned(&engine, &endpoint).unwrap().path, output_a);
     assert!(MediaRoot::owned(&engine, "http://127.0.0.1:9/").is_none());
@@ -403,20 +442,17 @@ fn relocation_blocks_incomplete_jobs_before_touching_the_file() {
     jobs.lock().unwrap().job.as_mut().unwrap().state = "running";
     assert!(jobs.media_move_idle().is_err());
     let dir = tempfile::tempdir().unwrap();
-    assert!(
-        Jobs::default()
-            .media_move_ready(dir.path(), &dir.path().join("a.png"))
-            .unwrap_err()
-            .contains("missing or unreadable")
-    );
-    assert!(
-        jobs.relocate_media(
+    assert!(Jobs::default()
+        .media_move_ready(dir.path(), &dir.path().join("a.png"))
+        .unwrap_err()
+        .contains("missing or unreadable"));
+    assert!(jobs
+        .relocate_media(
             std::path::Path::new("/output"),
             std::path::Path::new("/output/a.png"),
             || panic!("must not move running output")
         )
-        .is_err()
-    );
+        .is_err());
 }
 
 async fn complete_via_status(jobs: &Jobs, root: &std::path::Path, id: &str, video: bool) {
@@ -686,39 +722,34 @@ fn native_move_rejects_missing_active_uncertain_and_unsafe_roots() {
     for state in ["preparing", "queued", "running", "unknown"] {
         jobs.lock().unwrap().job.as_mut().unwrap().state = state;
         assert!(jobs.media_move_ready(&root, &source).is_err());
-        assert!(
-            jobs.relocate_media(&root, &source, || panic!("active move"))
-                .is_err()
-        );
+        assert!(jobs
+            .relocate_media(&root, &source, || panic!("active move"))
+            .is_err());
     }
     jobs.lock().unwrap().job.as_mut().unwrap().state = "succeeded";
     jobs.lock().unwrap().preparing = Some("next plan".into());
-    assert!(
-        jobs.relocate_media(&root, &source, || panic!("preparing move"))
-            .is_err()
-    );
+    assert!(jobs
+        .relocate_media(&root, &source, || panic!("preparing move"))
+        .is_err());
     jobs.lock().unwrap().preparing = None;
     for unknown in [
         root.join("unregistered.png"),
         root.join("DEAS/run-1/unknown.png"),
     ] {
-        assert!(
-            jobs.relocate_media(&root, &unknown, || panic!("unregistered move"))
-                .is_err()
-        );
+        assert!(jobs
+            .relocate_media(&root, &unknown, || panic!("unregistered move"))
+            .is_err());
     }
     let other = tempfile::tempdir().unwrap();
-    assert!(
-        jobs.media_move_ready(other.path(), &other.path().join("DEAS/run-1/image.png"))
-            .is_err()
-    );
+    assert!(jobs
+        .media_move_ready(other.path(), &other.path().join("DEAS/run-1/image.png"))
+        .is_err());
     let old = root.with_extension("old");
     std::fs::rename(&root, &old).unwrap();
     std::fs::create_dir(&root).unwrap();
-    assert!(
-        jobs.relocate_media(&root, &source, || panic!("replaced root"))
-            .is_err()
-    );
+    assert!(jobs
+        .relocate_media(&root, &source, || panic!("replaced root"))
+        .is_err());
     std::fs::remove_dir(&root).unwrap();
     std::fs::rename(&old, &root).unwrap();
 }
@@ -759,12 +790,11 @@ fn root_bound_alias_repair_uses_nested_parent_and_failed_move_preserves_every_re
         .map(|record| record.outputs.clone())
         .collect();
     std::fs::write(root.join("starred"), b"blocked destination").unwrap();
-    assert!(
-        jobs.relocate_media(&root, &source, || crate::media::star::move_media(
+    assert!(jobs
+        .relocate_media(&root, &source, || crate::media::star::move_media(
             &root, &source
         ))
-        .is_err()
-    );
+        .is_err());
     assert_eq!(std::fs::read(&source).unwrap(), png_bytes(1, 1));
     assert_eq!(
         jobs.lock()
@@ -861,12 +891,11 @@ fn unstar_repairs_root_bound_aliases_without_changing_submitted_intent() {
     std::fs::create_dir_all(returned.parent().unwrap()).unwrap();
     std::fs::write(&returned, b"occupied").unwrap();
     let before = jobs.current().unwrap();
-    assert!(
-        jobs.relocate_media(&root, &target, || crate::media::star::unstar_media(
+    assert!(jobs
+        .relocate_media(&root, &target, || crate::media::star::unstar_media(
             &root, &target
         ))
-        .is_err()
-    );
+        .is_err());
     assert_eq!(jobs.current().unwrap(), before);
     assert_eq!(std::fs::read(&returned).unwrap(), b"occupied");
     std::fs::remove_file(&returned).unwrap();
@@ -914,10 +943,9 @@ fn completion_retention_is_bounded_deduplicated_and_failed_moves_preserve_record
         .unwrap();
     let source = root.join(format!("DEAS/run-1/{COMPLETED_LIMIT}.png"));
     let before = jobs.current().unwrap();
-    assert!(
-        jobs.relocate_media(&root, &source, || Err("fixture move failed".into()))
-            .is_err()
-    );
+    assert!(jobs
+        .relocate_media(&root, &source, || Err("fixture move failed".into()))
+        .is_err());
     assert_eq!(jobs.current().unwrap(), before);
     jobs.media_move_ready(&root, &source).unwrap();
     assert_eq!(jobs.lock().unwrap().completed.len(), COMPLETED_LIMIT);
@@ -981,10 +1009,9 @@ async fn music_flac_outputs_are_decoded_before_preview_and_export() {
         #[cfg(any(target_os = "linux", windows))]
         {
             let dir = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
-            assert!(
-                jobs.export_to("job-a", index, Some(&dir.path().join("song.png")))
-                    .is_err()
-            );
+            assert!(jobs
+                .export_to("job-a", index, Some(&dir.path().join("song.png")))
+                .is_err());
             let path = dir.path().join("song ü.flac");
             let exported = jobs
                 .export_to("job-a", index, Some(&path))
@@ -1242,34 +1269,31 @@ async fn rejects_wrong_job_state_index_and_metadata_before_network() {
         assert!(error.contains("completed"), "{error}");
     }
     jobs.lock().unwrap().job.as_mut().unwrap().state = "succeeded";
-    assert!(
-        jobs.output("other".into(), 0)
-            .await
-            .err()
-            .unwrap()
-            .contains("Unknown")
-    );
-    assert!(
-        jobs.output("job-a".into(), 1)
-            .await
-            .err()
-            .unwrap()
-            .contains("index")
-    );
+    assert!(jobs
+        .output("other".into(), 0)
+        .await
+        .err()
+        .unwrap()
+        .contains("Unknown"));
+    assert!(jobs
+        .output("job-a".into(), 1)
+        .await
+        .err()
+        .unwrap()
+        .contains("index"));
     jobs.lock().unwrap().job.as_mut().unwrap().outputs[0]["filename"] = json!("../secret.png");
-    assert!(
-        jobs.output("job-a".into(), 0)
-            .await
-            .err()
-            .unwrap()
-            .contains("Unsafe")
-    );
+    assert!(jobs
+        .output("job-a".into(), 0)
+        .await
+        .err()
+        .unwrap()
+        .contains("Unsafe"));
 }
 
 #[cfg(target_os = "linux")]
 #[tokio::test]
 async fn exports_only_cached_original_to_explicit_new_private_png() {
-    use std::os::unix::fs::{MetadataExt, PermissionsExt, symlink};
+    use std::os::unix::fs::{symlink, MetadataExt, PermissionsExt};
     let dir = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
     let bytes = png_bytes(512, 768);
     let (base, server) = binary_server(bytes.clone(), 200, "Content-Type: image/png").await;
@@ -1304,24 +1328,20 @@ async fn exports_only_cached_original_to_explicit_new_private_png() {
     let bad_parent = dir.path().join("writable");
     std::fs::create_dir(&bad_parent).unwrap();
     std::fs::set_permissions(&bad_parent, std::fs::Permissions::from_mode(0o777)).unwrap();
-    assert!(
-        jobs.export_to("job-a", 0, Some(&bad_parent.join("x.png")))
-            .is_err()
-    );
+    assert!(jobs
+        .export_to("job-a", 0, Some(&bad_parent.join("x.png")))
+        .is_err());
     let parent_link = dir.path().join("linked");
     symlink(dir.path(), &parent_link).unwrap();
-    assert!(
-        jobs.export_to("job-a", 0, Some(&parent_link.join("x.png")))
-            .is_err()
-    );
-    assert!(
-        jobs.export_to("other", 0, Some(&dir.path().join("x.png")))
-            .is_err()
-    );
-    assert!(
-        jobs.export_to("job-a", 1, Some(&dir.path().join("x.png")))
-            .is_err()
-    );
+    assert!(jobs
+        .export_to("job-a", 0, Some(&parent_link.join("x.png")))
+        .is_err());
+    assert!(jobs
+        .export_to("other", 0, Some(&dir.path().join("x.png")))
+        .is_err());
+    assert!(jobs
+        .export_to("job-a", 1, Some(&dir.path().join("x.png")))
+        .is_err());
     assert!(!dir.path().join("x.png").exists());
     assert!(!std::fs::read_dir(dir.path()).unwrap().any(|entry| {
         entry

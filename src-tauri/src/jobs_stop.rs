@@ -34,7 +34,10 @@ impl Jobs {
                         // Display observation ends at confirmed invalidation, even if backend
                         // reconciliation is partial or leaves the execution outcome unknown.
                         job.stop_observer();
-                        let epoch = if job.terminal() {
+                        if let Some(cancel) = entry.audio_post.as_ref() {
+                            cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+                        }
+                        let epoch = if job.terminal() || entry.audio_post.is_some() {
                             Ok(0)
                         } else {
                             owner(&job.plan.base)
@@ -86,7 +89,7 @@ impl Jobs {
         owner: Owner,
         interrupt_owner: InterruptOwner,
     ) -> Result<Value, String> {
-        use futures_util::{StreamExt, stream};
+        use futures_util::{stream, StreamExt};
         let results = stream::iter(held)
             .map(|(held, epoch)| {
                 let owner = owner.clone();
@@ -164,11 +167,14 @@ impl Jobs {
         // Existing submission, status and scoped mutation tasks have bounded network deadlines.
         tokio::time::timeout(Duration::from_secs(45), async {
             loop {
-                let busy = held
-                    .lock()?
-                    .job
-                    .as_ref()
-                    .is_some_and(|j| j.submitting || j.polling);
+                let busy = {
+                    let entry = held.lock()?;
+                    entry.audio_post.is_some()
+                        || entry
+                            .job
+                            .as_ref()
+                            .is_some_and(|j| j.submitting || j.polling)
+                };
                 if !busy {
                     break;
                 }

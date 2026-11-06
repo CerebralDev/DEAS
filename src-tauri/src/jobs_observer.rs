@@ -1,5 +1,5 @@
 //! Optional display observation belongs to the native job's shared live state.
-use super::{Live, RESPONSE_LIMIT, canonical_uuid, preview_frame};
+use super::{canonical_uuid, preview_frame, Live, RESPONSE_LIMIT};
 use futures_util::{SinkExt, StreamExt};
 use serde_json::Value;
 use std::{
@@ -7,7 +7,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::sync::watch;
-use tokio_tungstenite::tungstenite::{Error, Message, protocol::WebSocketConfig};
+use tokio_tungstenite::tungstenite::{protocol::WebSocketConfig, Error, Message};
 
 #[derive(Clone, Copy)]
 enum Failure {
@@ -341,11 +341,9 @@ mod tests {
             .collect();
         assert_eq!(own.len(), 1);
         assert_eq!(own[0].source, crate::logs::Source::Deas);
-        assert!(
-            own[0]
-                .text
-                .starts_with("WARN: preview-observer operation=connect ")
-        );
+        assert!(own[0]
+            .text
+            .starts_with("WARN: preview-observer operation=connect "));
         assert!(own[0].text.contains("suppressed=0"));
         assert!(entries.iter().any(|entry| {
             entry

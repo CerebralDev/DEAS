@@ -1,6 +1,6 @@
 //! Shared text-only LLM transport. No API keys or secrets are accepted or persisted.
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::{io::Write, path::Path, process::Stdio, time::Duration};
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWriteExt};
 
@@ -1492,18 +1492,14 @@ mod continuity_tests {
         .unwrap_err();
         task.await.unwrap();
         assert_eq!(err, "422 Prompt Forge continuity request failed");
-        assert!(
-            crate::logs::native_logs(0)
-                .iter()
-                .any(|e| e.source == crate::logs::Source::Deas
-                    && e.text == format!("ERROR: Prompt Forge h3: {err}"))
-        );
-        assert!(
-            crate::logs::native_logs(0)
-                .iter()
-                .all(|e| !e.text.contains("hf_private_continuity_secret")
-                    && !e.text.contains("private continuity prompt"))
-        );
+        assert!(crate::logs::native_logs(0)
+            .iter()
+            .any(|e| e.source == crate::logs::Source::Deas
+                && e.text == format!("ERROR: Prompt Forge h3: {err}")));
+        assert!(crate::logs::native_logs(0)
+            .iter()
+            .all(|e| !e.text.contains("hf_private_continuity_secret")
+                && !e.text.contains("private continuity prompt")));
     }
 
     #[tokio::test]
@@ -1630,11 +1626,9 @@ mod continuity_tests {
         let entries = crate::logs::native_logs(0);
         assert!(entries.iter().any(|e| e.source == crate::logs::Source::Deas
             && e.text == "ERROR: Prompt Forge h3: Invalid H3 continuity request"));
-        assert!(
-            entries
-                .iter()
-                .all(|e| !e.text.contains("hf_private_continuity_secret")
-                    && !e.text.contains("private continuity prompt"))
-        );
+        assert!(entries
+            .iter()
+            .all(|e| !e.text.contains("hf_private_continuity_secret")
+                && !e.text.contains("private continuity prompt")));
     }
 }

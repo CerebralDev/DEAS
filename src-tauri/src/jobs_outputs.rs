@@ -122,6 +122,34 @@ impl CachedOutput {
     }
 }
 impl Jobs {
+    /// Resolves only a held terminal output beneath its recorded, unchanged owned media root.
+    pub(crate) fn audio_source(
+        &self,
+        id: &str,
+        index: usize,
+    ) -> Result<std::path::PathBuf, String> {
+        if let Some(held) = self.workbench_job(id)? {
+            return held.audio_source(id, index);
+        }
+        let job = self.selected_job(id, index)?;
+        let root = job
+            .plan
+            .media_root
+            .as_ref()
+            .and_then(MediaRoot::current_path)
+            .ok_or("AUDIO_SOURCE: This output has no unchanged owned local media root")?;
+        let path = output_path(root, &job.outputs[index]);
+        let canonical_root =
+            std::fs::canonicalize(root).map_err(|_| "AUDIO_SOURCE: Output root unavailable")?;
+        let canonical =
+            std::fs::canonicalize(&path).map_err(|_| "AUDIO_SOURCE: Output unavailable")?;
+        if !canonical.starts_with(&canonical_root) {
+            return Err("AUDIO_SOURCE: Output escaped its owned media root".into());
+        }
+        crate::video_post::open_source(&path)?;
+        dunce::canonicalize(path).map_err(|_| "AUDIO_SOURCE: Output unavailable".into())
+    }
+
     pub(crate) fn media_move_idle(&self) -> Result<(), String> {
         let session = self.lock()?;
         if session.preparing.is_some()
@@ -176,15 +204,13 @@ impl Jobs {
                     && target != source
                 {
                     output["filename"] = json!(target.file_name().unwrap().to_string_lossy());
-                    output["subfolder"] = json!(
-                        target
-                            .parent()
-                            .unwrap()
-                            .strip_prefix(root)
-                            .unwrap()
-                            .to_string_lossy()
-                            .replace(std::path::MAIN_SEPARATOR, "/")
-                    );
+                    output["subfolder"] = json!(target
+                        .parent()
+                        .unwrap()
+                        .strip_prefix(root)
+                        .unwrap()
+                        .to_string_lossy()
+                        .replace(std::path::MAIN_SEPARATOR, "/"));
                 }
             }
         };
@@ -353,7 +379,11 @@ impl Jobs {
             bytes.extend_from_slice(&chunk);
         }
         let (width, height) = if flac {
-            validate_flac(&bytes)?;
+            if image["role"] == "processed" && job.plan.intent.get("audioEnhance").is_some() {
+                validate_audio_post_flac(&bytes)?;
+            } else {
+                validate_flac(&bytes)?;
+            }
             (0, 0)
         } else {
             self.validate_png(&job, image, &bytes)?
@@ -437,13 +467,26 @@ impl Jobs {
 }
 /// Fully decodes the stream (nothing retained) so a truncated or forged FLAC never reaches the player or export.
 pub(crate) fn validate_flac(bytes: &[u8]) -> Result<(), String> {
+    validate_flac_inner(bytes, false)
+}
+pub(super) fn validate_audio_post_flac(bytes: &[u8]) -> Result<(), String> {
+    validate_flac_inner(bytes, true)
+}
+fn validate_flac_inner(bytes: &[u8], streaming: bool) -> Result<(), String> {
     if !bytes.starts_with(b"fLaC") {
         return Err("Invalid FLAC signature".into());
     }
     let mut reader =
         claxon::FlacReader::new(std::io::Cursor::new(bytes)).map_err(|_| "Invalid FLAC header")?;
     let info = reader.streaminfo();
-    let samples = info.samples.ok_or("FLAC without a sample count")?;
+    let declared = info.samples;
+    if declared.is_none() && !streaming {
+        return Err("FLAC without a sample count".into());
+    }
+    let samples = declared.unwrap_or(
+        (FLAC_MAX_SECONDS * u64::from(info.sample_rate))
+            .min(FLAC_PCM_LIMIT / u64::from(info.channels.max(1)) / 4),
+    );
     if info.channels == 0
         || info.channels > 2
         || info.sample_rate == 0
@@ -467,7 +510,7 @@ pub(crate) fn validate_flac(bytes: &[u8]) -> Result<(), String> {
         }
         buffer = block.into_buffer();
     }
-    if decoded != samples {
+    if decoded == 0 || declared.is_some_and(|samples| decoded != samples) {
         return Err("Truncated FLAC".into());
     }
     Ok(())

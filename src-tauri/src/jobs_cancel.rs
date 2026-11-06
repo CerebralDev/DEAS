@@ -104,6 +104,11 @@ impl Jobs {
             if job.terminal() {
                 return Ok(session.snapshot());
             }
+            if let Some(cancel) = session.audio_post.as_ref() {
+                cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+                return Ok(session.snapshot());
+            }
+            let job = session.job.as_mut().ok_or("Unknown native Workbench job")?;
             if job.submitting || job.polling {
                 return Err("Native Workbench job is busy; no cancellation sent".into());
             }
@@ -199,9 +204,9 @@ async fn cancel_observed(
         .map_err(|_| "Job cancellation readback failed; outcome unknown; do not retry mutation")?;
     if !present {
         // History was read before queue: close the completion-between-reads window.
-        present = poll_present(job).await.map_err(
-            |_| "Job cancellation final readback failed; outcome unknown; do not retry mutation",
-        )?;
+        present = poll_present(job).await.map_err(|_| {
+            "Job cancellation final readback failed; outcome unknown; do not retry mutation"
+        })?;
     }
     if cancellation.authority(&job.plan.base)?.0 != epoch {
         return Err("Owned backend lifecycle changed during readback; outcome unknown".into());

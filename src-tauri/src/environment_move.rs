@@ -2,7 +2,7 @@
 //! Same drive: one rename. Other drive: copy, then the original is removed only after the
 //! moved copy passed the Python check. The venv, manifests and launchers store absolute
 //! paths; they are rewritten from the old root to the new one.
-use crate::install::{Engine, Plan, VENV_BIN, VENV_PYTHON, lock};
+use crate::install::{lock, Engine, Plan, VENV_BIN, VENV_PYTHON};
 use serde::Serialize;
 use std::{
     fs, io,
@@ -602,7 +602,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn copy_and_rebase_keep_a_venv_usable() {
-        use std::os::unix::fs::{PermissionsExt, symlink};
+        use std::os::unix::fs::{symlink, PermissionsExt};
         let dir = tempfile::tempdir().unwrap();
         let old = dir.path().join("old");
         let bin = old.join(VENV_BIN);
@@ -635,11 +635,9 @@ mod tests {
             fs::read_to_string(new.join("venv/pyvenv.cfg")).unwrap(),
             format!("home = {n}/runtime/bin\n")
         );
-        assert!(
-            fs::read_to_string(new.join("venv/bin/tool"))
-                .unwrap()
-                .starts_with(&format!("#!{n}/venv/bin/python\n"))
-        );
+        assert!(fs::read_to_string(new.join("venv/bin/tool"))
+            .unwrap()
+            .starts_with(&format!("#!{n}/venv/bin/python\n")));
         assert_eq!(
             fs::metadata(new.join("venv/bin/tool"))
                 .unwrap()

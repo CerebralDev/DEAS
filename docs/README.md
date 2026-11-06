@@ -10,6 +10,7 @@ Top-level tabs: Studio · Library · Prompt Forge · Chat · TVE · Run Plan · 
 
 | Feature, tab or action | Guide |
 | --- | --- |
+| Clean/Deep/Smule audio enhancement, automatic post-processing and TVE audio-only | [Audio enhancement](AUDIO-ENHANCEMENT.md) |
 | Installation, Windows/Linux build, launch and first setup | [Getting started](GETTING-STARTED.md) |
 | Backend tab: install review, foreign-installation takeover, lifecycle, startup settings, folders and language | [Backend and settings](BACKEND.md) |
 | Confirmed application-binary updates, manual restart and platform limitations | [Application updates](APP-UPDATES.md) |
@@ -20,6 +21,7 @@ Top-level tabs: Studio · Library · Prompt Forge · Chat · TVE · Run Plan · 
 | Per-pipeline session drafts, prompt counts, spellcheck and tag completion | [Session drafts](STUDIO.md#session-only-pipeline-and-model-drafts-0164-shipped-in-0166) · [Writing aids](STUDIO.md#prompt-writing-aids-0163-shipped-in-0166) |
 | Quick Settings, layout reset and colour schemes | [Layout and Quick Settings](STUDIO.md#layout-last-used-state-and-quick-settings) |
 | Install, refresh and edit local colour/image theme packs | [Theme packs](THEME-PACKS.md) |
+| Beginner experience: generation, model guides and collection without technical settings | [Beginner mode](BEGINNER-MODE.md) |
 | Music (Text to Music / Cover Music) with YuE2 | [Music](MUSIC.md) |
 | TVE tab: video source inspection, output drafts and bounded native spatial rendering (Linux) | [TVE workspace](STUDIO.md#tve-workspace) |
 | Monitoring tab: last ten generations with timing, live host/GPU telemetry | [Monitoring tab](STUDIO.md#monitoring-tab) |

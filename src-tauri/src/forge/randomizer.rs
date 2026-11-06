@@ -9,7 +9,7 @@
 //! nothing.
 
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
@@ -239,20 +239,19 @@ impl Randomizer {
             }
             n
         };
-        json!(
-            self.categories
-                .iter()
-                .map(|c| json!({
-                    "id": c.id,
-                    "label": c.label(),
-                    "children": c.leaves().iter().map(|k| json!({
-                        "id": k.id,
-                        "label": k.label(),
-                        "options": k.templates.iter().map(|t| count(t)).sum::<usize>(),
-                    })).collect::<Vec<_>>(),
-                }))
-                .collect::<Vec<_>>()
-        )
+        json!(self
+            .categories
+            .iter()
+            .map(|c| json!({
+                "id": c.id,
+                "label": c.label(),
+                "children": c.leaves().iter().map(|k| json!({
+                    "id": k.id,
+                    "label": k.label(),
+                    "options": k.templates.iter().map(|t| count(t)).sum::<usize>(),
+                })).collect::<Vec<_>>(),
+            }))
+            .collect::<Vec<_>>())
     }
 
     fn surprise(&self, req: &Roll, rng: &mut Rng) -> HashSet<String> {
@@ -525,14 +524,13 @@ mod tests {
             assert!(s.boxes.iter().all(|b| b.label != "NSFW"));
         }
         assert!(rz.roll(&Roll::default()).is_err());
-        assert!(
-            rz.roll(&Roll {
+        assert!(rz
+            .roll(&Roll {
                 categories: vec!["nope".into()],
                 ..Default::default()
             })
             .unwrap_err()
-            .contains("nope")
-        );
+            .contains("nope"));
     }
 
     /// `DEAS_FORGE_DATA=<dir> cargo test --lib -- --ignored real_randomizer --nocapture`

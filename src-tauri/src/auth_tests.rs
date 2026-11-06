@@ -1,7 +1,7 @@
 use super::*;
 use std::sync::{
-    Arc,
     atomic::{AtomicBool, AtomicUsize, Ordering},
+    Arc,
 };
 
 #[derive(Clone, Default)]
@@ -63,11 +63,9 @@ fn session_token_is_scoped_and_metadata_only() {
             .as_deref(),
         Some("fixture-token")
     );
-    assert!(
-        state
-            .credential("huggingface", "https://evil.example")
-            .is_err()
-    );
+    assert!(state
+        .credential("huggingface", "https://evil.example")
+        .is_err());
     let json = serde_json::to_value(state.status().unwrap()).unwrap();
     for item in json.as_array().unwrap() {
         assert_eq!(item.as_object().unwrap().len(), 3);
@@ -88,13 +86,11 @@ fn anonymous_defaults_never_access_vault() {
     for (id, origin) in PROVIDERS {
         assert!(state.credential(id, origin).unwrap().is_none());
     }
-    assert!(
-        state
-            .status()
-            .unwrap()
-            .iter()
-            .all(|s| !s.configured && !s.persisted)
-    );
+    assert!(state
+        .status()
+        .unwrap()
+        .iter()
+        .all(|s| !s.configured && !s.persisted));
     state.set("github", "session-only".into(), false).unwrap();
     assert_eq!(store.calls.load(Ordering::SeqCst), 0);
     assert!(store.values.lock().unwrap().is_empty());
@@ -112,13 +108,11 @@ fn persisted_credentials_are_activated_and_deleted_across_restart() {
     );
     drop(state);
     let restarted = AuthState::with_store(Box::new(store.clone())).restore_saved();
-    assert!(
-        restarted
-            .status()
-            .unwrap()
-            .iter()
-            .any(|s| s.provider_id == "github" && s.configured && s.persisted)
-    );
+    assert!(restarted
+        .status()
+        .unwrap()
+        .iter()
+        .any(|s| s.provider_id == "github" && s.configured && s.persisted));
     assert_eq!(
         restarted
             .credential("github", "https://api.github.com")
@@ -155,18 +149,14 @@ fn startup_restore_is_scoped_and_survives_unavailable_or_invalid_vault() {
             .as_deref(),
         Some("saved")
     );
-    assert!(
-        state
-            .credential("github", "https://api.github.com")
-            .unwrap()
-            .is_none()
-    );
-    assert!(
-        state
-            .credential("civitai", "https://civitai.com")
-            .unwrap()
-            .is_none()
-    );
+    assert!(state
+        .credential("github", "https://api.github.com")
+        .unwrap()
+        .is_none());
+    assert!(state
+        .credential("civitai", "https://civitai.com")
+        .unwrap()
+        .is_none());
     store.fail.store(true, Ordering::SeqCst);
     let unavailable = AuthState::with_store(Box::new(store.clone())).restore_saved();
     assert!(unavailable.status().unwrap().iter().all(|s| !s.configured));
@@ -179,11 +169,9 @@ fn failed_vault_writes_and_removals_preserve_existing_memory() {
     state.set("civitai", "old-fixture".into(), true).unwrap();
     store.fail.store(true, Ordering::SeqCst);
     assert!(state.set("civitai", "new-fixture".into(), true).is_err());
-    assert!(
-        state
-            .set("civitai", "session-fixture".into(), false)
-            .is_err()
-    );
+    assert!(state
+        .set("civitai", "session-fixture".into(), false)
+        .is_err());
     assert!(state.remove("civitai").is_err());
     assert!(state.restore("civitai").is_err());
     assert_eq!(
@@ -231,13 +219,11 @@ fn invalid_input_is_bounded_and_never_echoed() {
             assert!(!error.contains(&token));
         }
     }
-    assert!(
-        state
-            .set("unknown-secret-id", "fixture".into(), false)
-            .unwrap_err()
-            .find("unknown-secret-id")
-            .is_none()
-    );
+    assert!(state
+        .set("unknown-secret-id", "fixture".into(), false)
+        .unwrap_err()
+        .find("unknown-secret-id")
+        .is_none());
     assert!(state.remove("unknown").is_err());
     assert!(state.restore("unknown").is_err());
     assert_eq!(store.calls.load(Ordering::SeqCst), 0);
@@ -264,12 +250,10 @@ fn exact_origin_excludes_paths_ports_redirects_and_userinfo() {
         "http://huggingface.co/file",
         "https://user@huggingface.co/file",
     ] {
-        assert!(
-            state
-                .authorization("huggingface", &Url::parse(target).unwrap())
-                .unwrap()
-                .is_none()
-        );
+        assert!(state
+            .authorization("huggingface", &Url::parse(target).unwrap())
+            .unwrap()
+            .is_none());
     }
     let header = state
         .authorization(
@@ -294,28 +278,22 @@ fn custom_accounts_are_explicit_immutable_and_separate_vault_keys() {
         "https://example.com/path",
         "https://@example.com",
     ] {
-        assert!(
-            state
-                .register_generic_provider("custom-invalid", origin)
-                .is_err()
-        );
+        assert!(state
+            .register_generic_provider("custom-invalid", origin)
+            .is_err());
     }
-    assert!(
-        state
-            .register_generic_provider("github", "https://evil.example")
-            .is_err()
-    );
+    assert!(state
+        .register_generic_provider("github", "https://evil.example")
+        .is_err());
     state
         .register_generic_provider("custom-ollama", "http://localhost:11434")
         .unwrap();
     state
         .register_generic_provider("custom-ollama", "http://localhost:11434")
         .unwrap();
-    assert!(
-        state
-            .register_generic_provider("custom-ollama", "http://127.0.0.1:11434")
-            .is_err()
-    );
+    assert!(state
+        .register_generic_provider("custom-ollama", "http://127.0.0.1:11434")
+        .is_err());
     state
         .set("custom-ollama", "fixture-custom".into(), true)
         .unwrap();
@@ -323,10 +301,9 @@ fn custom_accounts_are_explicit_immutable_and_separate_vault_keys() {
     next.register_generic_provider("custom-ollama", "http://127.0.0.1:11434")
         .unwrap();
     assert!(!next.restore("custom-ollama").unwrap().configured);
-    assert!(
-        next.credential("custom-ollama", "http://localhost:11434")
-            .is_err()
-    );
+    assert!(next
+        .credential("custom-ollama", "http://localhost:11434")
+        .is_err());
 }
 #[test]
 fn session_removal_does_not_require_os_vault() {
@@ -356,12 +333,10 @@ fn invalid_vault_content_never_enters_memory_or_errors() {
     );
     let error = state.restore("github").unwrap_err();
     assert!(!error.contains("fixture"));
-    assert!(
-        state
-            .credential("github", "https://api.github.com")
-            .unwrap()
-            .is_none()
-    );
+    assert!(state
+        .credential("github", "https://api.github.com")
+        .unwrap()
+        .is_none());
 }
 
 #[tokio::test]

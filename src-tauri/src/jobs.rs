@@ -1,14 +1,16 @@
 //! Native-owned classic diagnostic execution; never accepts a frontend graph.
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::{
     sync::{Arc, Mutex, MutexGuard},
     time::Duration,
 };
 
+#[path = "jobs_audio_post.rs"]
+mod audio_post;
 #[path = "jobs_outputs.rs"]
 mod job_outputs;
 pub(crate) use job_outputs::validate_envelope as validate_png_envelope;
-pub use job_outputs::{OutputPreview, native_job_export, native_job_output};
+pub use job_outputs::{native_job_export, native_job_output, OutputPreview};
 #[path = "jobs_cancel.rs"]
 mod cancel;
 #[path = "jobs_history.rs"]
@@ -46,6 +48,7 @@ pub struct Jobs(
 
 #[derive(Default)]
 struct Session {
+    audio_post: Option<Arc<std::sync::atomic::AtomicBool>>,
     studio: bool,
     workbench: Vec<Arc<Jobs>>,
     admission_epoch: u64,
@@ -281,6 +284,11 @@ async fn get(client: &reqwest::Client, base: &reqwest::Url, path: &str) -> Resul
 }
 
 fn compile(i: &Value) -> Result<Value, String> {
+    if audio_post::settings(i)?.is_some() {
+        let mut recipe = i.clone();
+        recipe.as_object_mut().unwrap().remove("audioEnhance");
+        return compile(&recipe);
+    }
     if crate::jobs_music::is_music(i) {
         return crate::jobs_music::compile(i);
     }
@@ -1386,6 +1394,11 @@ impl Jobs {
         roots: Vec<std::path::PathBuf>,
     ) -> Result<Value, String> {
         let base = crate::validate_base_url(&base_url)?;
+        if let Some(settings) = audio_post::settings(&intent)? {
+            tokio::task::spawn_blocking(move || crate::audio_enhance::validate_settings(&settings))
+                .await
+                .map_err(|_| "AUDIO_SETTINGS: Runtime validation failed")??;
+        }
         // The segment-capture graph needs the pinned clip's frame count for its crop plan: read it
         // from the read-only session list before compiling; missing counts fail closed in compile.
         if crate::jobs_video::needs_source_frames(&intent) {
@@ -1660,17 +1673,48 @@ impl Jobs {
     async fn submit(&self, plan_id: String, confirmed: bool) -> Result<Value, String> {
         let jobs = self.clone();
         // Native submission and its history commits outlive any diagnostic/Studio IPC waiter.
-        tokio::spawn(async move { jobs.submit_inner(plan_id, confirmed).await })
-            .await
-            .map_err(|_| "Native submission task failed")?
+        tokio::spawn(async move {
+            let result = jobs.submit_inner(plan_id, confirmed).await;
+            if result.is_ok()
+                && jobs
+                    .lock()?
+                    .job
+                    .as_ref()
+                    .is_some_and(|job| job.plan.intent.get("audioEnhance").is_some())
+            {
+                jobs.start_audio_observer();
+            }
+            result
+        })
+        .await
+        .map_err(|_| "Native submission task failed")?
     }
 
     async fn submit_inner(&self, plan_id: String, confirmed: bool) -> Result<Value, String> {
         if !confirmed {
             return Err("Explicit diagnostic submission confirmation is required".into());
         }
+        let audio_settings = {
+            let session = self.lock()?;
+            let plan = session
+                .plan
+                .as_ref()
+                .filter(|plan| plan.id == plan_id)
+                .ok_or("Unknown or stale native plan")?;
+            audio_post::settings(&plan.intent)?
+        };
+        if let Some(settings) = audio_settings {
+            tokio::task::spawn_blocking(move || crate::audio_enhance::validate_settings(&settings))
+                .await
+                .map_err(|_| "AUDIO_SETTINGS: Runtime validation failed")??;
+        }
+        // Shared compute gate: submission holds it until the backend has accepted the prompt,
+        // so an audio admission decision cannot be invalidated by an interleaved start.
+        // Acquired without blocking: backend Stop and cancel paths stay reachable either way.
+        let _compute = crate::resources::reserve_compute()
+            .map_err(|_| "Workbench jobs are in flight or unknown".to_string())?;
         let client = client()?;
-        // Consume before the first await: a lost response must never authorize a retry.
+        // Consume before the first submission await: a lost response must never authorize a retry.
         let mut job = {
             let mut session = self.lock()?;
             if session.stop_requested {
@@ -1687,6 +1731,18 @@ impl Jobs {
                 .as_mut()
                 .filter(|p| p.id == plan_id)
                 .ok_or("Unknown or stale native plan")?;
+            if plan.intent.get("audioEnhance").is_some()
+                && plan
+                    .media_root
+                    .as_ref()
+                    .and_then(job_outputs::MediaRoot::current_path)
+                    .is_none()
+            {
+                return Err(
+                    "AUDIO_SOURCE: Automatic audio stage requires an unchanged owned output root"
+                        .into(),
+                );
+            }
             if plan.consumed {
                 return Err("This native plan was already submitted; retries are forbidden".into());
             }
@@ -1785,7 +1841,7 @@ impl Jobs {
     async fn status_inner(&self, job_id: String, stopping: bool) -> Result<Value, String> {
         let mut job = {
             let mut session = self.lock()?;
-            if session.stop_requested && !stopping {
+            if session.audio_post.is_some() || (session.stop_requested && !stopping) {
                 return Ok(session.snapshot());
             }
             let job = session
@@ -1825,12 +1881,26 @@ impl Jobs {
             .as_mut()
             .filter(|j| j.id == job_id)
             .ok_or("Native job changed during status request")?;
+        let audio_stage = job.state == "succeeded" && job.plan.intent.get("audioEnhance").is_some();
+        let stage_job = audio_stage.then(|| job.clone());
+        if audio_stage {
+            for output in &mut job.outputs {
+                output["role"] = json!("original");
+            }
+            job.state = "running";
+            job.stop_observer();
+        }
         job.stop_observer_if_terminal();
         self.3.observe(&job);
         *current = job;
         // Disarm under the same lock: Drop must never clear a subsequent operation's flag.
         polling.armed = false;
         session.retain_completed();
+        if let Some(job) = stage_job {
+            let cancel = Arc::new(std::sync::atomic::AtomicBool::new(session.stop_requested));
+            session.audio_post = Some(cancel.clone());
+            self.start_audio_post(job, cancel);
+        }
         Ok(session.snapshot())
     }
 }

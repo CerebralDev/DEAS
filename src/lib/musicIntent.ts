@@ -1,3 +1,4 @@
+import type { AudioEnhanceIntent } from './audioEnhance';
 /** YuE2 music recipe intent (native compiler `jobs_music.rs`): text-to-music with ABC planning, or a SheetSage2 melody cover. */
 export interface AbcSettings { maxTokens:number; temperature:number; topP:number; topK:number; repetitionPenalty:number; penaltyWindow:number }
 export interface MusicGenerationSettings { temperature:number; topP:number; topK:number; repetitionPenalty:number; cfgScale:number }
@@ -11,7 +12,7 @@ export const musicBounds={
  generation:{temperature:[0,5,false],topP:[0.01,1,false],topK:[1,32768,true],repetitionPenalty:[0.01,10,false],cfgScale:[0,100,false]},
  abc:{maxTokens:[1,20000,true],temperature:[0,5,false],topP:[0.01,1,false],topK:[1,32768,true],repetitionPenalty:[0.01,10,false],penaltyWindow:[1,20000,true]},
 } as const satisfies {generation:Record<keyof MusicGenerationSettings,readonly [number,number,boolean]>;abc:Record<keyof AbcSettings,readonly [number,number,boolean]>};
-export interface MusicBase {
+export interface MusicBase { readonly audioEnhance?:AudioEnhanceIntent;
  readonly recipeId:'music-generation'; readonly version:1; readonly family:'yue2';
  readonly checkpoint:string; readonly style:string; readonly lyrics:string;
  readonly seed:number; readonly maxDuration:number;

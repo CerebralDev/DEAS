@@ -3,7 +3,7 @@
 //! SheetSage2. Graphs mirror the core `audio_yue2_*` templates; saver keeps ID `7`.
 use crate::jobs::{comfy_model_name, model_name, safe_choice, safe_output_prefix};
 use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 /// Every class the graphs can emit; prepare() checks the compiled graph's nodes against object_info.
 /// (`CheckpointLoaderSimple`/`KSampler` are already core-required.)

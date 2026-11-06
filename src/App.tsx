@@ -15,6 +15,7 @@ import { Chat } from './features/chat/Chat';
 import type { Folders } from './lib/settings';
 import type { ForgeCanvasContext, ForgeSendCanvas } from './lib/forgeCanvas';
 import { oneOf, usePref } from './lib/preferences';
+import {type Experience,type BeginnerPage} from './features/beginner/Experience';
 const studioTabs=['generate','forge','chat','tve','monitor','map'] as const;
 const presentation: Record<string,{column:number;order:number}>={engine:{column:0,order:0},director:{column:1,order:0},plugins:{column:1,order:1},forge:{column:2,order:0},refmods:{column:2,order:1},continuity:{column:2,order:2},output:{column:2,order:3}};
 interface DirectorDraft {direction:string;framing:string;mood:string}
@@ -35,6 +36,9 @@ function readDraft():DirectorDraft {
 }
 export default function App(){
  const {t}=useI18n();
+ const [experience,setExperience]=usePref<Experience>('interface.experience','unset',oneOf('unset','beginner','advanced'));
+ const [beginnerPage,setBeginnerPage]=useState<BeginnerPage>('generate');
+ const beginner=experience==='beginner';
  const [active,setActive]=useState<string|null>(null);
  const [endpoint,setEndpoint]=useState('http://127.0.0.1:7801');
  const [snapshot,setSnapshot]=useState<BackendSnapshot|null>(null);
@@ -96,10 +100,10 @@ export default function App(){
  const selected=builtinPlugins.find(p=>p.id===active);
  return <div className="studio-shell" ref={shellRef}>
   <main id="workspace">
-   <AiOSetup studioTab={tab} onStudioTab={setTab} onStudioActiveChange={setStudioActive} onConnectExisting={connectExisting} onEnvironment={setEnvironment} studio={<div id="studio-workspace" className="studio-workspace">
+   <AiOSetup experience={experience} onExperience={setExperience} beginnerPage={beginnerPage} onBeginnerPage={setBeginnerPage} studioTab={tab} onStudioTab={setTab} onStudioActiveChange={setStudioActive} onConnectExisting={connectExisting} onEnvironment={setEnvironment} studio={<div id="studio-workspace" className="studio-workspace">
     <div className="studio-columns">
     <div className="studio-main">
-    <div className="studio-generate-host" hidden={tab==='forge'||tab==='chat'||tab==='tve'||tab==='monitor'}><Workbench planVisible={tab==='map'} endpoint={endpoint} roots={roots} root={environment?.root} incoming={sent} onCanvasContext={setForgeCanvasContext} onOpenVideoPost={()=>setTab('tve')} forgeHost={forgeHost} forgeActive={studioActive&&tab==='forge'} onOpenPromptForge={()=>setTab('forge')} onH3ForgeAvailable={setH3ForgeAvailable}/></div>
+    <div className="studio-generate-host" hidden={tab==='forge'||tab==='chat'||tab==='tve'||tab==='monitor'}><Workbench beginner={beginner} beginnerPage={beginnerPage} onBeginnerPage={setBeginnerPage} planVisible={tab==='map'} endpoint={endpoint} roots={roots} root={environment?.root} incoming={sent} onCanvasContext={setForgeCanvasContext} onOpenVideoPost={()=>setTab('tve')} forgeHost={forgeHost} forgeActive={studioActive&&tab==='forge'} onOpenPromptForge={()=>setTab('forge')} onH3ForgeAvailable={setH3ForgeAvailable}/></div>
     {tveOpened.current&&<div className="studio-generate-host" hidden={tab!=='tve'}><TrueVideoEnhancer endpoint={endpoint} roots={roots}/></div>}
     {monitorOpened.current&&<div className="studio-generate-host" hidden={tab!=='monitor'}><Monitoring active={studioActive&&tab==='monitor'} root={environment?.root}/></div>}
     {forgeOpened.current&&<div className="studio-generate-host" hidden={tab!=='forge'}>{canvasSendError&&<p className="error-message" role="alert">{t(canvasSendError)}</p>}<div ref={setForgeHost} hidden={!h3ForgeAvailable}/><div hidden={h3ForgeAvailable}><PromptForge active={studioActive&&tab==='forge'&&!h3ForgeAvailable} endpoint={endpoint} root={environment?.root} inputDir={roots?.input} outputDir={roots?.output} onSend={sendToGenerate} canvasContext={forgeCanvasContext}/></div></div>}

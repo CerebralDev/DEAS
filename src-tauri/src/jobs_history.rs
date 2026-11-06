@@ -25,6 +25,8 @@ pub struct HistoryOutput {
     output_type: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     format: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    role: Option<String>,
 }
 
 /// This is the validated data-only recipe intent, never a Plan/JobStatus/graph or mutable draft.
@@ -460,6 +462,7 @@ fn projection_outputs(job: &Job) -> Vec<HistoryOutput> {
                 subfolder: value["subfolder"].as_str()?.into(),
                 output_type: "output".into(),
                 format: value["format"].as_str().map(str::to_owned),
+                role: value["role"].as_str().map(str::to_owned),
             })
         })
         .collect()
@@ -514,7 +517,10 @@ fn validate_record(record: &HistoryRecord) -> Result<(), String> {
             .is_some_and(|e| e.len() > 200 || e.chars().any(char::is_control))
         || record.outputs.len() > 64
         || record.outputs.iter().any(|o| {
-            o.output_type != "output"
+            o.role
+                .as_deref()
+                .is_some_and(|role| !["original", "processed"].contains(&role))
+                || o.output_type != "output"
                 || o.filename.len() > 255
                 || o.filename.contains('/')
                 || !safe_path(&o.filename, false)

@@ -2,7 +2,7 @@
 //! and the read-only update check (latest release + upstream heads of the owned checkouts).
 //! The repository is compiled in; nothing from the UI selects a URL.
 use crate::auth::AuthState;
-use reqwest::{Method, StatusCode, Url, header};
+use reqwest::{header, Method, StatusCode, Url};
 use serde::Serialize;
 use std::path::Path;
 

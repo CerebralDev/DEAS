@@ -7,16 +7,20 @@ import { pollWorkbench, readCurrentWorkbench, runWorkbenchJob, type JobStatus } 
 import { usePref } from '../../lib/preferences';
 import { audioBitrates, audioCodecs, bitDepths, defaultVideoOutput, isVideoOutput, videoCodecs, videoContainers, videoPostFrameRate, type VideoEnhanceIntentV1, type VideoOutput } from '../../lib/videoIntent';
 import { uploadVideoPostSource, type VideoPostInspection } from '../../lib/videoPost';
+import { AudioEnhance } from './AudioEnhance';
+import { useAudioEnhance } from './useAudioEnhance';
 import { TvePostControls, defaultTve, isTvePref, toVideoPost } from './TvePostControls';
 
 const terminal = (s: JobStatus['state']) => ['succeeded', 'failed', 'cancelled', 'unknown'].includes(s);
 /** Enhance an inspected source on the owned backend with the same TVE chain the video pipelines use; the job lands in the Studio queue. */
 export function TveBackendEnhance({ endpoint, source, disabled = false }: { endpoint: string; source: VideoPostInspection | null; disabled?: boolean }) {
   const { t } = useI18n();
+  const audioEnhance = useAudioEnhance('tve');
   const [tve, setTve] = usePref('studio.tve.post', defaultTve, isTvePref);
   const [output, setOutput] = usePref<VideoOutput>('studio.tve.output', defaultVideoOutput, isVideoOutput);
   const [choices, setChoices] = useState<RecipeAllowlist | null>(null);
   const [job, setJob] = useState<JobStatus | null>(null);
+  const [jobSource, setJobSource] = useState<string>();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const live = useRef(true);
@@ -44,22 +48,26 @@ export function TveBackendEnhance({ endpoint, source, disabled = false }: { endp
   }, [job?.id, job?.state]); // eslint-disable-line react-hooks/exhaustive-deps
   const videoPost = toVideoPost(tve);
   const fps = source ? source.fpsNumerator / source.fpsDenominator : undefined;
-  const ready = !!source?.sourceId && !!videoPost && !!endpoint.trim() && isTauri() && !busy && !disabled && !(tve.frameGen && tve.engine === 'rife' && !tve.rifeModel);
+  const ready = !!source?.sourceId && !!videoPost && !!endpoint.trim() && isTauri() && !busy && !disabled && audioEnhance.ready && !(tve.frameGen && tve.engine === 'rife' && !tve.rifeModel);
   async function run() {
     if (!ready || !source?.sourceId || !videoPost) return;
+    const audio = audioEnhance.intent ? { ...audioEnhance.intent } : undefined;
     setBusy(true); setError(null);
     try {
       const { imageFormat, imageCompression, ...out } = output; void imageFormat; void imageCompression;
       const epoch = (await readCurrentWorkbench()).admissionEpoch;
       const sourceVideo = await uploadVideoPostSource(endpoint, source.sourceId);
-      const intent: VideoEnhanceIntentV1 = { recipeId: 'video-enhance', version: 1, sourceVideo, frameRate: Number((source.fpsNumerator / source.fpsDenominator).toFixed(3)), seed: Math.floor(Math.random() * 2 ** 32), videoPost, output: out };
+      const intent: VideoEnhanceIntentV1 = { recipeId: 'video-enhance', version: 1, sourceVideo, frameRate: Number((source.fpsNumerator / source.fpsDenominator).toFixed(3)), seed: Math.floor(Math.random() * 2 ** 32), videoPost, output: out, ...(audio ? { audioEnhance: audio } : {}) };
       const value = await runWorkbenchJob(endpoint, intent, epoch);
-      if (live.current) setJob(value);
+      if (live.current) { setJob(value); setJobSource(source.sourceId); }
     } catch (failure) { if (live.current) setError(failure instanceof Error ? failure.message : String(failure)); }
     finally { if (live.current) setBusy(false); }
   }
   const choose = <K extends keyof VideoOutput>(k: K, list: readonly VideoOutput[K][]) => <label key={k}>{t(`studio.run.opt.output.${k}`)}<select data-tve-output={k} value={String(output[k])} onChange={e => setOutput({ ...output, [k]: e.target.value })}>{list.map(v => <option key={String(v)} value={String(v)}>{String(v)}</option>)}</select></label>;
+  const audioOutput = jobSource === source?.sourceId && job && ['succeeded', 'failed', 'cancelled'].includes(job.state) && job.outputs.length ? job : null;
+  const audioOutputIndex = Math.max(0, audioOutput?.outputs.findIndex(o => o.role === 'processed') ?? -1);
   return <section className="tve-panel" aria-label={t('studio.tve.backend')} data-tve-backend>
+    <AudioEnhance scope="tve" settings={audioEnhance} automatic={!!videoPost} source={audioOutput?{jobId:audioOutput.id,index:audioOutputIndex}:source?.sourceId?{sourceId:source.sourceId}:undefined} name={audioOutput?audioOutput.outputs[audioOutputIndex].filename:source?.name} disabled={disabled || busy}/>
     <h3>{t('studio.tve.backend')}</h3>
     <p className="field-help">{t('studio.tve.backendHint')}</p>
     <TvePostControls value={tve} onChange={setTve} allow={choices} onRead={loadChoices} disabled={disabled || busy} fps={fps}/>

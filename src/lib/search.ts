@@ -11,6 +11,8 @@ export interface SearchEntry {
   studioTab?: SearchStudioTab;
   panel?: SearchPanel;
   libraryView?: 'catalog' | 'installed';
+  /** Beginner page that must be selected before the target exists. */
+  beginnerTab?: 'generate' | 'models' | 'collection';
   /** Studio bottom-dock tab that must be selected before the target exists. */
   dockTab?: 'options' | 'post' | 'loras' | 'presets' | 'wildcards' | 'media' | 'models';
   /** Breadcrumb tab → section → control, all locale keys. */
@@ -27,6 +29,14 @@ export interface SearchEntry {
 const studio: SearchView = 'studio';
 
 export const searchIndex: readonly SearchEntry[] = [
+  // Beginner experience
+  { view: studio, studioTab: 'generate', beginnerTab: 'generate', tab: 'beginner.navigation', section: 'beginner.generate', label: 'beginner.generate', target: '[data-beginner-tab="generate"]', aliases: ['create', 'prompt', 'generate'] },
+  { view: studio, studioTab: 'generate', beginnerTab: 'models', tab: 'beginner.navigation', section: 'beginner.models', label: 'beginner.models', target: '[data-beginner-tab="models"]', aliases: ['model library', 'discover models'] },
+  { view: studio, studioTab: 'generate', beginnerTab: 'collection', tab: 'beginner.navigation', section: 'beginner.collection', label: 'beginner.collection', target: '[data-beginner-tab="collection"]', aliases: ['gallery', 'my creations'] },
+  { view: studio, studioTab: 'generate', beginnerTab: 'generate', tab: 'beginner.navigation', section: 'beginner.generate', label: 'studio.run.resolution.aspect', target: '[data-beginner-aspect]', aliases: ['format', 'ratio', 'portrait', 'landscape'] },
+  { view: studio, studioTab: 'generate', beginnerTab: 'generate', tab: 'beginner.navigation', section: 'beginner.generate', label: 'studio.run.resolution.title', target: '[data-beginner-resolution]', aliases: ['quality', 'size', 'megapixels'] },
+  { view: studio, studioTab: 'generate', beginnerTab: 'generate', tab: 'beginner.navigation', section: 'beginner.backend', label: 'beginner.backend', target: '.beginner-backend', aliases: ['engine', 'backend setup'] },
+  { view: studio, studioTab: 'generate', tab: 'beginner.navigation', section: 'beginner.experience', label: 'beginner.experience', target: '.experience-switch', aliases: ['beginner', 'advanced', 'mode'] },
   { view: 'backend', tab: 'settings.button', section: 'studio.quick.title', label: 'theme.ui.mouseDoorKnockFourTimesToInviteThe', target: '[data-theme-mouse-door]', aliases: ['mouse', 'cheese', 'easter egg'] },
   { view: 'backend', tab: 'settings.button', section: 'studio.quick.title', label: 'theme.ui.refresh', target: '[data-theme-action="refresh"]', aliases: ['reload themes', 'theme packs'], reason: 'theme.ui.chooseEnvironment' },
   { view: 'backend', tab: 'settings.button', section: 'studio.quick.title', label: 'theme.ui.openThemesFolder', target: '[data-theme-action="folder"]', aliases: ['theme directory', 'theme packs'], reason: 'theme.ui.chooseEnvironment' },
@@ -72,6 +82,24 @@ export const searchIndex: readonly SearchEntry[] = [
   { view: studio, studioTab: 'forge', tab: 'studio.tab.forge', section: 'studio.tab.forge', label: 'forge.detail', target: '[data-forge-ladder="detail"]', aliases: ['length', 'level'] },
   // Chat
   { view: studio, studioTab: 'chat', tab: 'studio.tab.chat', section: 'studio.tab.chat', label: 'chat.message', target: '[data-chat-input]', aliases: ['prompt', 'ask'] },
+  { view: studio, studioTab: 'generate', dockTab: 'post', tab: 'setup.tab.studio', section: 'studio.audioEnhance.title', label: 'studio.audioEnhance.deep', target: '[data-audio-enhance="post"] [data-audio-enhance-install="deep"]', aliases: ['audio', 'install', 'download', 'retry', 'engine', 'DeepFilterNet', 'speech', 'license', 'consent'], reason: 'studio.audioEnhance.modelsMissing' },
+  { view: studio, studioTab: 'generate', dockTab: 'post', tab: 'setup.tab.studio', section: 'studio.audioEnhance.title', label: 'studio.audioEnhance.stems', target: '[data-audio-enhance="post"] [data-audio-enhance-install="stems"]', aliases: ['audio', 'install', 'download', 'retry', 'engine', 'Smule', 'MIT', 'Windowed RoFormer', 'vocals', 'instrumental', 'license', 'consent', 'checkpoint'], reason: 'studio.audioEnhance.modelsMissing' },
+  { view: studio, studioTab: 'tve', tab: 'studio.tab.tve', section: 'studio.audioEnhance.title', label: 'studio.audioEnhance.deep', target: '[data-audio-enhance="tve"] [data-audio-enhance-install="deep"]', aliases: ['audio', 'install', 'download', 'retry', 'engine', 'DeepFilterNet', 'speech', 'license', 'consent'], reason: 'studio.audioEnhance.modelsMissing' },
+  { view: studio, studioTab: 'tve', tab: 'studio.tab.tve', section: 'studio.audioEnhance.title', label: 'studio.audioEnhance.stems', target: '[data-audio-enhance="tve"] [data-audio-enhance-install="stems"]', aliases: ['audio', 'install', 'download', 'retry', 'engine', 'Smule', 'MIT', 'Windowed RoFormer', 'vocals', 'instrumental', 'license', 'consent', 'checkpoint'], reason: 'studio.audioEnhance.modelsMissing' },
+  { view: studio, studioTab: 'generate', dockTab: 'post', tab: 'setup.tab.studio', section: 'studio.run.dock.post', label: 'studio.audioEnhance.title', target: '[data-audio-enhance="post"] [data-audio-enhance-mode]', aliases: ['audio', 'sound', 'denoise', 'loudness', 'stems'], reason: 'studio.audioEnhance.needsSource' },
+  { view: studio, studioTab: 'tve', tab: 'studio.tab.tve', section: 'studio.tve.post.title', label: 'studio.audioEnhance.title', target: '[data-audio-enhance="tve"] [data-audio-enhance-mode]', aliases: ['audio', 'sound', 'denoise', 'loudness', 'stems'], reason: 'studio.audioEnhance.needsSource' },
+  { view: studio, studioTab: 'generate', dockTab: 'post', tab: 'setup.tab.studio', section: 'studio.audioEnhance.title', label: 'studio.audioEnhance.profile', target: '[data-audio-enhance="post"] [data-audio-enhance-profile]', aliases: ['audio', 'sound'], reason: 'studio.audioEnhance.hint' },
+  { view: studio, studioTab: 'generate', dockTab: 'post', tab: 'setup.tab.studio', section: 'studio.audioEnhance.title', label: 'studio.audioEnhance.save', target: '[data-audio-enhance="post"] [data-audio-enhance-run]', aliases: ['audio', 'sound'], reason: 'studio.audioEnhance.hint' },
+  { view: studio, studioTab: 'generate', dockTab: 'post', tab: 'setup.tab.studio', section: 'studio.audioEnhance.title', label: 'studio.audioEnhance.cancel', target: '[data-audio-enhance="post"] [data-audio-enhance-cancel]', aliases: ['audio', 'sound'], reason: 'studio.audioEnhance.hint' },
+  { view: studio, studioTab: 'generate', dockTab: 'post', tab: 'setup.tab.studio', section: 'studio.audioEnhance.title', label: 'studio.audioEnhance.installCancel', target: '[data-audio-enhance="post"] [data-audio-enhance-install-cancel]', aliases: ['audio', 'sound'], reason: 'studio.audioEnhance.hint' },
+  { view: studio, studioTab: 'tve', tab: 'studio.tab.tve', section: 'studio.audioEnhance.title', label: 'studio.audioEnhance.profile', target: '[data-audio-enhance="tve"] [data-audio-enhance-profile]', aliases: ['audio', 'sound'], reason: 'studio.audioEnhance.hint' },
+  { view: studio, studioTab: 'tve', tab: 'studio.tab.tve', section: 'studio.audioEnhance.title', label: 'studio.audioEnhance.save', target: '[data-audio-enhance="tve"] [data-audio-enhance-run]', aliases: ['audio', 'sound'], reason: 'studio.audioEnhance.hint' },
+  { view: studio, studioTab: 'tve', tab: 'studio.tab.tve', section: 'studio.audioEnhance.title', label: 'studio.audioEnhance.cancel', target: '[data-audio-enhance="tve"] [data-audio-enhance-cancel]', aliases: ['audio', 'sound'], reason: 'studio.audioEnhance.hint' },
+  { view: studio, studioTab: 'tve', tab: 'studio.tab.tve', section: 'studio.audioEnhance.title', label: 'studio.audioEnhance.installCancel', target: '[data-audio-enhance="tve"] [data-audio-enhance-install-cancel]', aliases: ['audio', 'sound'], reason: 'studio.audioEnhance.hint' },
+  { view: studio, studioTab: 'generate', dockTab: 'post', tab: 'setup.tab.studio', section: 'studio.audioEnhance.title', label: 'studio.audioEnhance.engines', target: '[data-audio-enhance="post"] [data-audio-enhance-engines] summary', aliases: ['audio', 'engine', 'runtime', 'install'], reason: 'studio.audioEnhance.modelsMissing' },
+  { view: studio, studioTab: 'tve', tab: 'studio.tab.tve', section: 'studio.audioEnhance.title', label: 'studio.audioEnhance.engines', target: '[data-audio-enhance="tve"] [data-audio-enhance-engines] summary', aliases: ['audio', 'engine', 'runtime', 'install'], reason: 'studio.audioEnhance.modelsMissing' },
+  { view: studio, studioTab: 'generate', dockTab: 'post', tab: 'setup.tab.studio', section: 'studio.audioEnhance.title', label: 'studio.audioEnhance.device', target: '[data-audio-enhance="post"] [data-audio-enhance-device]', aliases: ['audio', 'device', 'GPU', 'CUDA', 'CPU', 'automatic'], reason: 'studio.audioEnhance.deviceHint' },
+  { view: studio, studioTab: 'tve', tab: 'studio.tab.tve', section: 'studio.audioEnhance.title', label: 'studio.audioEnhance.device', target: '[data-audio-enhance="tve"] [data-audio-enhance-device]', aliases: ['audio', 'device', 'GPU', 'CUDA', 'CPU', 'automatic'], reason: 'studio.audioEnhance.deviceHint' },
   // TVE
   { view: studio, studioTab: 'tve', tab: 'studio.tab.tve', section: 'studio.tve.post.title', label: 'studio.tve.post.model', target: '[data-tve-post="upscaleModel"]', aliases: ['upscale'] },
   { view: studio, studioTab: 'tve', tab: 'studio.tab.tve', section: 'studio.tve.post.title', label: 'studio.tve.post.frameGen', target: '[data-tve-post="frameGenEnabled"]', aliases: ['fps', 'interpolate'] },
@@ -159,7 +187,7 @@ export function revealTarget(target: string): RevealOutcome {
   element.scrollIntoView?.({ block: 'center' });
   element.classList.add('search-flash');
   window.setTimeout(() => element.classList.remove('search-flash'), 1400);
-  const disabled = element.matches(':disabled') || !!element.querySelector(':disabled') || element.getAttribute('aria-disabled') === 'true';
+  const disabled = element.matches(':disabled') || !!element.querySelector(':disabled:not(option):not(optgroup)') || element.getAttribute('aria-disabled') === 'true';
   if (!disabled) return { state: 'revealed' };
   const title = element.getAttribute('title')?.trim();
   return { state: 'disabled', ...(title ? { title: title.slice(0, 160) } : {}) };

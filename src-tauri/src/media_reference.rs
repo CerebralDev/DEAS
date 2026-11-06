@@ -166,11 +166,9 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let cache = root.path().join("cache");
         for seconds in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, -0.1, 3600.01] {
-            assert!(
-                thumbnail(&root.path().join("video.mp4"), seconds, &cache)
-                    .unwrap_err()
-                    .contains("time")
-            );
+            assert!(thumbnail(&root.path().join("video.mp4"), seconds, &cache)
+                .unwrap_err()
+                .contains("time"));
         }
         for path in [
             PathBuf::from("relative.mp4"),
@@ -188,13 +186,11 @@ mod tests {
     fn errors_reach_shared_reference_logging_without_paths() {
         let result: Result<(), String> = finish(Err("private-video.mp4".into()));
         assert!(result.is_err());
-        assert!(
-            crate::logs::native_logs(0)
-                .iter()
-                .any(|entry| entry.source == crate::logs::Source::Deas
-                    && entry.text.starts_with("ERROR: Studio ReferenceMedia")
-                    && !entry.text.contains("private-video.mp4"))
-        );
+        assert!(crate::logs::native_logs(0)
+            .iter()
+            .any(|entry| entry.source == crate::logs::Source::Deas
+                && entry.text.starts_with("ERROR: Studio ReferenceMedia")
+                && !entry.text.contains("private-video.mp4")));
     }
 
     #[test]

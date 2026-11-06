@@ -1,4 +1,4 @@
 [[permission]]
 identifier = "allow-native-logs"
 description = "Read shared logs, export user-selected text, and report fixed path-free people-image and reference-media preview errors."
-commands.allow = ["native_logs", "native_logs_export", "native_logs_people_image_error", "native_logs_reference_media_error"]
+commands.allow = ["native_logs_beginner_error", "native_logs", "native_logs_export", "native_logs_people_image_error", "native_logs_reference_media_error"]

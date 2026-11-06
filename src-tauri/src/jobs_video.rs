@@ -2,7 +2,7 @@
 //! FastFidelity, MiniMax H3 MythicAlchemy), not the ComfyUI templates. One intent,
 //! `recipeId: "video-generation"`, discriminated by `family`.
 use crate::jobs::{comfy_model_name, model_name, safe_choice, safe_output_prefix, valid_options};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 pub(crate) const FAMILIES: [&str; 3] = ["ltx-2", "wan", "minimax-h3"];
 const FIELDS: [&str; 17] = [

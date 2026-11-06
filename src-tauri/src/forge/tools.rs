@@ -4,7 +4,7 @@
 //! never give orders, and they never fail the write: a bad call is answered.
 
 use super::pack::PackModel;
-use super::tags::{CATEGORIES, TagStore, category_name};
+use super::tags::{category_name, TagStore, CATEGORIES};
 use serde_json::Value;
 
 const MAX_QUERIES: usize = 24;
@@ -53,7 +53,11 @@ fn grouped(n: i64) -> String {
         }
         out.push(c);
     }
-    if n < 0 { format!("-{out}") } else { out }
+    if n < 0 {
+        format!("-{out}")
+    } else {
+        out
+    }
 }
 
 pub fn search_tags(store: &TagStore, raw: &Value, spaced: bool) -> Outcome {
@@ -214,14 +218,12 @@ mod tests {
             true,
         );
         assert!(out.ok);
-        assert!(
-            out.content
-                .starts_with("3 tags matching \"boots\":\nboots — 600,000 posts (general)")
-        );
-        assert!(
-            out.content
-                .contains("No danbooru tag contains \"wet boots\"")
-        );
+        assert!(out
+            .content
+            .starts_with("3 tags matching \"boots\":\nboots — 600,000 posts (general)"));
+        assert!(out
+            .content
+            .contains("No danbooru tag contains \"wet boots\""));
         let bare = search_tags(&store, &Value::String("boots".into()), false);
         assert_eq!(bare.queries, ["boots"]);
         assert!(

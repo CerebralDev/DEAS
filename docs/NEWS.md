@@ -1,5 +1,11 @@
 # News
 
+## 0.2.15 BETA
+
+- DEAS now asks **You are… A beginner / An advanced user** on first launch. Beginner mode keeps only Generation (model, LoRAs optional, prompt), Models and Collection; the Engine button reaches setup, and the top-right Beginner/Advanced switch restores your full technical workbench untouched. [Beginner mode](BEGINNER-MODE.md).
+
+- Audio enhancement now offers **Clean**, **Deep** for speech and **Stems** with Smule Labs Windowed RoFormer. Select a mode before video/music generation or TVE enhancement to chain it automatically; audio-only new-copy export also works without video enhancement. Originals remain available. Model/runtime downloads are explicit; Smule's CPU path is currently slow and requires a C++ compiler. [Audio enhancement](AUDIO-ENHANCEMENT.md).
+
 ## 0.2.14 BETA
 
 - Install local colour/image themes from `theme-packs/`, customize them with the offline editor and apply changes through Quick Settings → Refresh themes. French and Paris remain optional; existing packs and saved selections are not overwritten. [Theme packs](THEME-PACKS.md).

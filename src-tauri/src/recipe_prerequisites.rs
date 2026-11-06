@@ -1,6 +1,6 @@
 //! Read-only core object_info diagnosis, not model-load or generation proof.
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::time::Duration;
 
 const REQUIRED_NODES: [&str; 6] = [
@@ -226,7 +226,7 @@ pub async fn native_recipe_prerequisites(base_url: String) -> Result<Value, Stri
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
+    use serde_json::{json, Value};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     #[test]
@@ -258,12 +258,10 @@ mod tests {
                 "ltx-2.3-spatial-upscaler-x2-1.1.safetensors"
             ])
         );
-        assert!(
-            result["allowlist"]["nodes"]
-                .as_array()
-                .unwrap()
-                .contains(&json!("DaSiWaH3TiledUpscale"))
-        );
+        assert!(result["allowlist"]["nodes"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("DaSiWaH3TiledUpscale")));
     }
 
     fn nodes() -> Value {
@@ -284,13 +282,11 @@ mod tests {
         let mut info = nodes();
         let without = parse(&base, &info).unwrap();
         assert_eq!(without["allowlist"]["audioEncoders"], json!([]));
-        assert!(
-            !without["allowlist"]["nodes"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .any(|n| n == "YuE2GenerateMusic")
-        );
+        assert!(!without["allowlist"]["nodes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|n| n == "YuE2GenerateMusic"));
         assert_eq!(without["missingNodes"], json!([]));
         for n in crate::jobs_music::MUSIC_NODES {
             if info.get(n).is_none() {
@@ -305,15 +301,13 @@ mod tests {
             json!(["sheetsage2_bf16.safetensors", "sub/other.safetensors"])
         );
         let listed = with["allowlist"]["nodes"].as_array().unwrap();
-        assert!(
-            [
-                "YuE2GenerateMusic",
-                "SheetSage2AudioToABC",
-                "SaveAudioAdvanced"
-            ]
-            .iter()
-            .all(|n| listed.iter().any(|l| l == n))
-        );
+        assert!([
+            "YuE2GenerateMusic",
+            "SheetSage2AudioToABC",
+            "SaveAudioAdvanced"
+        ]
+        .iter()
+        .all(|n| listed.iter().any(|l| l == n)));
         assert_eq!(with["missingNodes"], without["missingNodes"]);
         info["AudioEncoderLoader"] =
             json!({"input":{"required":{"audio_encoder_name":["COMBO",{"options":"broken"}]}}});
@@ -328,27 +322,21 @@ mod tests {
         let base = reqwest::Url::parse("http://127.0.0.1:8188/").unwrap();
         let mut info = nodes();
         let without = parse(&base, &info).unwrap();
-        assert!(
-            !without["allowlist"]["nodes"]
-                .as_array()
-                .unwrap()
-                .contains(&json!("TextEncodeQwenImage21"))
-        );
+        assert!(!without["allowlist"]["nodes"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("TextEncodeQwenImage21")));
         info["TextEncodeQwenImage21"] = json!({});
         info["DEAS_ImagePromptEncode"] = json!({});
         let with = parse(&base, &info).unwrap();
-        assert!(
-            with["allowlist"]["nodes"]
-                .as_array()
-                .unwrap()
-                .contains(&json!("TextEncodeQwenImage21"))
-        );
-        assert!(
-            with["allowlist"]["nodes"]
-                .as_array()
-                .unwrap()
-                .contains(&json!("DEAS_ImagePromptEncode"))
-        );
+        assert!(with["allowlist"]["nodes"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("TextEncodeQwenImage21")));
+        assert!(with["allowlist"]["nodes"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("DEAS_ImagePromptEncode")));
         assert_eq!(with["missingNodes"], without["missingNodes"]);
     }
 
@@ -398,19 +386,17 @@ mod tests {
             assert_eq!(result["missingNodes"], json!(absent));
             assert_eq!(
                 result["allowlist"]["nodes"],
-                json!(
-                    REQUIRED_NODES
-                        .iter()
-                        .copied()
-                        .filter(|n| !absent.contains(n))
-                        .chain([
-                            "LoraLoader",
-                            "CLIPVisionLoader",
-                            "CLIPVisionEncode",
-                            "unCLIPConditioning"
-                        ])
-                        .collect::<Vec<_>>()
-                )
+                json!(REQUIRED_NODES
+                    .iter()
+                    .copied()
+                    .filter(|n| !absent.contains(n))
+                    .chain([
+                        "LoraLoader",
+                        "CLIPVisionLoader",
+                        "CLIPVisionEncode",
+                        "unCLIPConditioning"
+                    ])
+                    .collect::<Vec<_>>())
             );
             if absent.contains(&"CheckpointLoaderSimple") {
                 assert_eq!(result["allowlist"]["checkpoints"], json!([]));
@@ -514,11 +500,9 @@ mod tests {
         assert!(native_recipe_prerequisites(base).await.is_err());
         request.await.unwrap();
         // Sibling rejection tests share the once-per-minute limiter; only presence is stable.
-        assert!(
-            crate::logs::after(0)
-                .iter()
-                .any(|e| e.text.contains("prerequisites rejected: object_info "))
-        );
+        assert!(crate::logs::after(0)
+            .iter()
+            .any(|e| e.text.contains("prerequisites rejected: object_info ")));
     }
 
     #[tokio::test]
@@ -593,12 +577,10 @@ mod tests {
     async fn rejects_html_and_invalid_json() {
         for body in ["<html>Not ComfyUI</html>", "{broken"] {
             let (base, request) = fixture(body.into()).await;
-            assert!(
-                native_recipe_prerequisites(base)
-                    .await
-                    .unwrap_err()
-                    .contains("invalid JSON")
-            );
+            assert!(native_recipe_prerequisites(base)
+                .await
+                .unwrap_err()
+                .contains("invalid JSON"));
             request.await.unwrap();
         }
     }
@@ -611,12 +593,10 @@ mod tests {
             destination.local_addr().unwrap()
         );
         let (base, request) = fixture_response(response, Duration::ZERO).await;
-        assert!(
-            native_recipe_prerequisites(base)
-                .await
-                .unwrap_err()
-                .contains("HTTP 302")
-        );
+        assert!(native_recipe_prerequisites(base)
+            .await
+            .unwrap_err()
+            .contains("HTTP 302"));
         request.await.unwrap();
         assert!(
             tokio::time::timeout(Duration::from_millis(100), destination.accept())
@@ -636,12 +616,10 @@ mod tests {
         );
         for response in [declared, chunked] {
             let (base, request) = fixture_response(response, Duration::ZERO).await;
-            assert!(
-                native_recipe_prerequisites(base)
-                    .await
-                    .unwrap_err()
-                    .contains("response size limit")
-            );
+            assert!(native_recipe_prerequisites(base)
+                .await
+                .unwrap_err()
+                .contains("response size limit"));
             request.await.unwrap();
         }
     }
@@ -650,12 +628,10 @@ mod tests {
     async fn enforces_ten_second_total_request_timeout() {
         let (base, request) = fixture_response(String::new(), Duration::from_secs(11)).await;
         let started = std::time::Instant::now();
-        assert!(
-            native_recipe_prerequisites(base)
-                .await
-                .unwrap_err()
-                .starts_with("BACKEND_TIMEOUT:")
-        );
+        assert!(native_recipe_prerequisites(base)
+            .await
+            .unwrap_err()
+            .starts_with("BACKEND_TIMEOUT:"));
         assert!(started.elapsed() >= Duration::from_secs(9));
         assert!(started.elapsed() < Duration::from_secs(11));
         request.await.unwrap();
@@ -700,12 +676,10 @@ mod tests {
         assert_eq!(capability["local"], true);
         assert!(capability.get("remote").is_none());
         assert_eq!(capability["windows"], json!(["main"]));
-        assert!(
-            capability["permissions"]
-                .as_array()
-                .unwrap()
-                .contains(&json!("allow-native-recipe-prerequisites"))
-        );
+        assert!(capability["permissions"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("allow-native-recipe-prerequisites")));
     }
 
     #[test]
@@ -727,18 +701,14 @@ mod tests {
         );
         assert_eq!(allow["ggufClipTypes"], json!(["wan"]));
         assert_eq!(allow["ggufDualClipTypes"], json!(["ltxv"]));
-        assert!(
-            allow["nodes"]
-                .as_array()
-                .unwrap()
-                .contains(&json!("CLIPLoaderGGUF"))
-        );
-        assert!(
-            allow["nodes"]
-                .as_array()
-                .unwrap()
-                .contains(&json!("DualCLIPLoaderGGUF"))
-        );
+        assert!(allow["nodes"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("CLIPLoaderGGUF")));
+        assert!(allow["nodes"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("DualCLIPLoaderGGUF")));
     }
 
     /// Real object_info shapes: core v3 combo (with spaces), KJNodes v1 combo (with `++`, `disabled`).
@@ -784,12 +754,10 @@ mod tests {
             "nodes {}\nattention {}\nsage {}\ncompile {}",
             allow["nodes"], allow["attention"], allow["sage"], allow["compile"]
         );
-        assert!(
-            allow["attention"]
-                .as_array()
-                .unwrap()
-                .contains(&json!("pytorch attention"))
-        );
+        assert!(allow["attention"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("pytorch attention")));
     }
 
     #[tokio::test]
@@ -807,11 +775,9 @@ mod tests {
                 }, "missingNodes":[], "generationReady":false
             })
         );
-        assert!(
-            request
-                .await
-                .unwrap()
-                .starts_with("GET /comfy/object_info HTTP/1.1\r\n")
-        );
+        assert!(request
+            .await
+            .unwrap()
+            .starts_with("GET /comfy/object_info HTTP/1.1\r\n"));
     }
 }

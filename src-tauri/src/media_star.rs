@@ -597,11 +597,9 @@ mod tests {
         std::fs::write(&source, b"original").unwrap();
         let target = move_media(&root, &source).unwrap();
         std::fs::write(root.join("raw/a.xmp"), b"unrelated metadata").unwrap();
-        assert!(
-            unstar_media(&root, &target)
-                .unwrap_err()
-                .contains("sidecars")
-        );
+        assert!(unstar_media(&root, &target)
+            .unwrap_err()
+            .contains("sidecars"));
         assert_eq!(std::fs::read(&target).unwrap(), b"original");
         assert!(!source.exists());
     }
@@ -626,16 +624,14 @@ mod tests {
     }
     #[test]
     fn unstar_failure_reaches_shared_logs_without_paths() {
-        assert!(
-            move_owned(
-                "/private/media.png".into(),
-                &crate::install::Engine::default(),
-                &crate::jobs::Jobs::default(),
-                &crate::FolderOperations::default(),
-                true
-            )
-            .is_err()
-        );
+        assert!(move_owned(
+            "/private/media.png".into(),
+            &crate::install::Engine::default(),
+            &crate::jobs::Jobs::default(),
+            &crate::FolderOperations::default(),
+            true
+        )
+        .is_err());
         let entries = crate::logs::native_logs(0);
         let entry = entries
             .iter()
@@ -663,15 +659,13 @@ mod tests {
                 } else {
                     root.join("starred")
                 };
-                assert!(
-                    relocate_checked(&root, &target, true, |committed| {
-                        if committed == after_commit {
-                            std::fs::rename(&changed_path, &displaced).unwrap();
-                            std::fs::create_dir(&changed_path).unwrap();
-                        }
-                    })
-                    .is_err()
-                );
+                assert!(relocate_checked(&root, &target, true, |committed| {
+                    if committed == after_commit {
+                        std::fs::rename(&changed_path, &displaced).unwrap();
+                        std::fs::create_dir(&changed_path).unwrap();
+                    }
+                })
+                .is_err());
                 let recovered = if changed == "root" {
                     displaced.join("starred/a.png")
                 } else {
@@ -882,16 +876,12 @@ mod tests {
         for name in ["unknown.bin", "no-extension", "media.png.part"] {
             let source = root.join(name);
             std::fs::write(&source, b"arbitrary bytes").unwrap();
-            assert!(
-                validate(&root, &source)
-                    .unwrap_err()
-                    .contains("unsupported")
-            );
-            assert!(
-                move_media(&root, &source)
-                    .unwrap_err()
-                    .contains("unsupported")
-            );
+            assert!(validate(&root, &source)
+                .unwrap_err()
+                .contains("unsupported"));
+            assert!(move_media(&root, &source)
+                .unwrap_err()
+                .contains("unsupported"));
             assert_eq!(std::fs::read(source).unwrap(), b"arbitrary bytes");
         }
         assert!(!root.join("starred").exists());
@@ -910,11 +900,9 @@ mod tests {
             .unwrap()
             .set_len(1)
             .unwrap();
-        assert!(
-            unchanged(&file, &before)
-                .unwrap_err()
-                .contains("still changing")
-        );
+        assert!(unchanged(&file, &before)
+            .unwrap_err()
+            .contains("still changing"));
         let parent = Anchor::open(&root).unwrap();
         std::fs::rename(&source, root.join("old.png")).unwrap();
         std::fs::write(&source, png_bytes()).unwrap();

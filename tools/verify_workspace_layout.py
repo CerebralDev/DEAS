@@ -49,6 +49,9 @@ window.__TAURI_INTERNALS__.invoke=async(c,a)=>{
   native_chat_list:[],native_chat_settings:{search:'off',searxngUrl:''},native_logs:[],
   native_spellcheck_status:{available:true,installed:true},native_spellcheck_check:[],
   native_jobs_history:{schemaVersion:1,records:[],readOnly:false,error:null},
+  native_wildcard_library:JSON.stringify({categories:[]}),
+  native_audio_enhance_install_status:{running:false,mode:"",stage:"",downloaded:0,total:0},
+  native_audio_enhance_capabilities:{clean:true,deep:false,stems:false},
   native_monitoring_sample:{at:0,source:'layout-fixture',cpu:null,ram:null,swap:null,disks:[],diskIo:null,gpus:[]}
  };
  if(c==='native_install_plan'){f.calls.push({command:c,args:clone(a??{})});return {id:'layout-reopen',reopenId:'checked',request:a.request,steps:[],warnings:[],unsupportedOptions:[],canExecute:true};}
@@ -97,6 +100,12 @@ def verify(browser, url, shots):
                 expect(page.locator('[data-run-positive]')).to_have_value('Viewport draft retained')
             if locale in ('de','en'):
                 page.locator('[data-studio-tab="tve"]').click()
+                audio = page.locator('[data-audio-enhance="tve"]')
+                expect(audio).to_be_visible()
+                audio.locator('[data-audio-enhance-run]').scroll_into_view_if_needed()
+                assert audio.locator('[data-audio-enhance-mode]').input_value() == 'off'
+                assert audio.locator('[data-audio-enhance-run]').is_disabled()
+                checks.append(f'{locale}:TVE audio enhancement reachable and opt-in OFF')
                 page.set_viewport_size({'width':1440,'height':960})
                 page.screenshot(path=str(shots/f'workspace-{locale}-desktop.png'))
                 page.set_viewport_size({'width':390,'height':844})

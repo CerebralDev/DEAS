@@ -38,16 +38,18 @@ export function GenerationMetadata({job,media=null,onRestore}:{job:JobStatus|nul
  const intent=job?.intent;const v=intent&&isVideoIntent(intent)?intent:undefined;const i=intent&&isImageIntent(intent)?intent:undefined;const m=intent&&isMusicIntent(intent)?intent:undefined;const e=intent&&isVideoEnhanceIntent(intent)?intent:undefined;
  const extensionSeconds=v?.family==='minimax-h3'?v.h3.continuity?.durationSeconds:undefined;
  const row=(key:string,value:ReactNode)=><div key={key}><dt>{t(key)}</dt><dd>{value}</dd></div>;
+ const audio=(v??m??e)?.audioEnhance;
+ const audioRow=audio&&row('studio.audioEnhance.title',`${t(`studio.audioEnhance.${audio.mode}`)} · ${t(`studio.audioEnhance.${audio.profile}`)}${audio.mode==='stems'?` · ${t(`studio.audioEnhance.device.${audio.device??'auto'}`)}`:''}`);
  const timing=<>{job?.metadata&&Number.isFinite(new Date(job.metadata.startedAt).getTime())&&row('studio.run.metadata.date',new Date(job.metadata.startedAt).toLocaleString(locale))}{duration!==null&&row('studio.run.metadata.time',duration)}</>;
  return <section className="wb-metadata" aria-label={t('studio.run.metadata')}>
   <h3>{t('studio.run.metadata')}</h3>
-  {e?<dl data-tve-metadata>{row('studio.tve.source',e.sourceVideo)}{row('studio.tve.post.title',describeVideoPost(e.videoPost))}{row('studio.tve.fps',`${e.frameRate} → ${videoPostFrameRate(e.frameRate,e.videoPost)}`)}{row('studio.run.seed',e.seed)}{timing}{job?.appVersion&&row('studio.run.metadata.version',job?.appVersion)}</dl>
+  {e?<dl data-tve-metadata>{row('studio.tve.source',e.sourceVideo)}{row('studio.tve.post.title',describeVideoPost(e.videoPost))}{row('studio.tve.fps',`${e.frameRate} → ${videoPostFrameRate(e.frameRate,e.videoPost)}`)}{row('studio.run.seed',e.seed)}{audioRow}{timing}{job?.appVersion&&row('studio.run.metadata.version',job?.appVersion)}</dl>
   :m?<dl data-music-metadata>{/* Music has no image "use these settings"; Recent history restores the whole record. */}
    {row('studio.music.style',m.style)}{m.lyrics&&row('studio.music.lyrics',m.lyrics)}{row('studio.run.checkpoint',m.checkpoint)}
    {row('studio.music.planning',t(`studio.music.${m.planning}`))}{row('studio.music.maxDuration',`${m.maxDuration} · ${t('studio.music.durationHint')}`)}
    {m.mode==='cover'&&<>{row('studio.music.source',m.sourceAudio)}{row('studio.music.audioEncoder',m.audioEncoder)}</>}
    {row('studio.run.seed',m.seed)}{row('studio.run.steps',m.steps)}{row('studio.run.cfg',m.cfg)}{row('studio.recipe.sampler',m.sampler)}{row('studio.recipe.scheduler',m.scheduler)}
-   {row('studio.music.generationSettings',JSON.stringify(m.generation))}{m.mode==='t2m'&&m.abc&&row('studio.music.abcSettings',JSON.stringify(m.abc))}
+   {audioRow}{row('studio.music.generationSettings',JSON.stringify(m.generation))}{m.mode==='t2m'&&m.abc&&row('studio.music.abcSettings',JSON.stringify(m.abc))}
    {timing}{job?.appVersion&&row('studio.run.metadata.version',job?.appVersion)}
   </dl>:v?<>{onRestore&&job&&<button type="button" className="wb-dock-action" data-metadata-apply onClick={()=>onRestore(job)}>{t('studio.run.metadata.apply')}</button>}<dl>
    {row('studio.run.positive',v.positivePrompt)}{v.negativePrompt&&row('studio.run.negative',v.negativePrompt)}{row('studio.run.checkpoint',v.model)}{row('studio.run.resolution.title',`${v.width} × ${v.height} · ${extensionSeconds===undefined?`${v.frames} ${t('studio.run.video.frames')} · `:''}${v.frameRate} fps`)}
@@ -55,6 +57,7 @@ export function GenerationMetadata({job,media=null,onRestore}:{job:JobStatus|nul
    {!!v.loras?.length&&row('studio.run.loras',v.loras.map(l=>`${l.name} (${l.strength})`).join(', '))}{(v.firstFrame||v.lastFrame)&&row('studio.run.pipe.input',[v.firstFrame,v.lastFrame].filter(Boolean).join(' → '))}
    {row('studio.run.video.settings',JSON.stringify(v.family==='ltx-2'?v.ltx:v.family==='wan'?v.wan:{...v.h3,references:v.h3.references.map(r=>r.image)}))}
    {v.latentUpscale&&<>{row('studio.run.latent.model',v.latentUpscale.model)}{row('studio.run.dock.post',JSON.stringify(v.latentUpscale))}{row('studio.run.latent.enabled',`${latentUpscaleSize(v.family,v,v.latentUpscale.scale).width} × ${latentUpscaleSize(v.family,v,v.latentUpscale.scale).height}`)}</>}
+   {audioRow}
    {v.videoPost&&row('studio.tve.post.title',`${describeVideoPost(v.videoPost)} · ${videoPostFrameRate(v.frameRate,v.videoPost)} fps`)}
    {timing}{job?.appVersion&&row('studio.run.metadata.version',job?.appVersion)}
   </dl></>:i?<>{onRestore&&job&&<button type="button" className="wb-dock-action" data-metadata-apply onClick={()=>onRestore(job)}>{t('studio.run.metadata.apply')}</button>}<dl>

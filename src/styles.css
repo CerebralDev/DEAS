@@ -687,7 +687,7 @@ button.footer-version.is-update { background: none; border: 0; padding: 0; color
 .studio-main, .studio-generate-host { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
 .studio-main, .studio-generate-host { overflow: auto; }
 .studio-main > :not(.studio-generate-host) { flex: none; }
-.studio-generate-host > :not([hidden]):not(.project-bar) { flex: 1; min-height: 0; min-width: 0; }
+.studio-generate-host > :not([hidden]):not(.project-bar):not(.studio-project-bar-host) { flex: 1; min-height: 0; min-width: 0; }
 .studio-generate-host[hidden] { display: none; }
 .media-stage { min-height: 16rem; padding: 16px; border: 1px solid rgb(var(--ink-rgb) / 0.071); border-radius: 12px; background: var(--surface); }
 .media-preview { margin: 12px 0 0; }

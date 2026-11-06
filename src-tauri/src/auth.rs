@@ -1,7 +1,7 @@
 //! Origin-bound credentials and fixed read-only provider identity checks.
 //! The desktop restores saved official-provider tokens once at startup.
 //! Native consumers must disable redirects and never log returned credential strings.
-use reqwest::{Url, header::HeaderValue};
+use reqwest::{header::HeaderValue, Url};
 use serde::Serialize;
 use std::{collections::BTreeMap, sync::Mutex};
 
@@ -386,7 +386,11 @@ async fn probe_identity(id: &str, url: Url, authorization: HeaderValue) -> &'sta
         }
         _ => false,
     };
-    if valid { "verified" } else { "unavailable" }
+    if valid {
+        "verified"
+    } else {
+        "unavailable"
+    }
 }
 
 #[tauri::command]

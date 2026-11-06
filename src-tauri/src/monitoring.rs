@@ -183,8 +183,8 @@ fn disk_io() -> Option<DiskIo> {
     use windows_sys::Win32::Storage::FileSystem::{
         CreateFileW, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
     };
-    use windows_sys::Win32::System::IO::DeviceIoControl;
     use windows_sys::Win32::System::Ioctl::{DISK_PERFORMANCE, IOCTL_DISK_PERFORMANCE};
+    use windows_sys::Win32::System::IO::DeviceIoControl;
     let (mut read, mut written) = (0u64, 0u64);
     for n in 0..32 {
         let path: Vec<u16> = std::ffi::OsString::from(format!(r"\\.\PhysicalDrive{n}"))
@@ -585,11 +585,9 @@ mod tests {
         assert_eq!(value.disks.len(), 1);
         assert!(value.disks[0].total >= value.disks[0].used);
         assert_eq!(value.source, "native");
-        assert!(
-            sample(Some(std::path::Path::new("relative")))
-                .await
-                .disks
-                .is_empty()
-        );
+        assert!(sample(Some(std::path::Path::new("relative")))
+            .await
+            .disks
+            .is_empty());
     }
 }

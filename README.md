@@ -2,7 +2,7 @@
 
 A Rust/Tauri desktop workstation for ComfyUI and DaSiWa tools: generation, model-aware prompting, model/resource browsing and image editing in one interface. Studio, Library, Prompt Forge, Chat, TVE, Run Plan and the original Comfy editor share the same owned backend; installation, provider authorization and settings live in the Backend tab, diagnostics in Logs.
 
-**0.2.14 BETA.** Linux CPU/NVIDIA provisioning and individual model runs are recorded; Windows builds do not establish Windows runtime acceptance. Image, video and YuE2 music recipes exist; Linux video plays through embedded libmpv, but real-model quality and native playback acceptance are still open. TVE enhances videos through the owned ComfyUI backend (upscale model, NVIDIA RTX refine, frame generation); synchronized comparison, assembly and training are planned integrations, not completed ports. See [current status and limitations](docs/PLAN.md).
+**0.2.15 BETA.** A Beginner experience (generation, model guides, collection) and audio enhancement ship in this Beta. Linux CPU/NVIDIA provisioning and individual model runs are recorded; Windows builds do not establish Windows runtime acceptance. Image, video and YuE2 music recipes exist; Linux video plays through embedded libmpv, but real-model quality and native playback acceptance are still open. TVE enhances videos through the owned ComfyUI backend (upscale model, NVIDIA RTX refine, frame generation); synchronized comparison, assembly and training are planned integrations, not completed ports. See [current status and limitations](docs/PLAN.md).
 
 [Documentation](docs/README.md) · [Getting started](docs/GETTING-STARTED.md) · [News](docs/NEWS.md) · [Changelog](docs/CHANGELOG.md) · [Credits](docs/CREDITS.md)
 

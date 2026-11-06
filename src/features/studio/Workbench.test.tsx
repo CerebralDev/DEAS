@@ -5,6 +5,7 @@ import { invoke, isTauri } from '@tauri-apps/api/core';
 import { Workbench } from './Workbench';
 import { defaultOptions } from './OptionsPanel';
 import { applyStudioSettings, captureStudioSettings } from '../../lib/preferences';
+import { aspects, resolutions } from '../../lib/resolution';
 import type { HistoryRecord } from './history';
 import type { ForgeCanvasContext } from '../../lib/forgeCanvas';
 import { I18nProvider } from '../../i18n/I18nProvider';
@@ -212,6 +213,65 @@ test.each(['metadata','gguf'])('selected LoRA %s errors block Run rather than si
  expect(runWorkbenchJob).not.toHaveBeenCalled();
 });
 const heldJob=(id:string,state:JobStatus['state'],baseUrl='http://original:7801/'):JobStatus=>({id,state,baseUrl,promptId:'p-'+id,outputs:[],error:null,generationReady:false});
+test('automatic audio readiness blocks video while probe is pending/missing; Off restores ordinary Run',async()=>{
+ let resolve!: (value:unknown)=>void;
+ localStorage.setItem('deas.pref.studio.run.pipeline',JSON.stringify('t2v'));
+ localStorage.setItem('deas.pref.studio.audioEnhance.post.mode',JSON.stringify('stems'));
+ vi.mocked(scanModels).mockResolvedValue([...ltxModels]);vi.mocked(checkRecipePrerequisites).mockResolvedValue(evidence);
+ vi.mocked(invoke).mockImplementation(async command=>command==='native_audio_enhance_capabilities'?new Promise(r=>{resolve=r;}):{path:'/out',parent:'/',entries:[],truncated:false});
+ render(<I18nProvider><Workbench endpoint={evidence.baseUrl} roots={{models:'/m'}}/></I18nProvider>);
+ await waitFor(()=>expect(document.querySelector('[data-model-picker]')?.textContent).toContain('LTX2/ltx.safetensors'));
+ const run=screen.getByRole('button',{name:'Run'});
+ expect(run).toHaveProperty('disabled',true);
+ await act(async()=>{resolve({clean:true,deep:false,stems:false});});
+ expect(run).toHaveProperty('disabled',true);
+ expect(run.title).toContain('Audio enhancement is not ready');
+ fireEvent.click(screen.getByRole('tab',{name:'Post-Processing'}));
+ fireEvent.change(document.querySelector('[data-audio-enhance-mode]')!,{target:{value:'off'}});
+ await waitFor(()=>expect(run).toHaveProperty('disabled',false));
+ expect(runWorkbenchJob).not.toHaveBeenCalled();
+});
+
+test.each((['ltx-2','minimax-h3','yue2'] as const).flatMap(family=>(['off','clean','deep','stems'] as const).flatMap(mode=>(mode==='stems'?['auto','cpu','cuda'] as const:['auto'] as const).map(device=>({family,mode,device})))))('automatic audio $family / $mode / $device reaches Run Plan and immutable native Run',async({family,mode,device})=>{
+ const h3=family==='minimax-h3',musicFamily=family==='yue2';
+ localStorage.setItem('deas.pref.studio.audioEnhance.post.device',JSON.stringify(device));
+ const files=musicFamily?[...yue2Models]:h3?[
+  {category:'diffusion_models',name:'h3.safetensors',family},
+  {category:'text_encoders',name:'qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors'},
+  {category:'vae',name:'minimax_h3_video_vae_fp16.safetensors'},
+  {category:'vae',name:'minimax_h3_audio_vae_fp32.safetensors'}
+ ].map(m=>({...m,path:'/m/'+m.name,size:1,info:null})):[...ltxModels];
+ vi.mocked(scanModels).mockResolvedValue(files);
+ vi.mocked(checkRecipePrerequisites).mockResolvedValue(musicFamily?musicEvidence():evidence);
+ vi.mocked(invoke).mockImplementation(async command=>command==='native_audio_enhance_capabilities'?{clean:true,deep:true,stems:true,cuda:true}:command==='native_jobs_history'?{schemaVersion:1,records:[],readOnly:false,error:null}:{path:'/out',parent:'/',entries:[],truncated:false});
+ vi.mocked(runWorkbenchJob).mockResolvedValue({...heldJob('audio-chain','failed'),error:'fixture'});
+ localStorage.setItem('deas.pref.studio.run.pipeline',JSON.stringify(musicFamily?'t2m':'t2v'));
+ const props={endpoint:evidence.baseUrl,roots:{models:'/m'}};
+ const view=render(<I18nProvider><Workbench {...props}/></I18nProvider>);
+ if(musicFamily)fireEvent.change(music().style,{target:{value:'indie pop'}});
+ await waitFor(()=>expect(screen.getByRole('button',{name:'Run'})).toHaveProperty('disabled',false));
+ fireEvent.click(screen.getByRole('tab',{name:'Post-Processing'}));
+ await act(async()=>{fireEvent.focus(document.querySelector('[data-audio-enhance-mode]')!);});
+ fireEvent.change(document.querySelector('[data-audio-enhance-mode]')!,{target:{value:mode}});
+ if(mode==='deep'){
+  expect(screen.getByRole('button',{name:'Run'})).toHaveProperty('disabled',true);
+  fireEvent.change(document.querySelector('[data-audio-enhance-profile]')!,{target:{value:'speech'}});
+ }
+ view.rerender(<I18nProvider><Workbench {...props} planVisible/></I18nProvider>);
+ const plan=JSON.parse(document.querySelector('[data-plan-intent]')!.textContent!);
+ const audio=mode==='off'?undefined:{mode,profile:mode==='deep'?'speech':'mix',...(mode==='stems'?{device}:{})};
+ if(audio){expect(plan.audioEnhance).toEqual(audio);expect(document.querySelector('[data-plan-stage="audioEnhance"]')).not.toBeNull();}
+ else expect(plan).not.toHaveProperty('audioEnhance');
+ view.rerender(<I18nProvider><Workbench {...props}/></I18nProvider>);
+ fireEvent.click(screen.getByRole('button',{name:'Run'}));
+ if(mode==='stems')fireEvent.change(document.querySelector('[data-audio-enhance-device]')!,{target:{value:device==='cpu'?'auto':'cpu'}});
+ fireEvent.change(document.querySelector('[data-audio-enhance-mode]')!,{target:{value:mode==='off'?'clean':'off'}});
+ await waitFor(()=>expect(runWorkbenchJob).toHaveBeenCalled());
+ const submitted=vi.mocked(runWorkbenchJob).mock.lastCall![1];
+ if(audio)expect(submitted).toHaveProperty('audioEnhance',audio);else expect(submitted).not.toHaveProperty('audioEnhance');
+ expect(invoke).not.toHaveBeenCalledWith('native_audio_enhance_export',expect.anything());
+});
+
 test.each(['ltx-2','minimax-h3'] as const)('latent post-processing is opt-in, family scoped, and held in Run Plan and Run (%s)',async family=>{
  const h3=family==='minimax-h3';
  const files=h3?[
@@ -4325,7 +4385,8 @@ test.each([['ltx-2',32],['minimax-h3',32]] as const)('Forge canvas retains requi
 test('Forge canvas handoff follows project autosave and retains failed-save unsaved protection',async()=>{
  const saved={...projectFixture,draft:{...projectFixture.draft,checkpoint:'a.safetensors',pipeline:'t2i'}};
  vi.mocked(scanModels).mockResolvedValue([{category:'checkpoints',name:'a.safetensors',family:'sdxl',path:'/m/a',size:1,info:null}]);
- vi.mocked(invoke).mockImplementation(async command=>{if(command==='native_project_open')return saved;if(command==='native_project_save')throw Error('disk full');return {entries:[],truncated:false};});
+ vi.mocked(invoke).mockImplementation(async command=>{
+    if (command === 'native_audio_enhance_install_status') return { running: false, mode: '', stage: '', downloaded: 0, total: 0 };if(command==='native_project_open')return saved;if(command==='native_project_save')throw Error('disk full');return {entries:[],truncated:false};});
  const publish=vi.fn<(context:ForgeCanvasContext|undefined)=>void>();const props={endpoint:evidence.baseUrl,roots:{models:'/m'},onCanvasContext:publish};
  const view=render(<I18nProvider><Workbench {...props}/></I18nProvider>);
  await waitFor(()=>expect(screen.getByRole('button',{name:'Open project'}).hasAttribute('disabled')).toBe(false));
@@ -4576,6 +4637,21 @@ test('Run Plan in music mode shows the music stages from the captured intent and
  expect(uploadInput).not.toHaveBeenCalled();expect(runWorkbenchJob).not.toHaveBeenCalled();
 });
 
+test.each([false,true])('audio enhancement exports the clicked output and matching filename (paired=%s)',async paired=>{
+ const job:JobStatus={...musicJob('audio-pair'),state:'succeeded',outputRoot:'/env/ComfyUI/output',outputs:[{filename:'first.flac',subfolder:'raw/audio',type:'output',...(paired?{role:'original' as const}:{})},{filename:'second.flac',subfolder:'raw/audio',type:'output',...(paired?{role:'processed' as const}:{})}]};
+ vi.mocked(readCurrentWorkbench).mockResolvedValue(collection([job]));
+ await mountMusic('Music (Text to Music)');
+ await waitFor(()=>expect(document.querySelectorAll('[data-job-id="audio-pair"] .wb-queue-select').length).toBe(2));
+ fireEvent.click(document.querySelectorAll('[data-job-id="audio-pair"] .wb-queue-select')[1]);
+ fireEvent.click(document.querySelector('[data-dock-tab="post"]')!);
+ expect(document.querySelector('[data-audio-enhance-source]')?.textContent).toBe('second.flac');
+ vi.mocked(invoke).mockImplementation(async command=>command==='native_audio_enhance_capabilities'?{clean:true,deep:false,stems:false}:null);
+ await act(async()=>{fireEvent.focus(document.querySelector('[data-audio-enhance-mode]')!);});
+ fireEvent.change(document.querySelector('[data-audio-enhance-mode]')!,{target:{value:'clean'}});
+ await act(async()=>{fireEvent.click(document.querySelector('[data-audio-enhance-run]')!);});
+ expect(invoke).toHaveBeenCalledWith('native_audio_enhance_export',{request:expect.objectContaining({jobId:'audio-pair',index:1})});
+});
+
 test('a retained music job renders a controls-only audio player, audio queue glyph, and music metadata',async()=>{
  const job:JobStatus={...musicJob('job-m'),state:'succeeded',outputRoot:'/env/ComfyUI/output',outputs:[{filename:'YuE2_00001.flac',subfolder:'raw/audio',type:'output'}],intent:{recipeId:'music-generation',version:1,family:'yue2',mode:'t2m',planning:'off',checkpoint:'yue2_3b.safetensors',style:'retained style',lyrics:'',seed:1,maxDuration:30,steps:32,cfg:1,sampler:'dpm_2',scheduler:'sgm_uniform',generation:{temperature:1,topP:0.95,topK:100,repetitionPenalty:1.2,cfgScale:1.01},outputPrefix:'raw/audio/x'}};
  vi.mocked(readCurrentWorkbench).mockResolvedValue(collection([job]));
@@ -4590,6 +4666,22 @@ test('a retained music job renders a controls-only audio player, audio queue gly
  fireEvent.click(document.querySelector('[data-metadata-toggle]')!);
  const meta=document.querySelector('[data-music-metadata]')!;
  expect(meta.textContent).toContain('retained style');expect(meta.textContent).toContain('Off');expect(meta.textContent).not.toContain('Negative');
+});
+
+test.each(['off','clean','deep','stems'] as const)('Recent history restores audio selection %s without stale preferences or implicit installation',async mode=>{
+ const record=recentHistoryRecord({recipeId:'music-generation',version:1,family:'yue2',mode:'t2m',planning:'off',checkpoint:'yue2_3b.safetensors',style:'historic audio',lyrics:'',seed:777,maxDuration:30,steps:20,cfg:1,sampler:'dpm_2',scheduler:'sgm_uniform',generation:{temperature:1,topP:0.95,topK:100,repetitionPenalty:1.2,cfgScale:1},outputPrefix:'raw/audio/old',...(mode==='off'?{}:{audioEnhance:{mode,profile:mode==='deep'?'speech' as const:'mix' as const}})});
+ await mountMusic('Music (Text to Music)');
+ vi.mocked(invoke).mockImplementation(async(command,args)=>command==='native_audio_enhance_capabilities'?{clean:true,deep:true,stems:true}:command==='native_jobs_history'?{schemaVersion:1,records:[record],readOnly:false,error:null}:command==='native_media_star_status'?{starred:false,unavailable:null}:{path:(args as {path?:string})?.path??'/env/ComfyUI/input',parent:'/env',entries:mediaEntries,truncated:false});
+ fireEvent.click(screen.getByRole('tab',{name:'Post-Processing'}));
+ await act(async()=>{fireEvent.focus(document.querySelector('[data-audio-enhance-mode]')!);});
+ fireEvent.change(document.querySelector('[data-audio-enhance-mode]')!,{target:{value:mode==='stems'?'clean':'stems'}});
+ await openHistoryRecord();fireEvent.click(document.querySelector('[data-history-apply]')!);fireEvent.click(screen.getByRole('button',{name:'Close history'}));
+ fireEvent.click(screen.getByRole('tab',{name:'Post-Processing'}));
+ expect(document.querySelector('[data-audio-enhance-mode]')).toHaveProperty('value',mode);
+ expect(document.querySelector('[data-audio-enhance-profile]')).toHaveProperty('value',mode==='deep'?'speech':'mix');
+ if(mode==='stems')expect(document.querySelector('[data-audio-enhance-device]')).toHaveProperty('value','auto');
+ expect(runWorkbenchJob).not.toHaveBeenCalled();
+ expect(invoke).not.toHaveBeenCalledWith('native_audio_enhance_install',expect.anything());
 });
 
 test('Recent history restores a music record into the cover pipeline with every setting and an unresolved source',async()=>{
@@ -4630,4 +4722,84 @@ test('variable chips show picks and remove exactly that token occurrence from th
  await waitFor(()=>expect(positive.value).toBe('a  cat with ${color}-light and $color'));
  fireEvent.click(screen.getAllByRole('button',{name:'Remove color from the prompt'})[0]);
  await waitFor(()=>expect(positive.value).toBe('a  cat with -light and $color'));
+});
+
+test('beginner submits through the real Workbench adapter and restores advanced technical settings',async()=>{
+ localStorage.setItem('deas.pref.studio.run.cfg','7');localStorage.setItem('deas.pref.studio.run.negative',JSON.stringify('advanced negative'));
+ vi.mocked(scanModels).mockResolvedValue([{name:'a.safetensors',category:'checkpoints',path:'/m/a',size:1,info:null,family:'sdxl'}]);
+ vi.mocked(checkRecipePrerequisites).mockResolvedValue(evidence);
+ vi.mocked(runWorkbenchJob).mockResolvedValue({...heldJob('beginner','failed'),error:'fixture'});
+ const props={endpoint:evidence.baseUrl,roots:{models:'/m'}};
+ const view=render(<I18nProvider><Workbench {...props} beginner/></I18nProvider>);
+ await waitFor(()=>expect(captureStudioSettings()['studio.run.cfg']).toBe(3.5));
+ expect(JSON.parse(localStorage.getItem('deas.pref.studio.run.cfg')!)).toBe(7);
+ fireEvent.change(document.querySelector('[data-run-positive]')!,{target:{value:'A house by a lake'}});
+ const button=screen.getByRole('button',{name:'Generate'});await waitFor(()=>expect(button).toHaveProperty('disabled',false));
+ expect(runWorkbenchJob).not.toHaveBeenCalled();fireEvent.click(button);
+ await waitFor(()=>expect(runWorkbenchJob).toHaveBeenCalledTimes(1));
+ expect(vi.mocked(runWorkbenchJob).mock.lastCall![1]).toMatchObject({positivePrompt:'A house by a lake',negativePrompt:'',checkpoint:'a.safetensors',cfg:3.5,steps:28,sampler:'euler',scheduler:'normal'});
+ view.rerender(<I18nProvider><Workbench {...props} beginner={false}/></I18nProvider>);
+ await waitFor(()=>expect(captureStudioSettings()['studio.run.cfg']).toBe(7));
+ expect(captureStudioSettings()['studio.run.negative']).toBe('advanced negative');
+ expect((document.querySelector('[data-run-positive]') as HTMLTextAreaElement).value).toBe('A house by a lake');
+});
+
+test('beginner model selection keeps the prompt and changes the actual Studio model without executing',async()=>{
+ vi.mocked(scanModels).mockResolvedValue(['a','b'].map(n=>({name:n+'.safetensors',category:'checkpoints',path:'/m/'+n,size:1,info:null,family:'sdxl'})));
+ vi.mocked(checkRecipePrerequisites).mockResolvedValue(evidence);const onPage=vi.fn();
+ render(<I18nProvider><Workbench endpoint={evidence.baseUrl} roots={{models:'/m'}} beginner beginnerPage="models" onBeginnerPage={onPage}/></I18nProvider>);
+ await waitFor(()=>expect(screen.getAllByRole('button',{name:/Use this model/})).toHaveLength(2));
+ fireEvent.change(document.querySelector('[data-run-positive]')!,{target:{value:'Keep this idea'}});
+ fireEvent.click(screen.getAllByRole('button',{name:/Use this model/})[1]);
+ await waitFor(()=>expect(captureStudioSettings()['studio.run.checkpoint']).toBe('b.safetensors'));
+ expect(captureStudioSettings()['studio.run.positive']).toBe('Keep this idea');expect(onPage).toHaveBeenCalledWith('generate');
+ expect(runWorkbenchJob).not.toHaveBeenCalled();
+});
+
+test('beginner LoRAs use known matching families, native strengths and Ctrl+Enter without overwriting Advanced',async()=>{
+ const advanced=[{name:'advanced-only.safetensors',strength:0.4}];localStorage.setItem('deas.pref.studio.run.loras',JSON.stringify(advanced));
+ vi.mocked(scanModels).mockResolvedValue([
+  {name:'a.safetensors',category:'checkpoints',path:'/m/a',size:1,info:null,family:'sdxl'},
+  {name:'watercolor.safetensors',category:'loras',path:'/m/watercolor',size:1,info:null,family:'sdxl'},
+  {name:'other.safetensors',category:'loras',path:'/m/other',size:1,info:null,family:'anima'},
+  {name:'unknown.safetensors',category:'loras',path:'/m/unknown',size:1,info:null}
+ ]);
+ vi.mocked(checkRecipePrerequisites).mockResolvedValue(evidence);vi.mocked(runWorkbenchJob).mockResolvedValue({...heldJob('beginner-lora','failed'),error:'fixture'});
+ const props={endpoint:evidence.baseUrl,roots:{models:'/m'}};const view=render(<I18nProvider><Workbench {...props} beginner/></I18nProvider>);
+ fireEvent.click(screen.getByText('LoRAs (optional)'));
+ await waitFor(()=>expect(screen.getByRole('option',{name:'watercolor'})).toBeDefined());
+ expect(screen.queryByRole('option',{name:'other'})).toBeNull();expect(screen.queryByRole('option',{name:'unknown'})).toBeNull();
+ fireEvent.change(screen.getByRole('combobox',{name:'Add a LoRA…'}),{target:{value:'watercolor.safetensors'}});
+ fireEvent.change(screen.getByRole('spinbutton',{name:/watercolor/}),{target:{value:'0.65'}});
+ expect(runWorkbenchJob).not.toHaveBeenCalled();expect(JSON.parse(localStorage.getItem('deas.pref.studio.run.loras')!)).toEqual(advanced);
+ const run=screen.getByRole('button',{name:'Generate'});await waitFor(()=>expect(run).toHaveProperty('disabled',false));
+ fireEvent.keyDown(window,{key:'Enter',ctrlKey:true});await waitFor(()=>expect(runWorkbenchJob).toHaveBeenCalledTimes(1));
+ expect(vi.mocked(runWorkbenchJob).mock.lastCall![1]).toMatchObject({family:'sdxl',loras:[{name:'watercolor.safetensors',strength:0.65}]});
+ view.rerender(<I18nProvider><Workbench {...props} beginner={false}/></I18nProvider>);await waitFor(()=>expect(captureStudioSettings()['studio.run.loras']).toEqual(advanced));
+ view.rerender(<I18nProvider><Workbench {...props} beginner/></I18nProvider>);fireEvent.click(screen.getByText('LoRAs (optional)'));await waitFor(()=>expect(screen.getByRole('spinbutton',{name:/watercolor/})).toHaveProperty('value','0.65'));
+ fireEvent.click(screen.getByRole('button',{name:'Remove watercolor.safetensors'}));expect(screen.queryByRole('spinbutton',{name:/watercolor/})).toBeNull();
+});
+
+test('beginner format and quality reuse the shared aspect and resolution options without a fork',async()=>{
+ vi.mocked(scanModels).mockResolvedValue([{name:'a.safetensors',category:'checkpoints',path:'/m/a',size:1,info:null,family:'sdxl'}]);
+ vi.mocked(checkRecipePrerequisites).mockResolvedValue(evidence);
+ const held=heldJob('beginner-size','queued');vi.mocked(runWorkbenchJob).mockResolvedValue(held);
+ const view=render(<I18nProvider><Workbench endpoint={evidence.baseUrl} roots={{models:'/m'}} beginner/></I18nProvider>);
+ await waitFor(()=>expect(captureStudioSettings()['studio.run.cfg']).toBe(3.5));
+ const aspect=document.querySelector('[data-beginner-aspect]')! as HTMLSelectElement;
+ const resolution=document.querySelector('[data-beginner-resolution]')! as HTMLSelectElement;
+ // same shared option sets as the advanced panel, no beginner-specific values
+ expect(Array.from(aspect.options).map(o=>o.value)).toEqual(aspects.filter(a=>a!=='custom'&&a!=='auto'));
+ expect(Array.from(resolution.options).map(o=>o.value)).toEqual(['model',...Object.keys(resolutions)]);
+ fireEvent.change(aspect,{target:{value:'3:4'}});fireEvent.change(resolution,{target:{value:'1024p'}});
+ expect(captureStudioSettings()['studio.run.aspect']).toBe('3:4');expect(captureStudioSettings()['studio.run.resolution']).toBe('1024p');
+ fireEvent.change(document.querySelector('[data-run-positive]')!,{target:{value:'A house by a lake'}});
+ const button=screen.getByRole('button',{name:'Generate'});await waitFor(()=>expect(button).toHaveProperty('disabled',false));
+ fireEvent.click(button);
+ await waitFor(()=>expect(runWorkbenchJob).toHaveBeenCalledTimes(1));
+ // model-exact: SDXL 3:4 at 1 MP snaps to 896x1152 on the family grid
+ expect(vi.mocked(runWorkbenchJob).mock.lastCall![1]).toMatchObject({width:896,height:1152});
+ // shared canvas intent survives the round-trip into advanced
+ view.rerender(<I18nProvider><Workbench endpoint={evidence.baseUrl} roots={{models:'/m'}} beginner={false}/></I18nProvider>);
+ expect(captureStudioSettings()['studio.run.aspect']).toBe('3:4');expect(captureStudioSettings()['studio.run.resolution']).toBe('1024p');
 });

@@ -359,7 +359,11 @@ pub fn space_underscores(text: &str, protected: &[&str]) -> (String, usize) {
                     let after = chars.get(i + 1).copied();
                     let left = before.is_some_and(|b| b.is_alphanumeric() || b == ')' || b == '\\');
                     let right = after.is_some_and(|a| a.is_alphanumeric() || a == '(' || a == '\\');
-                    if c == '_' && left && right { ' ' } else { c }
+                    if c == '_' && left && right {
+                        ' '
+                    } else {
+                        c
+                    }
                 })
                 .collect();
             if spaced != piece {

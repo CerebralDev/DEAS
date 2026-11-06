@@ -1,0 +1,36 @@
+/* Models presentation is scoped to Beginner; no Advanced or shared theme rules. */
+.is-beginner .beginner-model-grid{display:flex;flex-direction:column;gap:22px;max-width:1280px;margin:18px auto 34px}
+.is-beginner .beginner-model-card{display:grid;grid-template-columns:minmax(230px,34%) minmax(0,1fr);align-items:stretch;min-width:0;overflow:hidden;border:1px solid var(--line);border-radius:15px;background:var(--panel)}
+.is-beginner .beginner-model-card:hover{transform:none}
+.is-beginner .beginner-model-visual{display:flex;flex-direction:column;min-width:0;background:var(--field);border-right:1px solid var(--line)}
+.is-beginner .beginner-model-image{flex:1;display:block;width:100%;height:100%;min-height:260px;max-height:420px;padding:0;background:var(--field);border:0;border-radius:0;overflow:hidden}
+.is-beginner .beginner-model-image img{display:block;width:100%;height:100%;max-height:420px;object-fit:contain;transition:transform .2s}
+.is-beginner .beginner-model-image:hover img{transform:scale(1.025)}
+.is-beginner .beginner-model-placeholder{flex:1;min-height:260px;height:auto;padding:20px;overflow-wrap:anywhere}
+.is-beginner .beginner-image-credit{display:block;flex:none;color:var(--muted);padding:10px 14px;border-top:1px solid var(--line);font-size:9px;line-height:1.5}
+.is-beginner .beginner-model-copy{padding:25px 29px;gap:12px;min-width:0;align-items:stretch}
+.is-beginner .beginner-model-copy h3{font:600 24px Manrope,sans-serif;letter-spacing:-.6px;line-height:1.2;margin:0}
+.is-beginner .beginner-model-copy>p{font-size:12px;line-height:1.7;max-width:74ch}
+.is-beginner .beginner-model-version{font-size:9px;letter-spacing:1.6px;color:var(--ok)}
+.is-beginner .beginner-model-tags{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+.is-beginner .beginner-model-tags button{width:auto;min-height:0;flex:none;margin:0;border:1px solid var(--line);background:transparent;color:var(--muted);font-size:9px;font-weight:400;padding:2px 6px;border-radius:4px;line-height:1.3}
+.is-beginner .beginner-model-tags button:hover{color:var(--chalk);background:var(--raised)}
+.is-beginner .beginner-prompt-guide{padding:12px 15px;background:var(--field);border-left:2px solid color-mix(in srgb,var(--ok) 60%,var(--line));border-radius:0 7px 7px 0}
+.is-beginner .beginner-prompt-guide h4{margin:0 0 6px;font-size:11px;color:var(--chalk)}
+.is-beginner .beginner-prompt-guide p{margin:0;font-size:11px;line-height:1.7;color:var(--muted)}
+.is-beginner .beginner-model-copy .beginner-model-note{font-size:10px;color:var(--muted)}
+.is-beginner .beginner-family-guide{font-size:9px;color:var(--muted)}
+.is-beginner .beginner-model-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:3px}
+.is-beginner .beginner-model-actions small{color:var(--muted);font-size:10px;margin-right:auto}
+.is-beginner .beginner-model-copy .beginner-model-actions button{width:auto;min-height:36px;margin:0}
+.is-beginner .beginner-model-actions button,.is-beginner .beginner-base-download button{border:1px solid var(--line);background:var(--raised);color:var(--chalk);border-radius:7px;padding:9px 13px;font-size:11px}
+.is-beginner .beginner-model-copy>.aio-confirm-button{align-self:flex-start}
+.is-beginner .beginner-model-filename{font-size:9px;color:var(--muted);overflow-wrap:anywhere}
+.is-beginner .beginner-model-filename a{color:var(--ok)}
+.is-beginner .beginner-search-hint{font-size:10px;color:var(--muted);margin:9px 0 25px;line-height:1.6}
+.is-beginner .beginner-base-download{max-width:760px;padding:24px;background:var(--panel);border:1px solid var(--line);border-radius:12px;display:flex;flex-wrap:wrap;gap:14px;align-items:center}
+.is-beginner .beginner-base-download p,.is-beginner .beginner-base-download label,.is-beginner .beginner-download-plan{flex:1 0 100%;font-size:12px;line-height:1.7;overflow-wrap:anywhere}
+.is-beginner .beginner-base-download p{margin:0;color:var(--muted)}
+.is-beginner .beginner-base-download select{display:block;width:100%;margin-top:8px;background:var(--field);color:var(--chalk);border:1px solid var(--line);padding:10px;border-radius:7px}
+.is-beginner .beginner-download-plan{padding:16px;background:var(--field);border:1px solid var(--line);border-radius:8px}
+@media(max-width:760px){.is-beginner .beginner-model-card{grid-template-columns:minmax(0,1fr)}.is-beginner .beginner-model-visual{border-right:0;border-bottom:1px solid var(--line)}.is-beginner .beginner-model-image{height:280px;min-height:0;flex:none}.is-beginner .beginner-model-copy{padding:22px}.is-beginner .beginner-model-copy h3{font-size:22px}}

@@ -317,10 +317,10 @@ struct OwnedProbe {
     job: crate::win::Job,
 }
 impl OwnedProbe {
-    fn spawn(mut command: Command) -> Result<Self, String> {
+    fn spawn(mut command: Command, output: Option<File>) -> Result<Self, String> {
         command
             .stdin(Stdio::null())
-            .stdout(Stdio::piped())
+            .stdout(output.map(Stdio::from).unwrap_or_else(Stdio::piped))
             .stderr(Stdio::piped());
         #[cfg(unix)]
         {
@@ -424,12 +424,18 @@ fn capture(reader: impl Read, limit: usize, overflow: &AtomicBool) -> Result<Vec
     Ok(bytes)
 }
 pub(crate) fn run_probe(command: Command, timeout: Duration) -> Result<Vec<u8>, String> {
-    let mut owned = OwnedProbe::spawn(command)?;
-    let stdout = owned
-        .child
-        .stdout
-        .take()
-        .ok_or("VIDEO_PROBE: Missing probe stdout.")?;
+    run_tool(command, timeout, &AtomicBool::new(false), None)
+}
+
+/// Shared owned-process runner: streamed output stays descriptor-anchored, diagnostics bounded.
+pub(crate) fn run_tool(
+    command: Command,
+    timeout: Duration,
+    cancel: &AtomicBool,
+    file: Option<File>,
+) -> Result<Vec<u8>, String> {
+    let mut owned = OwnedProbe::spawn(command, file)?;
+    let stdout = owned.child.stdout.take();
     let stderr = owned
         .child
         .stderr
@@ -437,10 +443,16 @@ pub(crate) fn run_probe(command: Command, timeout: Duration) -> Result<Vec<u8>, 
         .ok_or("VIDEO_PROBE: Missing probe stderr.")?;
     let overflow = AtomicBool::new(false);
     std::thread::scope(|scope| {
-        let output = scope.spawn(|| capture(stdout, OUTPUT_LIMIT, &overflow));
+        let output = scope.spawn(|| match stdout {
+            Some(stdout) => capture(stdout, OUTPUT_LIMIT, &overflow),
+            None => Ok(Vec::new()),
+        });
         let errors = scope.spawn(|| capture(stderr, STDERR_LIMIT, &overflow));
         let deadline = Instant::now() + timeout;
         let outcome = loop {
+            if cancel.load(Ordering::Relaxed) {
+                break Err("AUDIO_CANCELLED: Audio enhancement cancelled; original preserved.");
+            }
             if overflow.load(Ordering::Relaxed) {
                 break Err("VIDEO_PROBE_LIMIT: ffprobe metadata exceeded its output limit.");
             }

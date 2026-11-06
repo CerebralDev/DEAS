@@ -36,6 +36,10 @@ impl Session {
         Ok(Arc::clone(source))
     }
 }
+pub(crate) fn source(id: &str) -> Result<Arc<RetainedSource>, String> {
+    SESSION.lock().map_err(|_| INVALID)?.source(id)
+}
+
 pub(crate) fn strict_id(id: &str) -> Result<(), String> {
     let parsed = uuid::Uuid::parse_str(id).map_err(|_| INVALID)?;
     if parsed.get_version_num() != 4 || parsed.to_string() != id {
@@ -138,9 +142,7 @@ mod tests {
         for name in ["native_video_post_upload", "native_video_post_inspect_path"] {
             assert!(include_str!("main.rs").contains(&format!("deas::{name},")));
             assert!(include_str!("lib.rs").contains(name));
-            assert!(
-                include_str!("../permissions/video_post.toml").contains(&format!("\"{name}\""))
-            );
+            assert!(include_str!("../permissions/video_post.toml").contains(&format!("\"{name}\"")));
         }
     }
 }

@@ -2,3 +2,8 @@
 identifier = "allow-native-video-post-inspect"
 description = "Explicit native video source inspection (OS chooser or a Media-panel path) and copying the retained source into the bound backend's input folder for a backend enhance job; no rendering, output writes or native SDK execution."
 commands.allow = ["native_video_post_inspect", "native_video_post_inspect_path", "native_video_post_upload"]
+
+[[permission]]
+identifier = "allow-native-audio-enhance"
+description = "Explicit audio post-export, consent-gated isolated runtime/model installation, read-only status and cancellation; retained sources and no-clobber output publication."
+commands.allow = ["native_audio_enhance_capabilities", "native_audio_enhance_export", "native_audio_enhance_cancel", "native_audio_enhance_install", "native_audio_enhance_install_cancel", "native_audio_enhance_install_status"]

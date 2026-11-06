@@ -10,6 +10,19 @@ vi.mock('@tauri-apps/api/core',()=>({isTauri:()=>true}));
 vi.mock('../../lib/imageMetadata',async importOriginal=>({...await importOriginal<typeof import('../../lib/imageMetadata')>(),readImageMetadata:vi.fn()}));
 afterEach(()=>{cleanup();vi.clearAllMocks();});
 const job:JobStatus={id:'a',baseUrl:'http://127.0.0.1',promptId:'p',state:'succeeded',outputs:[],error:null,generationReady:false,appVersion:'0.1.14',metadata:{startedAt:1700000000000,generationMs:13310},intent:{recipeId:'checkpoint-text-to-image-diagnostic',version:1,positivePrompt:'<img src=x onerror=alert(1)> forest',negativePrompt:'blur',checkpoint:'Krea2/model.safetensors',width:896,height:1152,seed:940563189,steps:8,cfg:1,sampler:'euler',scheduler:'simple',outputPrefix:'DEAS',diffusion:{textEncoder:'qwen3vl_4b.safetensors',clipType:'krea2',vae:'qwen_vae.safetensors'},loras:[{name:'style.safetensors',strength:0.7}]}};
+test.each(['clean','deep','stems'] as const)('audio metadata shows the submitted %s selection, never later preferences',mode=>{
+ localStorage.setItem('deas.locale.v1','en');
+ localStorage.setItem('deas.pref.studio.audioEnhance.post.mode',JSON.stringify('off'));
+ const intent:JobStatus['intent']={recipeId:'music-generation',version:1,family:'yue2',mode:'t2m',planning:'off',checkpoint:'yue2',style:'pop',lyrics:'',seed:1,maxDuration:30,steps:20,cfg:1,sampler:'dpm_2',scheduler:'sgm_uniform',generation:{temperature:1,topP:0.95,topK:100,repetitionPenalty:1.2,cfgScale:1},outputPrefix:'raw/audio/x',audioEnhance:{mode,profile:mode==='deep'?'speech':'mix'}};
+ const view=render(<I18nProvider><GenerationMetadata job={{...job,intent}}/></I18nProvider>);
+ const row=Array.from(view.container.querySelectorAll('dt')).find(el=>el.textContent==='Audio enhancement');
+ expect(row?.nextElementSibling?.textContent).toContain(mode==='clean'?'Clean':mode==='deep'?'Deep':'Stems');
+ expect(row?.nextElementSibling?.textContent).toContain(mode==='deep'?'Speech':'Music / mixed audio');
+ const {audioEnhance,...off}=intent;void audioEnhance;
+ view.rerender(<I18nProvider><GenerationMetadata job={{...job,intent:off}}/></I18nProvider>);
+ expect(screen.queryByText('Audio enhancement')).toBeNull();
+});
+
 test('renders native generation settings as text and switches with the selected job without stale metadata',()=>{
  localStorage.setItem('deas.locale.v1','en');
  const {container,rerender}=render(<I18nProvider><GenerationMetadata job={job}/></I18nProvider>);

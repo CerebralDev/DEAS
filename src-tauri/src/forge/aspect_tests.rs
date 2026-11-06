@@ -241,14 +241,12 @@ fn forge_unset_and_exact_legacy_aspects_stay_compatible_without_unknown_fallback
     ] {
         req.controls.aspect_ratio = Some(aspect.into());
         assert!(validate_request(&data, &req).is_err(), "{aspect}");
-        assert!(
-            layout_size(
-                &data.pack.models["moss"],
-                req.mode.as_deref(),
-                &req.controls
-            )
-            .is_none()
-        );
+        assert!(layout_size(
+            &data.pack.models["moss"],
+            req.mode.as_deref(),
+            &req.controls
+        )
+        .is_none());
     }
 }
 
@@ -266,31 +264,25 @@ fn forge_layout_consumes_one_canvas_and_preserves_drawn_geometry() {
     req.mode = Some("Layout JSON".into());
     req.controls.layout = Some(layout(1216.0, 832.0));
     let prepared = prepare(&data, &req, &RefState::default()).unwrap();
-    assert!(
-        prepared
-            .user
-            .contains("Canvas: 1216×832 — measure every Layout JSON bbox")
-    );
+    assert!(prepared
+        .user
+        .contains("Canvas: 1216×832 — measure every Layout JSON bbox"));
     let mut body = json!({"summary":{"caption":"scene"},"items":[{"label":"text","text":"WRONG","caption":"written caption","bbox":[0,0,1,1]}]}).to_string();
-    assert!(
-        tidy_layout(
-            prepared.model,
-            prepared.mode.as_deref(),
-            &prepared.controls,
-            &mut body
-        )
-        .is_none()
-    );
+    assert!(tidy_layout(
+        prepared.model,
+        prepared.mode.as_deref(),
+        &prepared.controls,
+        &mut body
+    )
+    .is_none());
     let result: Value = serde_json::from_str(&body).unwrap();
     assert_eq!(result["items"][0]["bbox"], json!([-200, -300, 200, 300]));
     assert_eq!(result["items"][0]["text"], "KEEP");
     assert_eq!(result["items"][0]["caption"], "written caption");
     req.controls.layout.as_mut().unwrap().width = 1232.0;
-    assert!(
-        validate_request(&data, &req)
-            .unwrap_err()
-            .contains("layout and effective canvas disagree")
-    );
+    assert!(validate_request(&data, &req)
+        .unwrap_err()
+        .contains("layout and effective canvas disagree"));
     req.controls.canvas = None;
     req.controls.aspect_ratio = Some("N/A".into());
     req.controls.layout.as_mut().unwrap().width = 136.0;

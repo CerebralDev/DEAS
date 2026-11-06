@@ -32,8 +32,12 @@ pub(crate) fn validate(value: &Value) -> Result<(), String> {
         || r.reroll > 0x7fffffff
         || !(1..=10000).contains(&r.token_budget)
         || r.selection_state.len() > 4096
-        || r.variables_json.as_ref().is_some_and(|v| v.len() > 1_000_000)
-        || r.variable_selections.as_ref().is_some_and(|v| v.len() > 256_000)
+        || r.variables_json
+            .as_ref()
+            .is_some_and(|v| v.len() > 1_000_000)
+        || r.variable_selections
+            .as_ref()
+            .is_some_and(|v| v.len() > 256_000)
         || r.selection_state.iter().any(|(k, s)| {
             k.is_empty()
                 || k.encode_utf16().count() > 512
@@ -80,7 +84,12 @@ pub async fn native_wildcard_build(base_url: String, rules: Value) -> Result<Val
         .timeout(Duration::from_secs(10))
         .build()
         .map_err(|_| "Cannot create wildcard client")?;
-    let response = client.post(url).json(&payload).send().await.map_err(|_| "Wildcard build request failed")?;
+    let response = client
+        .post(url)
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|_| "Wildcard build request failed")?;
     if !response.status().is_success() {
         return Err(format!(
             "{} Wildcard build unavailable",

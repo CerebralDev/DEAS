@@ -1,0 +1,3 @@
+# Optional codec bridge for managed Torch 2.14 / torchaudio 2.9+; never installed in ComfyUI.
+# Linux CPython 3.12 x86_64 acceptance profile. Other platforms require their own checked codec.
+torchcodec @ https://files.pythonhosted.org/packages/05/44/d00a4df9c8985c6ce9e6d1e3f861496cdcde8b5b4b7543358d49e03f7337/torchcodec-0.17.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl --hash=sha256:defd5f0901999c9e981f6465a0f4aac8b5a5147e38e539b77c0711c015cf5349

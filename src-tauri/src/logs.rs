@@ -89,6 +89,23 @@ pub fn native_logs_people_image_error() {
     );
 }
 
+/// Fixed beginner-interface diagnostics; never accept paths, prompts or remote error text.
+#[tauri::command]
+pub fn native_logs_beginner_error(operation: String) {
+    static LAST: Mutex<[Option<std::time::Instant>; 2]> = Mutex::new([None; 2]);
+    let mut last = LAST.lock().unwrap_or_else(|e| e.into_inner());
+    let (slot, message) = match operation.as_str() {
+        "catalog" => (0, "ERROR: beginner Models catalog-read: native model catalog unavailable (repeats limited to once per minute)"),
+        "download" => (1, "ERROR: beginner Models download: native browse, plan, transfer or status unavailable; inspect provider access and destination (repeats limited to once per minute)"),
+        _ => return,
+    };
+    if last[slot].is_some_and(|at| at.elapsed() < std::time::Duration::from_secs(60)) {
+        return;
+    }
+    last[slot] = Some(std::time::Instant::now());
+    push(Source::Deas, message);
+}
+
 /// Fixed reference-preview diagnostic; no media paths or frontend text cross this boundary.
 #[tauri::command]
 pub fn native_logs_reference_media_error() {
@@ -137,6 +154,28 @@ mod tests {
     use super::*;
 
     #[test]
+    fn beginner_catalog_errors_are_fixed_shared_and_rate_limited() {
+        native_logs_beginner_error("secret arbitrary text".into());
+        native_logs_beginner_error("catalog".into());
+        native_logs_beginner_error("catalog".into());
+        let reports: Vec<_> = native_logs(0)
+            .into_iter()
+            .filter(|e| e.text.starts_with("ERROR: beginner Models catalog-read:"))
+            .collect();
+        assert_eq!(reports.len(), 1);
+        assert_eq!(reports[0].source, Source::Deas);
+        assert!(!reports[0].text.contains("secret"));
+        native_logs_beginner_error("download".into());
+        native_logs_beginner_error("download".into());
+        let downloads: Vec<_> = native_logs(0)
+            .into_iter()
+            .filter(|e| e.text.starts_with("ERROR: beginner Models download:"))
+            .collect();
+        assert_eq!(downloads.len(), 1);
+        assert_eq!(downloads[0].source, Source::Deas);
+    }
+
+    #[test]
     fn people_image_error_is_fixed_shared_and_rate_limited() {
         native_logs_people_image_error();
         native_logs_people_image_error();
@@ -173,11 +212,9 @@ mod tests {
         let seq = after(0).last().unwrap().seq;
         push(Source::Comfyui, "second");
         // Other tests share the global store: only assert on this test's own entries.
-        assert!(
-            after(seq)
-                .iter()
-                .any(|e| e.text == "second" && e.source == Source::Comfyui)
-        );
+        assert!(after(seq)
+            .iter()
+            .any(|e| e.text == "second" && e.source == Source::Comfyui));
         assert!(after(seq).iter().all(|e| e.text != "first"));
     }
 

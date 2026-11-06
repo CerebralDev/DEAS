@@ -11,10 +11,11 @@ beforeEach(() => { localStorage.setItem(LOCALE_STORAGE_KEY, 'en'); vi.mocked(isT
 afterEach(() => { cleanup(); localStorage.clear(); vi.resetAllMocks(); });
 const source: VideoPostInspection = { sourceId: '6f1c2b3a-4d5e-4f60-8a9b-0c1d2e3f4a5b', name: 'clip.mp4', width: 1280, height: 720, fpsNumerator: 24, fpsDenominator: 1, durationSeconds: 3, pixelFormat: 'yuv420p', fieldOrder: 'progressive', colorTransfer: 'bt709', audioStreams: 1, subtitleStreams: 0, blockers: [], timingVerified: false, processingReady: false };
 
-test('mount makes no native calls; the chooser inspection feeds the backend panel and the standalone engine is gone', async () => {
-  vi.mocked(invoke).mockResolvedValue(source);
+test('mount only reads audio installation recovery; chooser inspection feeds the backend panel without execution', async () => {
+  vi.mocked(invoke).mockImplementation(async command => command === 'native_audio_enhance_install_status' ? { running: false, mode: '', stage: '', downloaded: 0, total: 0 } : source);
   render(<I18nProvider><TrueVideoEnhancer endpoint="http://127.0.0.1:7801/"/></I18nProvider>);
-  expect(invoke).not.toHaveBeenCalled();
+  expect(invoke).toHaveBeenCalledExactlyOnceWith('native_audio_enhance_install_status');
+  vi.mocked(invoke).mockClear();
   expect(document.querySelector('[data-tve-scale]')).toBeNull();
   expect(document.querySelector('[data-tve-bind]')).toBeNull();
   expect(document.querySelector('[data-tve-standalone]')).toBeNull();
@@ -27,7 +28,7 @@ test('mount makes no native calls; the chooser inspection feeds the backend pane
 });
 
 test('without media roots there is no Media panel; with roots a video tile is inspected by path', async () => {
-  vi.mocked(invoke).mockResolvedValue(source);
+  vi.mocked(invoke).mockImplementation(async command => command === 'native_audio_enhance_install_status' ? { running: false, mode: '', stage: '', downloaded: 0, total: 0 } : source);
   const { unmount } = render(<I18nProvider><TrueVideoEnhancer endpoint=""/></I18nProvider>);
   expect(document.querySelector('[data-tve-media]')).toBeNull();
   unmount();
