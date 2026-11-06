@@ -1,5 +1,22 @@
 # DEAS verification — native baseline, optional capabilities and languages
 
+## Release 0.2.17 (published)
+
+Published [v0.2.17](https://github.com/darksidewalker/DEAS/releases/tag/v0.2.17) from source commit `73000469f6049e7f5ed3b66d6768dcf3677aa285` (tree `ba14abe9312436fa737ecd20efe55a6cd9269282`). Main and annotated release tag were pushed/read back on both remotes. This release rolls up unpublished/local-only 0.2.15 and 0.2.16 work, plus the utility-tab grouping and observed ACE export-alias correction. Independent bounded review passed; the fresh local gates and acceptance limits are listed below.
+
+Four unsigned assets were uploaded to a draft, verified against GitHub's exact SHA-256 digests and sizes, then published as the latest release. All four were downloaded again; byte hashes and `sha256sum -c SHA256SUMS` passed. Release ID: `436749557`. An initially stale releases-list response immediately after draft creation was retried against the same draft; no duplicate release was created.
+
+| Asset | SHA-256 |
+| --- | --- |
+| `BUILD-MANIFEST.json` | `80e2de5e6f70ad9d3b404dc3319220d6cdbb4c6b51349fbe5d2c6891d1122c4e` |
+| `SHA256SUMS` | `c2e7333c7bedafb6de1409da73e3472b85f23c7721ded5f90f1a808eae9bfd9f` |
+| `deas-linux-amd64` | `cf29cb2c887fd390d6397323bba1a07dae52b42febc774b2860ca15c4dd71232` |
+| `deas.exe` | `8345f0f094f48ec12c27a306ec8da10a334719c210b317bba5d96ca6e65d6bb4` |
+
+Linux is a host-linked build with measured direct GLIBC floor **2.39** and `ldd` reporting no missing libraries, not an Ubuntu 22.04 portable build. Windows was cargo-xwin cross-built; native Windows runtime/GUI and ACE model inference remain unverified. Both executables contain the current built frontend JS chunk. Hosted Verify/Release workflows remain manually disabled; their success is not claimed. No model files were moved/downloaded/executed and no foreign services were restarted.
+
+Canonical local files: `artifacts/releases/v0.2.17/` (Linux binary, Windows exe, manifest, checksums); build records/scripts/logs are retained under ignored `artifacts/build-records/v0.2.17/`. The byte-identical loose Linux rebuild was removed after verified staging. Quit the old instance and launch the versioned Linux executable. The documentation provenance commit follows the immutable release source/tag.
+
 ## Release candidate 0.2.17 (local gates)
 
 Utility tabs now form a separate right-hand group (Monitoring, Run Plan, Backend, Logs), including right alignment after wrapping on narrow windows; Studio, Library, Prompt Forge, Chat, TVE and Comfy stay left. Existing tab IDs/retained view state are unchanged. Source tests assert exact group membership and the browser viewport gate checks group geometry across six locales and five widths. Desktop and German narrow screenshots inspected. The exact observed ACE export alias `modelspec.architecture = "ace-step-1_5"` now uses matching 1.5 regular/XL header shapes; incomplete/contradictory structures stay unresolved/conflicting and training variant evidence remains filename-based. The explicitly selected real local `unet/Ace/ace_step_1.5_turbo_aio.safetensors` header detects as `ace-step-1-5-turbo` / `Filename`; no model weights were loaded, moved or executed. AIO under UNet is still the split-loader path: use checkpoints for its embedded encoders/VAE, or supply split components.
