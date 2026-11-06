@@ -2,19 +2,9 @@
   "theme.ui.openThemesFolder": "Open themes folder",
   "theme.ui.someThemePacksCouldNotBeLoadedBuilt": "Some theme packs could not be loaded. Default remains available for recovery. See Logs.",
   "theme.ui.theSavedThemeIsUnavailableDefaultIsShown": "The saved theme is unavailable. Default is shown until you restore the pack or choose another theme.",
-  "theme.ui.pixelVintage": "PIXEL VINTAGE",
-  "theme.ui.wineInProgress": "Wine in progress.",
-  "theme.ui.mouseDoorKnockFourTimesToInviteThe": "Mouse door — knock four times to invite the mouse",
-  "theme.ui.knockFourTimesQuicklyDodgeTheMouseFor": "Knock four times quickly. Dodge the mouse for 10 seconds. Escape sends it home.",
   "theme.ui.folderHint": "Drop theme folders into your environment’s themes folder.",
   "theme.ui.chooseEnvironment": "Choose your DEAS environment in Backend to load theme packs.",
   "theme.ui.loading": "Loading themes…",
   "theme.ui.refresh": "Refresh themes",
-  "theme.ui.folderFailed": "Could not open the themes folder. See Logs.",
-  "theme.ui.wineWaiting": "Let it breathe…",
-  "theme.ui.mouseIdle": "Knock four times. Brie warned.",
-  "theme.ui.mouseCaught": "Cheese heist! Your pointer still works.",
-  "theme.ui.mouseEscaped": "You got a whey! Ten seconds, no cheese lost.",
-  "theme.ui.mouseChasing": "Catch me if you Camembert! Dodge for 10 seconds.",
-  "theme.ui.mouseSafe": "Your cheese is safe."
+  "theme.ui.folderFailed": "Could not open the themes folder. See Logs."
 }

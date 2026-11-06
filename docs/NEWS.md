@@ -27,7 +27,7 @@
 
 ## 0.2.14 BETA
 
-- Install local colour/image themes from `theme-packs/`, customize them with the offline editor and apply changes through Quick Settings → Refresh themes. French and Paris remain optional; existing packs and saved selections are not overwritten. [Theme packs](THEME-PACKS.md).
+- Install local colour/image themes from `theme-packs/`, customize them with the offline editor and apply changes through Quick Settings → Refresh themes. Existing packs and saved selections are not overwritten. [Theme packs](THEME-PACKS.md).
 
 - Reuse SwarmUI `Stable-Diffusion` and `Lora` folders through the existing model-root settings, including existing directory links. Model-family sidecars are saved beside the actual file without moving weights. The checkpoint dropdown filters candidates for the current pipeline and keeps an unavailable saved selection explicit.
 
@@ -160,7 +160,7 @@
 - **Stop** is quiet and frees the queue; right-click a queue entry to stop just that generation.
 - The preview toolbar always sits top right; Linux audio previews (YuE2 FLAC) play through the native player with controls at the bottom.
 
-See the [changelog](CHANGELOG.md#021-beta) for details.
+See the [changelog](CHANGELOG.md#0211-beta-untagged-shipped-in-0214) for details.
 
 ## 0.2.0 BETA
 

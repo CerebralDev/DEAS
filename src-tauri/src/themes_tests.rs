@@ -8,30 +8,15 @@ fn all_existing_theme_packs_are_valid_without_mutating_them() {
         .parent()
         .unwrap()
         .join("theme-packs");
-    for group in ["classic", "optional"] {
-        for entry in fs::read_dir(source.join(group).join("themes")).unwrap() {
-            let entry = entry.unwrap();
-            let target = t.path().join("themes").join(entry.file_name());
-            fs::create_dir_all(&target).unwrap();
-            copy_folder(&entry.path(), &target);
-        }
+    for entry in fs::read_dir(source.join("classic").join("themes")).unwrap() {
+        let entry = entry.unwrap();
+        let target = t.path().join("themes").join(entry.file_name());
+        fs::create_dir_all(&target).unwrap();
+        copy_folder(&entry.path(), &target);
     }
     let result = scan(t.path().to_str().unwrap()).unwrap();
     assert!(result.warnings.is_empty(), "{:?}", result.warnings);
-    assert_eq!(result.packs.len(), 11);
-    let french = result.packs.iter().find(|p| p.id == "french").unwrap();
-    assert!(french.effects.mouse && french.effects.wine);
-    assert!(french.assets.contains_key("eiffel"));
-    assert_eq!(
-        result
-            .packs
-            .iter()
-            .find(|p| p.id == "paris")
-            .unwrap()
-            .presentation
-            .as_deref(),
-        Some("paris")
-    );
+    assert_eq!(result.packs.len(), 9);
 }
 fn copy_folder(source: &Path, target: &Path) {
     fs::create_dir_all(target).unwrap();

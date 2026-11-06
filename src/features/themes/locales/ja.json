@@ -2,19 +2,9 @@
   "theme.ui.openThemesFolder": "テーマフォルダーを開く",
   "theme.ui.someThemePacksCouldNotBeLoadedBuilt": "一部のテーマを読み込めませんでした。復旧用に Default を利用できます。ログを確認してください。",
   "theme.ui.theSavedThemeIsUnavailableDefaultIsShown": "保存したテーマは利用できません。復元するか別のテーマを選ぶまで Default を表示します。",
-  "theme.ui.pixelVintage": "ピクセル・ヴィンテージ",
-  "theme.ui.wineInProgress": "ワインの処理中。",
-  "theme.ui.mouseDoorKnockFourTimesToInviteThe": "ネズミの扉 — 4回ノックして招待",
-  "theme.ui.knockFourTimesQuicklyDodgeTheMouseFor": "素早く4回ノックし、10秒間ネズミを避けます。Escape で帰ります。",
   "theme.ui.folderHint": "環境の themes フォルダーにテーマフォルダーを置いてください。",
   "theme.ui.chooseEnvironment": "テーマを読み込むには Backend で DEAS 環境を選んでください。",
   "theme.ui.loading": "テーマを読み込み中…",
   "theme.ui.refresh": "テーマを更新",
-  "theme.ui.folderFailed": "テーマフォルダーを開けませんでした。ログを確認してください。",
-  "theme.ui.wineWaiting": "少し呼吸させて…",
-  "theme.ui.mouseIdle": "4回ノック。チーズにご注意！",
-  "theme.ui.mouseCaught": "チーズが盗まれました！ポインターはそのまま使えます。",
-  "theme.ui.mouseEscaped": "逃げ切りました！10秒間、チーズは無事でした。",
-  "theme.ui.mouseChasing": "捕まえられるかな？10秒間避けてください。",
-  "theme.ui.mouseSafe": "チーズは無事です。"
+  "theme.ui.folderFailed": "テーマフォルダーを開けませんでした。ログを確認してください。"
 }

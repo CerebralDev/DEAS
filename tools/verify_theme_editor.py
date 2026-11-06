@@ -1,8 +1,15 @@
 """Actual Chromium offline editor; browser directory handles are a strict in-memory fixture."""
-import base64,json
+import base64,json,struct,zlib
 from pathlib import Path
 from playwright.sync_api import expect
 import verify_postprocessing as runner
+
+def png_bytes():
+    raw = b'\x00\xff\x00\x00\xff'
+    def chunk(kind, payload):
+        return struct.pack('>I', len(payload)) + kind + payload + struct.pack('>I', zlib.crc32(kind + payload) & 0xffffffff)
+    ihdr = struct.pack('>IIBBBBB', 1, 1, 8, 6, 0, 0, 0)
+    return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', ihdr) + chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b'')
 
 FIXTURE=r'''
 window.__themeFiles={'theme.json':__MANIFEST__};window.__themeDirs=new Set(['']);window.__textReads=[];
@@ -20,7 +27,7 @@ window.showDirectoryPicker=async()=>directory();
 '''
 
 def regressions(page,root,manifest,checks):
- png=(root/'theme-packs/optional/themes/french/assets/cheese.png').read_bytes()
+ png=png_bytes()
  payload={'name':'replacement.png','mimeType':'image/png','buffer':png}
  page.evaluate('value=>window.__baseline=value',manifest)
  page.evaluate('value=>window.__png=value',list(png))
@@ -37,7 +44,7 @@ def regressions(page,root,manifest,checks):
  # Pause after the replacement asset starts committing, not merely before save begins.
  page.evaluate("""()=>{window.__held=false;__beforeClose=async key=>{if(key.startsWith('assets/')){__held=true;await new Promise(resolve=>window.__resume=resolve);}};}""")
  save();page.wait_for_function('()=>window.__held')
- for selector in ['#name','#id','#author','#color-ok','#mouse','#wine','[data-asset=background]']:
+ for selector in ['#name','#id','#author','#color-ok','[data-asset=background]']:
   expect(page.locator(selector)).to_be_disabled()
  expect(page.get_by_role('button',name='Remove mouse cursor',exact=True)).to_be_disabled()
  expect(page.locator('#open')).to_be_disabled();expect(page.locator('#undo')).to_be_disabled()
@@ -94,7 +101,7 @@ def regressions(page,root,manifest,checks):
  checks.append('delayed existing-image preview cannot replace a newly selected image preview')
  reset()
  invalid=[]
- for key,values in {'id':[42,['sage'],None], 'base':[['sage'],None,42], 'presentation':[False,0,'',None,[],{}], 'name':['bad\u0085name','bad\u202ename','bad\u2066name'], 'author':['bad\u009fname','bad\u200bname']}.items():
+ for key,values in {'id':[42,['sage'],None], 'base':[['sage'],None,42], 'name':['bad\u0085name','bad\u202ename','bad\u2066name'], 'author':['bad\u009fname','bad\u200bname']}.items():
   for value in values:invalid.append({**json.loads(manifest),key:value})
  assert page.evaluate("values=>values.every(value=>{try{validate(value);return false;}catch{return true;}})",invalid)
  assert page.evaluate("value=>{validate(value);return true;}",json.loads(manifest))
@@ -111,7 +118,7 @@ def regressions(page,root,manifest,checks):
   assert page.evaluate('__textReads.length')==0,stage
  assert page.evaluate("""async()=>{const file=new File(['é'.repeat(32769)],'theme.json');file.text=()=>{throw Error('text was read');};try{await manifestText(file);return false;}catch(error){return error.message.includes('64 KiB');}}""")
  assert page.evaluate("""async()=>{try{await load(' '.repeat(65536)+'{}',null);return false;}catch(error){return error.message.includes('64 KiB');}}""")
- checks.append('strict id/base/presentation types, Unicode Cc/Cf rejection, 64 KiB byte bounds before open/early-save/late-save text reads')
+ checks.append('strict id/base types, Unicode Cc/Cf rejection, 64 KiB byte bounds before open/early-save/late-save text reads')
  reset()
  result=page.evaluate("""async()=>{const valid=new Uint8Array(__png);const huge=valid.slice();new DataView(huge.buffer).setUint32(16,50000);
   const webp=new Uint8Array(30);webp.set([82,73,70,70,22,0,0,0,87,69,66,80,86,80,56,88,10,0,0,0]);webp.set([255,255,255],24);webp[27]=1;
@@ -149,7 +156,7 @@ def verify(browser,url,shots):
   webp=page.evaluate("""async()=>{const canvas=document.createElement('canvas');canvas.width=16;canvas.height=16;canvas.getContext('2d').fillRect(0,0,16,16);const blob=await new Promise(r=>canvas.toBlob(r,'image/webp'));return btoa(String.fromCharCode(...new Uint8Array(await blob.arrayBuffer())));}""")
   page.locator('[data-asset=background]').set_input_files({'name':'my-picture.webp','mimeType':'image/webp','buffer':base64.b64decode(webp)})
   expect(page.locator('#status')).to_contain_text('Image ready')
-  page.locator('[data-asset=cursor]').set_input_files(root/'theme-packs/optional/themes/french/assets/cheese.png')
+  page.locator('[data-asset=cursor]').set_input_files({'name':'cursor.png','mimeType':'image/png','buffer':png_bytes()})
   expect(page.locator('#status')).to_contain_text('Image ready')
   page.get_by_role('button',name='Save changes',exact=True).click();expect(page.locator('#status')).to_contain_text('Saved.')
   written=page.evaluate('JSON.parse(__themeFiles["theme.json"])')

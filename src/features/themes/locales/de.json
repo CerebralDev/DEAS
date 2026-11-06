@@ -2,19 +2,9 @@
   "theme.ui.openThemesFolder": "Themes-Ordner öffnen",
   "theme.ui.someThemePacksCouldNotBeLoadedBuilt": "Einige Theme-Pakete konnten nicht geladen werden. Default bleibt zur Wiederherstellung verfügbar. Siehe Logs.",
   "theme.ui.theSavedThemeIsUnavailableDefaultIsShown": "Das gespeicherte Theme ist nicht verfügbar. Bis zur Wiederherstellung oder einer anderen Auswahl wird Default angezeigt.",
-  "theme.ui.pixelVintage": "PIXEL-JAHRGANG",
-  "theme.ui.wineInProgress": "Wein in Arbeit.",
-  "theme.ui.mouseDoorKnockFourTimesToInviteThe": "Mäusetür — viermal klopfen, um die Maus einzuladen",
-  "theme.ui.knockFourTimesQuicklyDodgeTheMouseFor": "Viermal schnell klopfen. Weiche der Maus 10 Sekunden aus. Escape schickt sie nach Hause.",
   "theme.ui.folderHint": "Lege Theme-Ordner im Ordner themes deiner Umgebung ab.",
   "theme.ui.chooseEnvironment": "Wähle deine DEAS-Umgebung unter Backend, um Theme-Pakete zu laden.",
   "theme.ui.loading": "Themes werden geladen…",
   "theme.ui.refresh": "Themes aktualisieren",
-  "theme.ui.folderFailed": "Der Themes-Ordner konnte nicht geöffnet werden. Siehe Logs.",
-  "theme.ui.wineWaiting": "Lass ihn atmen…",
-  "theme.ui.mouseIdle": "Viermal klopfen. Vorsicht, Käse!",
-  "theme.ui.mouseCaught": "Käse geklaut! Dein Mauszeiger funktioniert weiterhin.",
-  "theme.ui.mouseEscaped": "Entwischt! Zehn Sekunden, kein Käse verloren.",
-  "theme.ui.mouseChasing": "Fang mich, wenn du kannst! Weiche 10 Sekunden aus.",
-  "theme.ui.mouseSafe": "Dein Käse ist sicher."
+  "theme.ui.folderFailed": "Der Themes-Ordner konnte nicht geöffnet werden. Siehe Logs."
 }

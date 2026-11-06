@@ -46,7 +46,7 @@ In the app, open **Backend**, review the installation, choose a **new writable e
 | Use prompt image references with SDXL, Qwen 2.1/Turbo, Krea 2 or MOSS | [Image references](docs/STUDIO.md#image-references) |
 | Write/enhance prompts, configure LLMs, use presets and wildcards | [Prompting](docs/PROMPTING.md) |
 | Discuss prompts with the configured LLM and optional web search | [Chat](docs/CHAT.md) |
-| Generate songs and melody covers with YuE2 | [Music](docs/MUSIC.md) |
+| Generate songs with YuE2 or ACE-Step; melody covers with YuE2 | [Music](docs/MUSIC.md) |
 | Inspect and upscale a video in the TVE tab | [TVE workspace](docs/STUDIO.md#tve-workspace) |
 | Review generation times and live CPU/RAM/GPU telemetry | [Monitoring tab](docs/STUDIO.md#monitoring-tab) |
 | Use GGUF models or assign a model's architecture (**Edit meta…**) | [GGUF](docs/STUDIO.md#gguf-models-and-manual-architecture-assignment) |

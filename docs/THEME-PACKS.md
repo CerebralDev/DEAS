@@ -13,13 +13,9 @@ Theme packs extend DEAS's existing colour picker with local palettes and optiona
 
 Nine palettes are supplied: Sage, Default, Liiti Pink, VOID (legacy ID `voud`), Alluring Abyss, Slimy Teal, Clawy Grey, Android White and Dragon's Hoard. The eight built-in schemes are always available; supplied packs add to the menu and a pack reusing a built-in ID overrides that entry in the selected environment. Deleting a pack folder and refreshing only removes its own entry. The application does not automatically copy or overwrite packs in your environment.
 
-French and Paris are optional separate packs in `theme-packs/optional/themes`; copy either in the same way. Neither is installed or selected automatically. Their artwork retains its source/license files.
-
-French supplies a cheese cursor, baguette scrollbars, Eiffel scene, mouse game and wine progress. The first mouse visit is scheduled after 45–105 seconds of eligible idle use, with later cooldowns of 90–180 seconds. Typing, dragging, dialogs, unfocused/hidden windows and reduced-motion preferences pause or suppress activity. Four rapid door clicks invite the mouse; evade for ten seconds or press Escape. The real pointer stays functional. Wine progress uses actual retained job progress, not a timer. Paris supplies a dark palette, lamps, moon and Eiffel scene.
-
 ## Offline editor
 
-Every supplied pack contains `theme.json`, `assets/`, `EDIT-THEME.html` and `README.md`. Optional packs also retain attribution/license files. Images are optional; the original flat PNG layout remains supported.
+Every supplied pack contains `theme.json`, `assets/`, `EDIT-THEME.html` and `README.md`. Packs retain attribution/license files when their artwork requires them. Images are optional; the original flat PNG layout remains supported.
 
 1. Open the pack's **EDIT-THEME.html** deliberately in Chrome or Edge, or use the shared `theme-packs/EDIT-THEMES.html`. It works offline; DEAS never executes this HTML.
 2. Click **Choose theme folder** and select the folder containing `theme.json`. Browser permission grants access to that chosen folder, not an upload.
@@ -46,15 +42,13 @@ The preview demonstrates colours/background/cursor, not the full application. Al
 
 `id` is a unique lowercase slug of letters, digits and hyphens (up to 64 characters); name and author are required bounded text. `base` selects one of the nine compiled scheme IDs, supplying omitted tokens. `colors` accepts supported colour tokens as hex RGB/RRGGBB/RRGGBBAA; the host derives RGB-channel tokens. The authoritative lists and limits live in `src-tauri/src/themes.rs`. The supplied manifests contain the exported palettes.
 
-Generic asset roles are `background`, `cursor` and `scrollbar`. Cursors use a 3×4 hotspot (32×32 PNG recommended). Existing French/Paris presentations use additional named artwork roles. Assets may be flat filenames or one level under exactly `assets/`; deeper nesting, backslashes, traversal, URLs, drive syntax, symlinks and Windows reparse points are rejected. Names use lowercase letters, digits and hyphens followed by `.png` or `.webp`. SVG, HTML, CSS and JavaScript are not runtime pack inputs.
-
-Optional `presentation` is `french` or `paris`; optional boolean effects `mouse` and `wine` require the French presentation and their assets. Effects are reviewed host components, not arbitrary executable plugins. New effect types require an application update.
+Generic asset roles are `background`, `cursor` and `scrollbar`. Cursors use a 3×4 hotspot (32×32 PNG recommended). Assets may be flat filenames or one level under exactly `assets/`; deeper nesting, backslashes, traversal, URLs, drive syntax, symlinks and Windows reparse points are rejected. Names use lowercase letters, digits and hyphens followed by `.png` or `.webp`. SVG, HTML, CSS and JavaScript are not runtime pack inputs.
 
 ## Recovery, safety and diagnostics
 
 Discovery reads only the selected environment's `themes/` directory and creates nothing. A missing directory yields an empty external catalog. Invalid packs are skipped independently; duplicate IDs are rejected together rather than selecting a winner by directory order. One external pack may reuse a compiled ID without duplicating the menu entry.
 
-The existing `appearance.scheme` preference and IDs remain stable. A missing/rejected selected pack falls back to Default without erasing the saved ID; restoring the folder restores the selection unless another theme was explicitly chosen. Switching clears old colour/image overrides, effects, listeners and timers. Late scans from a previous environment cannot replace the current catalog.
+The existing `appearance.scheme` preference and IDs remain stable. A missing/rejected selected pack falls back to Default without erasing the saved ID; restoring the folder restores the selection unless another theme was explicitly chosen. Switching clears old colour/image overrides, listeners and timers. Late scans from a previous environment cannot replace the current catalog.
 
 Local-window-only commands `native_theme_packs(root)` and `native_theme_folder(root)` use the `allow-native-theme-packs` permission. The root must be an existing absolute environment containing `deas-install.json`. Manifests reject unknown fields and are limited to 64 KiB. Discovery considers at most 128 folder entries, 64 colour overrides and 16 assets per pack. PNG/static WebP assets are decoded and validated: at most 2 MiB per file, 4096 pixels per dimension, 16 MiB decoded, and a 16 MiB compressed-image catalog budget.
 

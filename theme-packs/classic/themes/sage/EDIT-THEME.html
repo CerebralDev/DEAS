@@ -19,14 +19,13 @@
 <div class="card"><h2>About your theme</h2><div class="field-grid"><label>Theme name<input id="name" maxlength="120"></label><label>Theme ID<input id="id" maxlength="64" pattern="[a-z0-9-]+" title="Lowercase letters, numbers and hyphens only"></label></div><label>Created by<input id="author" maxlength="120"></label><small>The ID must be unique among your installed themes. Renaming the folder alone does not change the ID.</small></div>
 <div class="card"><h2>Colors</h2><p class="hint">Pick a color or type its hex value. Changes affect only this theme.</p><div id="colors"></div><details><summary>More colors</summary><div id="advanced"></div></details></div>
 <div class="card"><h2>Images</h2><p class="hint">Choose a PNG or a static WebP. Save copies it into this theme's assets folder and updates the path for you. Cursor: transparent PNG, 32 × 32 px recommended. Each image: at most 2 MiB and 4096 px per side; decoded pixels must fit within 16 MiB.</p><div id="assets"></div></div>
-<div class="card" id="effects-card" hidden><h2>Optional effects</h2><label><input id="mouse" type="checkbox"> Mouse and cheese game</label><label><input id="wine" type="checkbox"> Wine generation progress</label><small>These switches use the existing French presentation and its artwork. Keep required images in the theme folder.</small></div>
 </section>
-<aside class="preview"><div class="card"><h2>Palette preview</h2><p class="hint">A small sample of your colors and background. Use Refresh themes in DEAS to check the full interface and effects.</p><div class="sample" id="preview"><header>DEAS · Generation · Models · Collection</header><article><strong id="preview-name">Your theme</strong><p>Describe something you would like to create.</p><a>Explore your models</a></article><button type="button">Generate</button><img id="preview-cursor" alt="Cursor preview" hidden></div></div><div class="card"><h2>Your files</h2><pre>your-theme/
+<aside class="preview"><div class="card"><h2>Palette preview</h2><p class="hint">A small sample of your colors and background. Use Refresh themes in DEAS to check the full interface appearance.</p><div class="sample" id="preview"><header>DEAS · Generation · Models · Collection</header><article><strong id="preview-name">Your theme</strong><p>Describe something you would like to create.</p><a>Explore your models</a></article><button type="button">Generate</button><img id="preview-cursor" alt="Cursor preview" hidden></div></div><div class="card"><h2>Your files</h2><pre>your-theme/
 ├── theme.json
 ├── assets/
 │   ├── background.webp
 │   └── cursor.png
-└── README.md</pre><p class="hint">Only images actually used by the theme need to be present. Existing French and Paris artwork keeps its original filenames and credit files.</p></div></aside>
+└── README.md</pre><p class="hint">Only images actually used by the theme need to be present. Custom artwork keeps its source and license files beside it.</p></div></aside>
 </div>
 </main>
 <script>
@@ -49,17 +48,12 @@ function release(){for(const url of urls)URL.revokeObjectURL(url);urls=[];}
 function imageUrl(blob){const url=URL.createObjectURL(blob);urls.push(url);return url;}
 function validate(value){
  if(!value||Array.isArray(value)||value.schemaVersion!==1||typeof value.id!=='string'||!slug(value.id)||typeof value.base!=='string'||!Object.hasOwn(basePalettes,value.base))throw Error('Choose a valid DEAS theme.json (schema version 1 and a supported base).');
- if(Object.keys(value).some(key=>!['schemaVersion','id','name','author','base','colors','assets','presentation','effects'].includes(key)))throw Error('Unsupported field in theme.json. Use the documented DEAS theme format.');
- for(const key of ['colors','assets','effects'])if(value[key]!==undefined&&(!value[key]||typeof value[key]!=='object'||Array.isArray(value[key])))throw Error(key+' must be an object.');
- for(const [key,flag]of Object.entries(value.effects||{}))if(!['mouse','wine'].includes(key)||typeof flag!=='boolean')throw Error('Effect switches must be mouse/wine booleans.');
+ if(Object.keys(value).some(key=>!['schemaVersion','id','name','author','base','colors','assets'].includes(key)))throw Error('Unsupported field in theme.json. Use the documented DEAS theme format.');
+ for(const key of ['colors','assets'])if(value[key]!==undefined&&(!value[key]||typeof value[key]!=='object'||Array.isArray(value[key])))throw Error(key+' must be an object.');
  for(const key of ['name','author'])if(typeof value[key]!=='string'||!value[key].trim()||value[key].length>120||/[\p{Cc}\p{Cf}]/u.test(value[key]))throw Error('Theme name and author must contain 1–120 printable characters.');
  for(const [key,color]of Object.entries(value.colors||{}))if(!supported.includes(key)||typeof color!=='string'||!hex(color))throw Error('Invalid theme color. Use #RGB, #RRGGBB or #RRGGBBAA.');
  if(Object.keys(value.assets||{}).length>16)throw Error('A theme can contain at most 16 image roles.');
  for(const [key,path]of Object.entries(value.assets||{}))if(!slug(key)||typeof path!=='string'||!localPath(path))throw Error('Images must use a lowercase PNG/WebP filename inside assets/ or the theme folder.');
- if(value.presentation!==undefined&&(typeof value.presentation!=='string'||!['french','paris'].includes(value.presentation)))throw Error('Unsupported presentation.');
- if((value.effects?.mouse||value.effects?.wine)&&value.presentation!=='french')throw Error('These effects require the French presentation.');
- if(value.effects?.mouse&&(!value.assets?.mouse||!value.assets?.cheese))throw Error('The mouse effect needs both mouse and cheese images.');
- if(value.effects?.wine&&(!value.assets?.wine||!value.assets?.['wine-empty']))throw Error('The wine effect needs wine and wine-empty images.');
  if(new TextEncoder().encode(JSON.stringify(value)).length>65536)throw Error('theme.json is too large (maximum 64 KiB).');
 }
 function preview(){const colors={...basePalettes[model.base],...model.colors};for(const [key,value]of Object.entries(colors))$('preview').style.setProperty('--'+key,value);$('preview-name').textContent=model.name;}
@@ -114,7 +108,6 @@ async function render(){
   row.append(title,path,img,input,remove);$('assets').append(row);
   try{const assetPath=model.assets?.[role];const file=pending.get(role)?.file??(assetPath?await readAsset(assetPath):null);if(file){await inspectImage(file,assetPath);if(generation!==epoch)return;if(selection===0&&assetPath===model.assets?.[role])setAssetPreview(role,imageUrl(file),img);}}catch(error){if(generation!==epoch)return;if(selection===0)path.textContent+=' · unavailable: '+error.message;}if(generation!==epoch)return;
  }
- $('effects-card').hidden=model.presentation!=='french';for(const key of ['mouse','wine']){$(key).checked=!!model.effects?.[key];$(key).onchange=()=>{model.effects??={};model.effects[key]=$(key).checked;dirty();};}
  $('editor').hidden=false;preview();
 }
 async function load(text,handle){if(new TextEncoder().encode(text).length>65536)throw Error('theme.json is too large (maximum 64 KiB).');const value=JSON.parse(text);validate(value);folder=handle;model=value;original=structuredClone(value);originalText=text;pending.clear();changes=false;$('dirty').textContent='';$('save').disabled=true;$('undo').disabled=true;await render();status(handle?'Folder opened. Your files stay on this computer.':'Preview mode: this browser cannot save directly into a folder. Color edits can be downloaded as theme.json. Use Edge or Chrome for image replacement and direct saving.');}

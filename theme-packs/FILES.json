@@ -1,18 +1,18 @@
 [
   {
     "path": "theme-packs/EDIT-THEMES.html",
-    "bytes": 28848,
-    "sha256": "b104b86b6245769b282907a7abc58392ce5ab6b0d14d1f4bf61c66224096564b"
+    "bytes": 27917,
+    "sha256": "88fa11cc69496f04ab409f2197311a711b28bff98d7463b451574e5c4db5c421"
   },
   {
     "path": "theme-packs/README.md",
-    "bytes": 1566,
-    "sha256": "496225b61d0a4992d3318ff19afde4a582debed9214e9ac93762a89f7648d2b4"
+    "bytes": 1365,
+    "sha256": "661dcd1a12e33e5ef453046632d36924bc7b8b68ee82a1701c15065a45529166"
   },
   {
     "path": "theme-packs/classic/themes/alluring-abyss/EDIT-THEME.html",
-    "bytes": 28848,
-    "sha256": "b104b86b6245769b282907a7abc58392ce5ab6b0d14d1f4bf61c66224096564b"
+    "bytes": 27917,
+    "sha256": "88fa11cc69496f04ab409f2197311a711b28bff98d7463b451574e5c4db5c421"
   },
   {
     "path": "theme-packs/classic/themes/alluring-abyss/README.md",
@@ -31,8 +31,8 @@
   },
   {
     "path": "theme-packs/classic/themes/android-white/EDIT-THEME.html",
-    "bytes": 28848,
-    "sha256": "b104b86b6245769b282907a7abc58392ce5ab6b0d14d1f4bf61c66224096564b"
+    "bytes": 27917,
+    "sha256": "88fa11cc69496f04ab409f2197311a711b28bff98d7463b451574e5c4db5c421"
   },
   {
     "path": "theme-packs/classic/themes/android-white/README.md",
@@ -51,8 +51,8 @@
   },
   {
     "path": "theme-packs/classic/themes/clawy-grey/EDIT-THEME.html",
-    "bytes": 28848,
-    "sha256": "b104b86b6245769b282907a7abc58392ce5ab6b0d14d1f4bf61c66224096564b"
+    "bytes": 27917,
+    "sha256": "88fa11cc69496f04ab409f2197311a711b28bff98d7463b451574e5c4db5c421"
   },
   {
     "path": "theme-packs/classic/themes/clawy-grey/README.md",
@@ -71,8 +71,8 @@
   },
   {
     "path": "theme-packs/classic/themes/default/EDIT-THEME.html",
-    "bytes": 28848,
-    "sha256": "b104b86b6245769b282907a7abc58392ce5ab6b0d14d1f4bf61c66224096564b"
+    "bytes": 27917,
+    "sha256": "88fa11cc69496f04ab409f2197311a711b28bff98d7463b451574e5c4db5c421"
   },
   {
     "path": "theme-packs/classic/themes/default/README.md",
@@ -91,8 +91,8 @@
   },
   {
     "path": "theme-packs/classic/themes/dragons-hoard/EDIT-THEME.html",
-    "bytes": 28848,
-    "sha256": "b104b86b6245769b282907a7abc58392ce5ab6b0d14d1f4bf61c66224096564b"
+    "bytes": 27917,
+    "sha256": "88fa11cc69496f04ab409f2197311a711b28bff98d7463b451574e5c4db5c421"
   },
   {
     "path": "theme-packs/classic/themes/dragons-hoard/README.md",
@@ -111,8 +111,8 @@
   },
   {
     "path": "theme-packs/classic/themes/liiti-pink/EDIT-THEME.html",
-    "bytes": 28848,
-    "sha256": "b104b86b6245769b282907a7abc58392ce5ab6b0d14d1f4bf61c66224096564b"
+    "bytes": 27917,
+    "sha256": "88fa11cc69496f04ab409f2197311a711b28bff98d7463b451574e5c4db5c421"
   },
   {
     "path": "theme-packs/classic/themes/liiti-pink/README.md",
@@ -131,8 +131,8 @@
   },
   {
     "path": "theme-packs/classic/themes/sage/EDIT-THEME.html",
-    "bytes": 28848,
-    "sha256": "b104b86b6245769b282907a7abc58392ce5ab6b0d14d1f4bf61c66224096564b"
+    "bytes": 27917,
+    "sha256": "88fa11cc69496f04ab409f2197311a711b28bff98d7463b451574e5c4db5c421"
   },
   {
     "path": "theme-packs/classic/themes/sage/README.md",
@@ -151,8 +151,8 @@
   },
   {
     "path": "theme-packs/classic/themes/slimy-teal/EDIT-THEME.html",
-    "bytes": 28848,
-    "sha256": "b104b86b6245769b282907a7abc58392ce5ab6b0d14d1f4bf61c66224096564b"
+    "bytes": 27917,
+    "sha256": "88fa11cc69496f04ab409f2197311a711b28bff98d7463b451574e5c4db5c421"
   },
   {
     "path": "theme-packs/classic/themes/slimy-teal/README.md",
@@ -171,8 +171,8 @@
   },
   {
     "path": "theme-packs/classic/themes/voud/EDIT-THEME.html",
-    "bytes": 28848,
-    "sha256": "b104b86b6245769b282907a7abc58392ce5ab6b0d14d1f4bf61c66224096564b"
+    "bytes": 27917,
+    "sha256": "88fa11cc69496f04ab409f2197311a711b28bff98d7463b451574e5c4db5c421"
   },
   {
     "path": "theme-packs/classic/themes/voud/README.md",
@@ -188,110 +188,5 @@
     "path": "theme-packs/classic/themes/voud/theme.json",
     "bytes": 977,
     "sha256": "859b75615a61287ebed93b1d7b862b05a9808c6c4da297e23d8a64f23f3e4ada"
-  },
-  {
-    "path": "theme-packs/optional/themes/french/EDIT-THEME.html",
-    "bytes": 28848,
-    "sha256": "b104b86b6245769b282907a7abc58392ce5ab6b0d14d1f4bf61c66224096564b"
-  },
-  {
-    "path": "theme-packs/optional/themes/french/LICENSE-TWEMOJI.txt",
-    "bytes": 18524,
-    "sha256": "8ae9438818c26e4873b91d8c6ad620526c011e27e125677f13031eda903f007c"
-  },
-  {
-    "path": "theme-packs/optional/themes/french/README.md",
-    "bytes": 2958,
-    "sha256": "e53352e129c2245004873575019f66d32bfc42cf8c49a0ec3bcee631af8d6845"
-  },
-  {
-    "path": "theme-packs/optional/themes/french/SOURCES.json",
-    "bytes": 2015,
-    "sha256": "44cc822317fb7d564eb9856fa3eebc514f0f2326c87b4d543bea009a14ec5bc5"
-  },
-  {
-    "path": "theme-packs/optional/themes/french/assets/baguette-horizontal.png",
-    "bytes": 35374,
-    "sha256": "a68b84aa318743b39c7ba35fe1875ddfa83c813a858950a836222a4d1b8a637c"
-  },
-  {
-    "path": "theme-packs/optional/themes/french/assets/baguette.png",
-    "bytes": 36074,
-    "sha256": "61664e3d15d030d262887e914c26ae75c7fcc8c135563bd25732ae4bf3bed5eb"
-  },
-  {
-    "path": "theme-packs/optional/themes/french/assets/cheese.png",
-    "bytes": 1554,
-    "sha256": "3e42528cb46a073c3a83ce3b5328f97332876a14f5566a1dd7f0feefee4fa23a"
-  },
-  {
-    "path": "theme-packs/optional/themes/french/assets/croissant.png",
-    "bytes": 5222,
-    "sha256": "fefcd78f7c27b912ef01931192bd4ce4f2cd09007143751cb3aaa5ae7d666df4"
-  },
-  {
-    "path": "theme-packs/optional/themes/french/assets/eiffel.png",
-    "bytes": 189806,
-    "sha256": "640a8a30885ea283e4bc9a4bef0d14844adef6c0b8d4689e960be99d1f04b26c"
-  },
-  {
-    "path": "theme-packs/optional/themes/french/assets/flag.png",
-    "bytes": 1738,
-    "sha256": "ce85f5b1c81ec7479bf761d5e1f0b76413897ab70b7ea546a099b500f7516ba1"
-  },
-  {
-    "path": "theme-packs/optional/themes/french/assets/mouse.png",
-    "bytes": 4490,
-    "sha256": "90fa5c7912211cbab212e810d9f61975fb4b9e64310bd626bf851df83d290901"
-  },
-  {
-    "path": "theme-packs/optional/themes/french/assets/wine-empty.png",
-    "bytes": 5142,
-    "sha256": "a8ebba64901ddd7b55d70141e05abfa2398f379077e35ff345b53a1f5538e968"
-  },
-  {
-    "path": "theme-packs/optional/themes/french/assets/wine.png",
-    "bytes": 5946,
-    "sha256": "8569602b30a61f1ec6a56e2eb46efebbe395009b6f25f118443358310bcff9f3"
-  },
-  {
-    "path": "theme-packs/optional/themes/french/theme.json",
-    "bytes": 1439,
-    "sha256": "879b5b07a976a2f2525dc9d09e6ae191498ccadbb8a362dab045117cec72f0ea"
-  },
-  {
-    "path": "theme-packs/optional/themes/paris/EDIT-THEME.html",
-    "bytes": 28848,
-    "sha256": "b104b86b6245769b282907a7abc58392ce5ab6b0d14d1f4bf61c66224096564b"
-  },
-  {
-    "path": "theme-packs/optional/themes/paris/LICENSE-TWEMOJI.txt",
-    "bytes": 18524,
-    "sha256": "8ae9438818c26e4873b91d8c6ad620526c011e27e125677f13031eda903f007c"
-  },
-  {
-    "path": "theme-packs/optional/themes/paris/README.md",
-    "bytes": 2957,
-    "sha256": "5d0b179d3b63de52f9ff69cf1649575501a9c9ceaf2a82db97ee8cee5dd851f3"
-  },
-  {
-    "path": "theme-packs/optional/themes/paris/SOURCES.json",
-    "bytes": 2015,
-    "sha256": "44cc822317fb7d564eb9856fa3eebc514f0f2326c87b4d543bea009a14ec5bc5"
-  },
-  {
-    "path": "theme-packs/optional/themes/paris/assets/eiffel.png",
-    "bytes": 189806,
-    "sha256": "640a8a30885ea283e4bc9a4bef0d14844adef6c0b8d4689e960be99d1f04b26c"
-  },
-  {
-    "path": "theme-packs/optional/themes/paris/assets/street-lamp.png",
-    "bytes": 67409,
-    "sha256": "df0c92ae38bc43ee3b083b6a1162e7debd4dd057e904e45a62e5abf8a4ddd31a"
-  },
-  {
-    "path": "theme-packs/optional/themes/paris/theme.json",
-    "bytes": 1181,
-    "sha256": "2ee7e7d416d48b9b617a7ddc310b2b099163ae07666270f5f9c7122ea6273ec5"
   }
 ]

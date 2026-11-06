@@ -39,7 +39,6 @@ export const searchIndex: readonly SearchEntry[] = [
   { view: studio, studioTab: 'generate', beginnerTab: 'generate', tab: 'beginner.navigation', section: 'beginner.generate', label: 'studio.run.resolution.title', target: '[data-beginner-resolution]', aliases: ['quality', 'size', 'megapixels'] },
   { view: studio, studioTab: 'generate', beginnerTab: 'generate', tab: 'beginner.navigation', section: 'settings.button', label: 'settings.button', target: '.beginner-backend', aliases: ['engine', 'backend setup'] },
   { view: studio, studioTab: 'generate', tab: 'beginner.navigation', section: 'beginner.experience', label: 'beginner.experience', target: '.experience-switch', aliases: ['beginner', 'advanced', 'mode'] },
-  { view: 'backend', tab: 'settings.button', section: 'studio.quick.title', label: 'theme.ui.mouseDoorKnockFourTimesToInviteThe', target: '[data-theme-mouse-door]', aliases: ['mouse', 'cheese', 'easter egg'] },
   { view: 'backend', tab: 'settings.button', section: 'studio.quick.title', label: 'theme.ui.refresh', target: '[data-theme-action="refresh"]', aliases: ['reload themes', 'theme packs'], reason: 'theme.ui.chooseEnvironment' },
   { view: 'backend', tab: 'settings.button', section: 'studio.quick.title', label: 'theme.ui.openThemesFolder', target: '[data-theme-action="folder"]', aliases: ['theme directory', 'theme packs'], reason: 'theme.ui.chooseEnvironment' },
   // Studio · settings

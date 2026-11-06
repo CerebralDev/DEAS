@@ -1,6 +1,6 @@
 # DEAS documentation
 
-**Current version: 0.2.0 BETA**, previously ALPHA. Existing platform/model limitations and open acceptance gates still apply; see [the plan](PLAN.md).
+**Current version: 0.2.17 BETA**, released. Existing platform/model limitations and open acceptance gates still apply; see [the plan](PLAN.md).
 
 [Documentation index](README.md) · [Plan](PLAN.md)
 
@@ -21,9 +21,9 @@ Top-level tabs: Studio · Library · Prompt Forge · Chat · TVE · Comfy on the
 | Per-pipeline session drafts, prompt counts, spellcheck and tag completion | [Session drafts](STUDIO.md#session-only-pipeline-and-model-drafts-0164-shipped-in-0166) · [Writing aids](STUDIO.md#prompt-writing-aids-0163-shipped-in-0166) |
 | Quick Settings, layout reset and colour schemes | [Layout and Quick Settings](STUDIO.md#layout-last-used-state-and-quick-settings) |
 | Install, refresh and edit local colour/image theme packs | [Theme packs](THEME-PACKS.md) |
-| Beginner experience: generation, model guides and collection without technical settings | [Beginner mode](BEGINNER-MODE.md) |
-| Music (Text to Music / Cover Music) with YuE2 | [Music](MUSIC.md) |
-| TVE tab: video source inspection, output drafts and bounded native spatial rendering (Linux) | [TVE workspace](STUDIO.md#tve-workspace) |
+| Beginner experience: generation, model guides and Media page without technical settings | [Beginner mode](BEGINNER-MODE.md) |
+| Music: Text to Music with YuE2 or ACE-Step; Cover Music with YuE2 | [Music](MUSIC.md) |
+| TVE tab: video source inspection and backend video-enhance recipes with paired outputs | [TVE workspace](STUDIO.md#tve-workspace) |
 | Monitoring tab: last ten generations with timing, live host/GPU telemetry | [Monitoring tab](STUDIO.md#monitoring-tab) |
 | Native image-draft projects, autosave and managed PNG input (not job/result recovery) | [Projects](PROJECTS.md) |
 | Prompt Forge, hammer, MOSS Layout Studio, presets/wildcards and shared LLM settings | [Prompting](PROMPTING.md) · [Presets](PROMPTING.md#presets) · [Wildcards](PROMPTING.md#wildcards) |

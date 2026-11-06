@@ -4,7 +4,7 @@
 
 ## Getting started — Windows and Linux
 
-**DEAS 0.2.0 is BETA software.** Linux CPU/NVIDIA installation has been tested; Windows builds exist, but running the app and its installer on Windows has not yet been verified. AMD/Intel GPU installation remains blocked. Video recipes exist, with a recorded successful H3 job, but native playback has a bounded Linux Matroska crash repair, with full playback/audio/platform acceptance still open; see [video limitations](STUDIO.md#video-generation). Use a separate folder, not an existing ComfyUI installation.
+**DEAS 0.2.17 is BETA software.** Linux CPU/NVIDIA installation has been tested; Windows builds exist, but running the app and its installer on Windows has not yet been verified. AMD/Intel GPU installation remains blocked. Video recipes exist, with a recorded successful H3 job; Linux video playback uses the native libmpv player, while audible A/V sync, normal-driver interaction and Windows playback acceptance remain open; see [video limitations](STUDIO.md#video-generation). Use a separate folder, not an existing ComfyUI installation.
 
 **Start here:** [Windows](#windows-step-by-step) · [Linux](#linux-step-by-step) · [First setup inside DEAS](#first-setup-inside-deas) · [Help](#if-something-goes-wrong)
 

@@ -8,7 +8,7 @@ This is the **single current plan** for DEAS: what is in place, what is still op
 - [PROJECT-RULES.md](PROJECT-RULES.md), [COMFYUI-RULES.md](COMFYUI-RULES.md) and [EXECUTION-CONTRACT.md](EXECUTION-CONTRACT.md) govern how work is done; [PRODUCT-DECISIONS.md](PRODUCT-DECISIONS.md) governs scope.
 - An open row here is **not** authorization to start it. New integrations and large slices need an explicit owner priority.
 
-Current source: **0.2.0 BETA** (unreleased), previously ALPHA. The label does not close any acceptance gates below. Last published baseline: **0.1.66** (tag `v0.1.66`), reviewed 2026-10-29.
+Current source: **0.2.17 BETA** (published, tag `v0.2.17`). The label does not close any acceptance gates below. Earlier published baseline: **0.1.66** (tag `v0.1.66`).
 
 ## 1. Evidence levels
 
@@ -26,7 +26,7 @@ An item is only as accepted as its strongest evidence. Keep the levels separate 
 
 ## 2. Status by area
 
-| Area | State (0.1.66) | Open |
+| Area | State (0.2.17) | Open |
 | --- | --- | --- |
 | Shell, navigation, layout | Implemented. Creative tabs left: Studio, Library, Prompt Forge, Chat, TVE, Comfy; utility tabs right: Monitoring, Run Plan, Backend, Logs. Shared viewport gate `npm run test:layout` | Windows/native visual acceptance |
 | Provisioning (installer) | Partial. Immutable consented plans, Linux/Windows x86_64 CPU/NVIDIA baseline, pinned ComfyUI-GGUF, checked reopening, foreign-install takeover, explicit Upgrade/Reinstall | §4.8 |
@@ -35,10 +35,10 @@ An item is only as accepted as its strongest evidence. Keep the levels separate 
 | Authentication | Partial. Native exact-origin credentials, metadata-only readback | Real OS-store and provider acceptance beyond fixtures |
 | Localization | Implemented, bounded. Six languages, module-owned locales | Native-speaker review |
 | API negotiation | Partial. Classic/v2 discovery, exact node/model/sampler choices | Complete v2/SDK execution adapter |
-| Image generation and families | Partial. Image recipes, LoRA stacks, family constraints, MOSS, SDXL/Qwen/Krea/MOSS image references, paired refine products, GGUF split loaders, Edit meta… family override, wrong-folder gating | Per-family real-model matrix; §4.4, §4.5 |
+| Image generation and families | Partial. Image recipes, LoRA stacks, family constraints, MOSS, SDXL/Qwen/Krea/MOSS image references, paired refine products, GGUF split loaders, Edit meta… family override, wrong-folder gating. 0.2.12–0.2.13 added DualCLIPLoader/Flux, SD3/SD3.5, Chroma/Radiance, HiDream, PixArt/HunyuanDiT, Lumina2, SD1.5/SD2, Kandinsky5, Ideogram4, Boogu, OmniGen2, Fibo2, Ernie, Flux.2/3 and Mage-Flow | Per-family real-model matrix; §4.4, §4.5 |
 | Video generation | Partial. LTX 2.3, Wan 2.2, MiniMax H3 (T2VA/I2VA/FL2VA/L2VA/REF2VA, image edit), LTX v2v/keyframes, learned H3/LTX latent upscale | §4.1 |
 | Director and Continuity | Partial. Continuity for all H3 pipelines, sessions, checkpoint/imported/uploaded sources, overlap, use-references, Forge Next action, References modal, RefMod reading, packs, people boxes, cast/pose cards | RefMod creation, joined clips, automatic card reading; §4.1 |
-| Music (YuE2) | Implemented 0.1.66, fixture-verified. Text to Music (ABC Off/Full/Melody), Cover Music, FLAC results/history (all-in-one checkpoints only) | §4.3; split diffusion-model loading §4.5 |
+| Music (YuE2 and ACE-Step) | YuE2 implemented 0.1.66, fixture-verified: Text to Music (ABC Off/Full/Melody), Cover Music, FLAC results/history (all-in-one checkpoints only). ACE-Step Text to Music for original 1.0 and resolved 1.5 Base/SFT/Turbo/XL implemented 0.2.16, fixture/CPU-schema verified | §4.3; split diffusion-model loading §4.5; real ACE model/native acceptance in F3 |
 | Prompt Forge / Chat / shared LLM | Partial. Native writers, MOSS Layout Studio, streamed Chat with HTTP cancellation, model-exact routing, tag suggestions | Forge request streaming (Forge still sends `stream:false`), remote API-key auth where absent, real-LLM acceptance |
 | Presets, wildcards, seeds | Partial. Separate Presets/Wildcards tabs, reproducible seeds | Custom wildcard library editing/import, versioned cross-feature smart presets, hardware-aware recommendations |
 | Image editing | Partial. Layers/masks, paint, magic wand, outpaint frame, full-size drop, crop-inpaint-composite | Undo, transparent inserts, outpaint seam quality, §4.4 |
@@ -51,7 +51,7 @@ An item is only as accepted as its strongest evidence. Keep the levels separate 
 | Video assembly | Missing | §4.9 |
 | Training / datasets | Missing | §4.9 |
 | Telemetry / optimization | Partial primitives (`hardware.rs`) | Resource profiles, shared GPU scheduling, opt-in benchmarks |
-| Plugin platform | Metadata/data plugins only | §4.10 |
+| Plugin platform | Data-only metadata/catalog/theme plugins only; no executable or UI-plugin loading | §4.10 |
 | Updates and migrations | Partial. Confirmed app-binary update (Linux self-replace; Windows manual), in-place backend update | Staged update/rollback, project migrations, packed release assets (§4.8) |
 | Distribution | Partial. Local unsigned Linux/Windows builds, release manifest/SHA256SUMS; hosted workflows disabled | Signed/portable distribution, fresh-machine acceptance, glibc portability |
 
@@ -112,15 +112,16 @@ Owner decisions 2026-10-30: (1) the TVE tab compiles the same ComfyUI post recip
 
 Reference: TrueVideoEnhancer `67ddb2508fdb6da7f1897bbd964f316592f762d0` (`backend/custom_pipeline.py`, `streaming_pipeline.py`, `render_contract.py`, `nvidia_vfx_pipeline.py`) is a behavioural reference only. Its rawvideo path loses source PTS, its host budgets exclude GPU tensors and its final publication lacks a cancellation check. GPL code reuse does not clear model, NVIDIA SDK or FFmpeg terms.
 
-### 4.3 Music (YuE2)
+### 4.3 Music (YuE2 and ACE-Step)
 
-Delivered in 0.1.66 (see [MUSIC.md](MUSIC.md)). Open:
+YuE2 delivered in 0.1.66; ACE-Step Text to Music delivered in 0.2.16 (see [MUSIC.md](MUSIC.md)). Open:
 
 - [ ] Cover source preflight: actionable no-audio-stream error and decoded-PCM memory bounds for the input (only output FLAC is bounded today).
 - [ ] Live-backend SheetSage2 list multiplicity with real weights.
 - [ ] External-backend FLAC export: `jobs_outputs_tests.rs::music_flac_outputs_are_decoded_before_preview_and_export` covers fetch/decode/no-clobber export; confirm it runs without `outputRoot`, then close.
 - [ ] Real Text to Music (Full/Melody/Off), audio and video covers, scoped cancellation.
 - [ ] Native FLAC playback on WebKitGTK and WebView2; Windows runtime.
+- [ ] ACE-Step: real-model inference for authorized local original 1.0 and representative 1.5 AIO/split Base/SFT/Turbo/XL weights, plus native Linux/Windows picker, FLAC playback/export and audio post-processing acceptance (§4.5 F3b).
 
 Constraints kept from the implementation plan: signatures from one checkpoint do not cover every YuE2 variant (unknown variants stay unavailable; no filename fallback); missing optional nodes disable only the affected modes; no transcription, voice cloning, extra codecs, cloud fallback or automatic installer changes.
 
@@ -146,14 +147,14 @@ Constraints kept from the implementation plan: signatures from one checkpoint do
 
 ### 4.5 Models
 
-- **Sampler coverage and MOSS-Image defaults. Status: planned, not implemented.** Owner request.
-  - **Missing samplers/schedulers.** DEAS must offer the samplers and schedulers the installed backend's `KSampler` enum lists, including **`beta57`** and the **`res_2s`/`res_multistep`** samplers and the **`sgm_uniform`** scheduler. Source facts: the Studio selectors build from the negotiated `choices.samplers`/`choices.schedulers` (`Workbench.tsx`), so the UI list follows the backend; the pinned sampler/scheduler expectations live in `recipe_prerequisites.rs` (currently `euler`/`dpmpp_2m`, `normal`/`karras`) and the per-family defaults in `src/families/builtin.json` — none of these may omit a sampler the recipe can run on, and the graph-compatibility check must accept the samplers above where the graph accepts them.
-  - **MOSS-Image defaults need fixing to the official recommended settings.** Current `builtin.json` `moss-image.defaults` are 25 steps / CFG 2.5 / `er_sde` / `simple`; the official recommendations are **50+ inference steps, CFG 3.0 (usable range 3.0–6.0), Shift 5.0, `euler` sampler with the `sgm_uniform` scheduler**. Dimensions must stay multiples of 16 (the family already declares `multiple: 16`).
-  - **MOSS Skip-Layer Guidance (SLG).** DEAS needs a MOSS field **Skip layers** — comma-separated list, default **`22`** — sent as `uncond_skip_layers` on the negative branch (the current bounded adapter omits the template's SLG entirely). Layers 22, 24 and 26 are the effective ones; disabling SLG can yield more realistic textures at the cost of fine detail, so the field must support an empty/disabled state.
-  - **MOSS negative prompt.** The Python API default is empty; the recommended general-generation default is `nsfw, worst quality, bad anatomy, watermark, jpeg artifact`.
-  - **Turbo/speed variants.** Support the 8-step DMD LoRA (CFG 1, 8 steps) and the 4-step `rapid-moss` adapter (no negative prompt, no SLG) as labelled MOSS variants with matching defaults.
-  - [ ] Update `builtin.json` defaults + `defaultsNote`, add the SLG field to the MOSS adapter path (TS compiler + `jobs.rs` preflight + prerequisites), six locales, `docs/STUDIO.md` family table; one real MOSS run per default set (base 50/3.0/euler/sgm_uniform with SLG 22, turbo 8-step) recorded in `docs/VERIFICATION.md`.
-  - [ ] **Verify every family default against real suggested defaults.** `docs/MODEL_DEFAULTS.md` keeps a researched matrix (current `builtin.json` defaults vs official model-card / Comfy-Org-template recommendations, per row with source + confidence); re-check all families in `builtin.json` against it and fix any default the sources contradict.
+- **Sampler coverage and MOSS-Image defaults. Status: partially implemented.** Owner request.
+  - **Missing samplers/schedulers.** DEAS must offer the samplers and schedulers the installed backend's `KSampler` enum lists, including **`beta57`** and the **`res_2s`/`res_multistep`** samplers and the **`sgm_uniform`** scheduler. Source facts: the Studio selectors build from the negotiated `choices.samplers`/`choices.schedulers` (`Workbench.tsx`), so the UI list follows the backend; the pinned sampler/scheduler expectations live in `recipe_prerequisites.rs` (currently `euler`/`dpmpp_2m`, `normal`/`karras`) and the per-family defaults in `src/families/builtin.json` — none of these may omit a sampler the recipe can run on, and the graph-compatibility check must accept the samplers above where the graph accepts them. Open: extend the pinned prerequisites and add compiler tests for the listed samplers/schedulers.
+  - **MOSS-Image defaults — landed in 0.2.14.** `builtin.json` now uses 50 steps / CFG 3.0 / `euler` / `sgm_uniform` with shift 5.0 baked into the recipe, matching the official recommendations. Dimensions stay multiples of 16 (the family already declares `multiple: 16`).
+  - **MOSS Skip-Layer Guidance (SLG) — still open.** DEAS needs a MOSS field **Skip layers** — comma-separated list, default **`22`** — sent as `uncond_skip_layers` on the negative branch (the current bounded adapter omits the template's SLG entirely). Layers 22, 24 and 26 are the effective ones; disabling SLG can yield more realistic textures at the cost of fine detail, so the field must support an empty/disabled state.
+  - **MOSS negative prompt — still open.** The Python API default is empty; the recommended general-generation default is `nsfw, worst quality, bad anatomy, watermark, jpeg artifact`.
+  - **Turbo/speed variants — still open.** Support the 8-step DMD LoRA (CFG 1, 8 steps) and the 4-step `rapid-moss` adapter (no negative prompt, no SLG) as labelled MOSS variants with matching defaults.
+  - [x] Update `builtin.json` defaults + `defaultsNote` — landed in 0.2.14. Open: add the SLG field to the MOSS adapter path (TS compiler + `jobs.rs` preflight + prerequisites), the recommended negative prompt and turbo/speed variants, six locales, `docs/STUDIO.md` family table; one real MOSS run per default set (base 50/3.0/euler/sgm_uniform with SLG 22, turbo 8-step) recorded in `docs/VERIFICATION.md`.
+  - [ ] **Verify every family default against real suggested defaults.** `docs/MODEL_DEFAULTS.md` keeps a researched matrix (current `builtin.json` defaults vs official model-card / Comfy-Org-template recommendations, per row with source + confidence). 0.2.14 realigned fourteen families; residual: video/audio families outside the audited set in `MODEL_DEFAULTS.md` still need re-checking and any contradicted default fixed.
 
 - **User-defined recipe profiles (M-02, planned).** M-01 (the Edit meta… family override) shipped in 0.1.66. M-02 would add:
   - a versioned, data-only local profile binding an unknown model to an existing recipe adapter, with exact VAE/encoder references;
@@ -170,7 +171,7 @@ Constraints kept from the implementation plan: signatures from one checkpoint do
   - Apply the same audit to other families that are checkpoint-only today but whose core loaders accept split files; GGUF split variants follow the existing GGUF rules.
   - Native/TS compiler regressions, offline graph validation, six locales, then a real run per loading form in both music pipelines: the all-in-one checkpoint (including a quantized one such as `convrot_int8`, whose loading/quality is unverified) and the split files; MUSIC.md and the family table updated.
 - **GGUF.** Real bounded image/video/audio-in-video GGUF inference and the Windows runtime. ComfyUI-GGUF has no full-checkpoint or GGUF VAE loader, so a manual family assignment can still fail on unsupported labels.
-- **All ComfyUI core architectures (planned, owner request).** DEAS detects 12 families. ComfyUI core at `b5a43215` (2026-10-29) ships ~55 distinct architectures (108 `ModelSupport` classes counting variants) and `blueprints/*.json` is the authoritative per-architecture graph. SwarmUI adds no architecture of its own: it is a ComfyUI frontend, and `T2IModelClassSorter.cs` narrows detection to 25 compat classes, so it is only a header-signature source. Scope: every architecture ComfyUI can load from the folders DEAS already scans (`settings.rs::MODEL_FOLDERS`, 16 folders incl. `text_encoders`, `clip`, `clip_vision`, `style_models`). Owner example: Z-Image.
+- **All ComfyUI core architectures (planned, owner request).** DEAS registers 41 family IDs (including ACE-Step variants) and detects the families in `builtin.json`. ComfyUI core at `b5a43215` (2026-10-29) ships ~55 distinct architectures (108 `ModelSupport` classes counting variants) and `blueprints/*.json` is the authoritative per-architecture graph. SwarmUI adds no architecture of its own: it is a ComfyUI frontend, and `T2IModelClassSorter.cs` narrows detection to 25 compat classes, so it is only a header-signature source. Scope: every architecture ComfyUI can load from the folders DEAS already scans (`settings.rs::MODEL_FOLDERS`, 16 folders incl. `text_encoders`, `clip`, `clip_vision`, `style_models`). Owner example: Z-Image.
 
   **Gap by cause, not by model.** The image recipe is one fixed graph (`execution.ts::compileRecipe`: `UNETLoader`/`CLIPLoader`/`VAELoader`/`CLIPTextEncode`/`EmptyLatentImage`/`KSampler`) with two hardcoded family branches (MOSS `EmptyFlux2LatentImage`, GGUF) and one text encoder. Nearly every missing architecture differs from it in only four declarative points — text-encoder loader form (single vs `DualCLIPLoader`), latent node, model-sampling patch, negative handling — plus defaults. Make those family data: then most new image architectures are a `builtin.json` entry + header rule, not a compiler branch.
 
@@ -363,9 +364,9 @@ A PromptForge port keeps per-model dialects, structured video sections, referenc
 
 ### 4.10 Plugin platform and planner
 
-- **Drop-in theme packs — remaining native acceptance.** Theme-only adoption from the separate 0.2.13 delivery targets the current application, not its Beginner interface. Exercise actual Linux GTK/WebKitGTK and Windows WebView2 selection/refresh, OS folder opening and offline-editor folder permissions. Check optional French/Paris idle resources, reduced motion and retained-job progress in those runtimes; fixture/browser evidence does not close these gates. [Guide](THEME-PACKS.md).
+- **Drop-in theme packs — remaining native acceptance.** Theme-only adoption from the separate 0.2.13 delivery targets the current application, not its Beginner interface. Exercise actual Linux GTK/WebKitGTK and Windows WebView2 selection/refresh, OS folder opening and offline-editor folder permissions. Check reduced motion and retained-job progress in those runtimes; fixture/browser evidence does not close these gates. [Guide](THEME-PACKS.md).
 
-- **Beginner mode (landed in 0.2.15, acceptance open).** Manual port of the `DEAS-0.2.13-Beginner-SHARE.zip` overlay (archive SHA-256 `b4adae309300e95224bf3ad5ecdf5c4d34162014b28a0d28117a23bf09c3f900`): one `interface.experience` preference, page band Generate/Models/Collection, Engine button to the unchanged setup, per-mode settings isolation and model-bound Beginner LoRA draft. Deliberately not adopted: the fork's window-title rebranding, Sage as fresh-install theme fallback (the shipped `classic` pack already provides Sage), and the fork's hide-GlobalSearch choice (every control must stay reachable from Ctrl+K). Open gates:
+- **Beginner mode (landed in 0.2.15, acceptance open).** Manual port of the `DEAS-0.2.13-Beginner-SHARE.zip` overlay (archive SHA-256 `b4adae309300e95224bf3ad5ecdf5c4d34162014b28a0d28117a23bf09c3f900`): one `interface.experience` preference, page band Generate/Models/Media, Engine button to the unchanged setup, per-mode settings isolation and model-bound Beginner LoRA draft. Deliberately not adopted: the fork's window-title rebranding, Sage as fresh-install theme fallback (the shipped `classic` pack already provides Sage), and the fork's hide-GlobalSearch choice (every control must stay reachable from Ctrl+K). Open gates:
   - [ ] Native acceptance on WebKitGTK and WebView2: welcome dialog first run, mode switch during a running job keeps the job, Engine flow with no installed environment, six locales at narrow widths.
   - [x] Beginner must-have settings gap closed in 0.2.15: the composer's **Format**/**Quality** selects reuse the centralized `aspects`/`resolutions` option sets, the shared `studio.run.aspect`/`studio.run.resolution` preferences and the advanced panel's exact label keys — advanced-only `fixed`/`custom` (own size fields) stay out; sizing is treated as shared authored intent (kept out of the mode-isolation snapshot, persisted by the Beginner intent effect); seed and negative prompts remain advanced. Acceptance: real-run size check below.
   - [ ] Wizard alignment (see Wizards tab): wizard definitions already carry pipeline plus the same resolution/aspect/settings keys the Beginner Format/Quality pair writes; a future wizard run must be presentable inside Beginner Generate without a new execution path. Record that contract when the first wizard definition lands.
@@ -381,11 +382,11 @@ A PromptForge port keeps per-model dialects, structured video sections, referenc
 
 ### 4.11 Known defects and audits
 
-- **SwarmUI model folders/junctions — bounded implementation, remaining acceptance.** Category aliases, native metadata save/reset/readback and resolved category-target registration are implemented; Windows filesystem, actual ComfyUI Python configuration and real WebView2 persistence evidence are in [verification](VERIFICATION.md#swarmui-model-folders-and-pipeline-picker-0214-unreleased). Roots still contain category folders; a directly selected `Krea2`/category subfolder is not a mapping. No model bytes, SwarmUI settings or OS trust policies are changed.
+- **SwarmUI model folders/junctions — bounded implementation, remaining acceptance.** Category aliases, native metadata save/reset/readback and resolved category-target registration are implemented; Windows filesystem, actual ComfyUI Python configuration and real WebView2 persistence evidence are in [verification](VERIFICATION.md#swarmui-model-folders-and-pipeline-picker-0214-shipped-in-0214). Roots still contain category folders; a directly selected `Krea2`/category subfolder is not a mapping. No model bytes, SwarmUI settings or OS trust policies are changed.
   - [ ] **Nested untrusted Windows junctions remain a backend limitation.** Native headers/sidecars are readable, but ComfyUI’s recursive traversal/mtime lookup can raise OS448 and fail the entire category list. Resolving a category root does not preserve/bypass a nested alias prefix. Keep exact backend catalog and Run gates; do not flatten model names, claim these files runnable or patch ComfyUI/security policy without separately authorized work.
   - [ ] **Original reported files and interactive acceptance.** The reporter’s exact Krea2/MOSS/Z-image headers/loading forms and Windows paths are still needed for a matched reproduction and real generation check. Preserve the distinction between discovery, declared family and actual checkpoint/split loader support. Native Linux/Windows metadata-editor click-through and checkpoint-popup keyboard behavior remain separate from the completed native IPC save/restart/read/reset tests.
 
-Implementation and audit evidence for the completed portions is in [verification](VERIFICATION.md#known-defects-and-audits-0214-unreleased). Only remaining work is listed here.
+Implementation and audit evidence for the completed portions is in [verification](VERIFICATION.md#known-defects-and-audits-0214-shipped-in-0214). Only remaining work is listed here.
 
 - **Forge clipboard/drop — native acceptance.** Exercise real OS picture clipboard paste and native file drops in the open Forge editor on Linux WebKitGTK and Windows WebView2, including nested dialogs, ordinary text paste, image caps and errors. Component fixtures do not close this gate.
 - **Remembered settings — Linux selector acceptance.** Exercise checkpoint-only switches through the actual native selector: preserve positive/negative prompts exactly, including empty fields, while restoring the target's other draft settings. No key-collision defect is established. The GTK fixture rendered readable selectors but its separate warning-layout assertion failed; investigate that renderer-specific observation rather than weakening the gate.
@@ -398,7 +399,7 @@ Implementation and audit evidence for the completed portions is in [verification
 
 ### 4.12 Audio enhance across audio pipelines
 
-- **Audio enhancement for Studio post-processing and TVE (0.2.15, unreleased).** Clean processing, paired baseline/processed publication and native automatic post-generation chaining exist; the user selected Smule Labs Windowed RoFormer instead of Demucs for Stems. Deep uses native DeepFilterNet. All modes are opt-in OFF initially, content-aware alternatives rather than a quality ladder. See [Audio enhancement](AUDIO-ENHANCEMENT.md).
+- **Audio enhancement for Studio post-processing and TVE (0.2.15, shipped in 0.2.17).** Clean processing, paired baseline/processed publication and native automatic post-generation chaining exist; the user selected Smule Labs Windowed RoFormer instead of Demucs for Stems. Deep uses native DeepFilterNet. All modes are opt-in OFF initially, content-aware alternatives rather than a quality ladder. See [Audio enhancement](AUDIO-ENHANCEMENT.md).
   - Native automatic chaining retains immutable `audioEnhance: {mode, profile}` in music/video/TVE intents and watches backend completion independently of mounted frontend panes. Jobs remain running until post-processing settles. Local cancellation does not interrupt the backend after generation; silent video is a true no-op. Baselines and valid partial products remain accessible after failure/cancellation. Real-FFmpeg lifecycle checks are explicit ignored acceptance tests, separate from default dependency-free unit gates.
   - TVE supports audio-only processing from its retained inspected source without backend/video stages and automatically chained audio after selected video enhancements. Explicit new-copy export remains available on terminal selected products. Native source identity, stream mapping, sample-rate/channel/duration checks, no-clobber publication and central Logs apply to both paths.
   - **Stems selection:** [Smule Labs Windowed RoFormer](https://github.com/smulelabs/windowed-roformer), original HF revision `d9642ed592120dca935ebb783c77f2faa1e6c32b`, MIT code and checkpoint grant. This is vocal/instrumental separation, not four-stem drums/bass/other extraction. Demucs is not the selected shipping backend. No automatic music-to-speech-model routing or silent weaker-mode substitution.

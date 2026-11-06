@@ -1,6 +1,6 @@
 # Music — Text to Music with YuE2 and ACE-Step
 
-[Documentation index](README.md) · [Studio](STUDIO.md) · [Open work](PLAN.md#43-music-yue2)
+[Documentation index](README.md) · [Studio](STUDIO.md) · [Open work](PLAN.md#43-music-yue2-and-ace-step)
 
 Studio → Generate offers **Music (Text to Music)** for YuE2 and resolved ACE-Step models, plus **Music (Cover Music)** for YuE2. Recipes compile natively to ComfyUI core nodes; no custom node pack is required for generation.
 

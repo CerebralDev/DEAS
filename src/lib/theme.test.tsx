@@ -3,7 +3,7 @@ import {cleanup,render,screen,fireEvent,waitFor} from '@testing-library/react';
 import {invoke} from '@tauri-apps/api/core';
 import {availableSchemes,applySavedScheme,applyScheme,refreshThemePacks,useThemeCatalog,useScheme,type ThemePack} from './theme';
 vi.mock('@tauri-apps/api/core',()=>({invoke:vi.fn(),isTauri:()=>true}));
-const pack:ThemePack={id:'sage',name:'Sage',author:'Owner',base:'default',colors:{panel:'#123456',ok:'#abc'},assets:{cursor:'data:image/png;base64,YQ=='},presentation:null,effects:{mouse:false,wine:false}};
+const pack:ThemePack={id:'sage',name:'Sage',author:'Owner',base:'default',colors:{panel:'#123456',ok:'#abc'},assets:{cursor:'data:image/png;base64,YQ=='}};
 const catalog=(packs:ThemePack[])=>({directory:'/env/themes',packs,warnings:[]});
 function Probe({root='/env'}:{root?:string}){const state=useThemeCatalog(root);const [scheme,choose]=useScheme();return <><span>{state.active?.name??'Built-in'}</span><button onClick={()=>choose('sage')}>{scheme}</button></>;}
 beforeEach(async()=>{localStorage.clear();vi.mocked(invoke).mockReset();await refreshThemePacks();applyScheme('default');});

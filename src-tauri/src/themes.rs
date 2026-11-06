@@ -26,14 +26,6 @@ const MANIFEST_LIMIT: u64 = 65_536;
 const ASSET_LIMIT: u64 = 2 * 1024 * 1024;
 const CATALOG_LIMIT: usize = 16 * 1024 * 1024;
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct Effects {
-    #[serde(default)]
-    pub mouse: bool,
-    #[serde(default)]
-    pub wine: bool,
-}
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Manifest {
@@ -46,10 +38,6 @@ struct Manifest {
     colors: BTreeMap<String, String>,
     #[serde(default)]
     assets: BTreeMap<String, String>,
-    #[serde(default)]
-    presentation: Option<String>,
-    #[serde(default)]
-    effects: Effects,
 }
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -60,8 +48,6 @@ pub struct ThemePack {
     base: String,
     colors: BTreeMap<String, String>,
     assets: BTreeMap<String, String>,
-    presentation: Option<String>,
-    effects: Effects,
 }
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -286,17 +272,6 @@ fn read_pack(folder: &Path, used: &mut usize) -> Result<ThemePack, String> {
     {
         return Err("Theme colors must use supported tokens and hex values".into());
     }
-    if m.presentation
-        .as_deref()
-        .is_some_and(|p| !["french", "paris"].contains(&p))
-    {
-        return Err("Unsupported theme presentation".into());
-    }
-    if m.effects.mouse && m.presentation.as_deref() != Some("french")
-        || m.effects.wine && m.presentation.as_deref() != Some("french")
-    {
-        return Err("This effect requires the French presentation".into());
-    }
     if m.assets.len() > 16 {
         return Err("Too many theme assets".into());
     }
@@ -318,11 +293,6 @@ fn read_pack(folder: &Path, used: &mut usize) -> Result<ThemePack, String> {
             format!("data:{mime};base64,{}", STANDARD.encode(bytes)),
         );
     }
-    if m.effects.mouse && (!assets.contains_key("mouse") || !assets.contains_key("cheese"))
-        || m.effects.wine && (!assets.contains_key("wine") || !assets.contains_key("wine-empty"))
-    {
-        return Err("Required effect images are missing".into());
-    }
     *used += pack_bytes;
     Ok(ThemePack {
         id: m.id,
@@ -331,8 +301,6 @@ fn read_pack(folder: &Path, used: &mut usize) -> Result<ThemePack, String> {
         base: m.base,
         colors: m.colors,
         assets,
-        presentation: m.presentation,
-        effects: m.effects,
     })
 }
 fn scan(root: &str) -> Result<ThemeCatalog, String> {

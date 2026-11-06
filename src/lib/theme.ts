@@ -20,7 +20,7 @@ export const SCHEMES = [
 export type SchemeId = string;
 const KEY = 'appearance.scheme';
 const valid=(v:unknown):v is string=>typeof v==='string'&&/^[a-z0-9-]{1,64}$/.test(v);
-export interface ThemePack {id:string;name:string;author:string;base:string;colors:Record<string,string>;assets:Record<string,string>;presentation:'french'|'paris'|null;effects:{mouse:boolean;wine:boolean}}
+export interface ThemePack {id:string;name:string;author:string;base:string;colors:Record<string,string>;assets:Record<string,string>}
 interface ThemeCatalog {directory:string;packs:ThemePack[];warnings:string[]}
 let state:ThemeCatalog&{root:string;loading:boolean;error:boolean;active:ThemePack|null}={directory:'',packs:[],warnings:[],root:'',loading:false,error:false,active:null};
 const listeners=new Set<()=>void>();let epoch=0;const applied=new Set<string>();
@@ -34,16 +34,14 @@ function property(name:string,value:string){document.documentElement.style.setPr
 export function applyScheme(id: SchemeId) {
   const root = document.documentElement;
   for(const key of applied)root.style.removeProperty(key);applied.clear();
-  delete root.dataset.themePack;delete root.dataset.themePresentation;delete root.dataset.themeMouse;
-  delete root.dataset.themeCursor;delete root.dataset.themeScrollbar;
+  delete root.dataset.themePack;delete root.dataset.themeCursor;delete root.dataset.themeScrollbar;
   // Built-in schemes are always available; packs are additive and may
   // override a built-in ID as their base for this environment.
   const pack=state.packs.find(p=>p.id===id),base=pack?.base??(SCHEMES.some(s=>s.id===id)?id:'default');
   if (base === 'default') delete root.dataset.theme;
   else root.dataset.theme = base;
   if(pack){
-   root.dataset.themePack=pack.id;if(pack.presentation)root.dataset.themePresentation=pack.presentation;
-   if(pack.effects.mouse)root.dataset.themeMouse='true';
+   root.dataset.themePack=pack.id;
    for(const [key,value]of Object.entries(pack.colors)){
     if(!/^[a-z0-9-]{1,40}$/.test(key)||!/^#(?:[a-f\d]{3}|[a-f\d]{6}|[a-f\d]{8})$/i.test(value))continue;
     property('--'+key,value);const hex=value.slice(1);const full=hex.length===3?[...hex].map(c=>c+c).join(''):hex;

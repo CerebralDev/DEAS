@@ -7,5 +7,3 @@
 :root[data-theme-scrollbar] ::-webkit-scrollbar-thumb{background-image:var(--theme-asset-scrollbar);background-size:100% 100%}
 :root[data-theme-cursor]{cursor:var(--theme-asset-cursor) 3 4,auto}
 :root[data-theme-cursor] button,:root[data-theme-cursor] a{cursor:var(--theme-asset-cursor) 3 4,pointer}
-/* Runtime effect styles are inert unless a validated external pack enables them. */
-:root:not([data-theme-presentation=french]) .french-wine{display:none}

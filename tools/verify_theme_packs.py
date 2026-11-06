@@ -12,14 +12,11 @@ import verify_workspace_layout as layout
 def packs():
     result = []
     root = Path(__file__).resolve().parents[1]/'theme-packs'
-    for group in ['classic', 'optional']:
-        for file in sorted((root/group/'themes').glob('*/theme.json')):
-            data = json.loads(file.read_text(encoding='utf-8-sig'))
-            data.pop('schemaVersion')
-            data['presentation'] = data.get('presentation')
-            data['effects'] = data.get('effects', {'mouse': False, 'wine': False})
-            data['assets'] = {key: 'data:image/'+('webp' if name.endswith('.webp') else 'png')+';base64,'+base64.b64encode((file.parent/name).read_bytes()).decode() for key, name in data.get('assets', {}).items()}
-            result.append(data)
+    for file in sorted((root/'classic/themes').glob('*/theme.json')):
+        data = json.loads(file.read_text(encoding='utf-8-sig'))
+        data.pop('schemaVersion')
+        data['assets'] = {key: 'data:image/'+('webp' if name.endswith('.webp') else 'png')+';base64,'+base64.b64encode((file.parent/name).read_bytes()).decode() for key, name in data.get('assets', {}).items()}
+        result.append(data)
     assert result, 'No theme pack manifests found'
     return result
 
@@ -38,7 +35,7 @@ def verify(browser, url, shots):
             r.continue_()
     page.route('http**/*', route)
     data = packs()
-    classic = [p for p in data if p['presentation'] is None]
+    classic = data
     fixture = collection.FIXTURE.replace('__MIXED__', 'false').replace('const snapshot=', "f.jobs=[{...job('theme-running','running',7902),progress:{value:25,max:100}}];const snapshot=")
     script = fixture+layout.FIXTURE+'''
 localStorage.setItem('deas.locale.v1','en');
@@ -90,37 +87,7 @@ window.__TAURI_INTERNALS__.invoke=async(c,a)=>{
         page.evaluate('values=>window.__themePacks=values', data)
         refresh()
         expect(page.locator('html')).to_have_attribute('data-theme-pack', 'android-white')
-        select('french')
-        expect(page.locator('[data-mouse-house]')).to_be_visible()
-        expect(page.locator('[data-french-wine]')).to_be_visible()
-        expect(page.locator('[data-french-wine]')).to_have_attribute('aria-valuenow', '25')
-        cursor = page.locator('.studio-quick > button').evaluate('el=>getComputedStyle(el).cursor')
-        assert 'data:image/png;base64,' in cursor, cursor
-        door = page.locator('.mouse-door')
-        for _ in range(4):
-            door.click()
-        expect(page.locator('[data-cheese-mouse]')).to_be_visible()
-        page.keyboard.press('Escape')
-        for identifier in ['french', 'paris']:
-            select(identifier)
-            if identifier == 'paris':
-                expect(page.locator('.paris-scene')).to_be_visible()
-            for width, height in [(1440, 960), (1024, 768), (390, 844)]:
-                page.set_viewport_size({'width': width, 'height': height})
-                page.mouse.move(4, 4)
-                page.wait_for_timeout(150)
-                bounds = page.evaluate('({w:innerWidth,h:innerHeight,sw:document.documentElement.scrollWidth,sh:document.documentElement.scrollHeight})')
-                assert bounds['sw'] <= width+1 and bounds['sh'] <= height+2, (identifier, bounds)
-                page.screenshot(path=str(shots/(identifier+'-'+str(width)+'.png')))
-            page.set_viewport_size({'width': 1440, 'height': 960})
-        select('french')
-        page.evaluate('values=>window.__themePacks=values', classic)
-        refresh()
-        expect(page.locator('[data-mouse-house]')).to_have_count(0)
-        assert page.evaluate("document.documentElement.style.getPropertyValue('--theme-asset-cheese')") == ''
-        page.evaluate('values=>window.__themePacks=values', data)
-        refresh()
-        expect(page.locator('[data-mouse-house]')).to_be_visible()
+
         select('sage')
         page.evaluate("window.__themePacks.find(p=>p.id==='sage').colors.ok='#ff0000'")
         refresh()
@@ -130,7 +97,7 @@ window.__TAURI_INTERNALS__.invoke=async(c,a)=>{
         collection.assert_clean(page, errors)
         forbidden = page.evaluate("__collection.calls.filter(c=>/(_start|_stop|_write|_send|_generate|_run|_submit|_cancel)$/.test(c.command))")
         assert not forbidden, forbidden
-        result = {'status': 'PASS', 'kind': 'Chromium with strict simulated IPC and actual pack manifests/assets', 'checks': ['all supplied classic palettes and navigation retention', 'deleted active Android White pack falls back to the always-available built-in; restoration reapplies the override', 'legacy IDs and reload', 'prompt retention', 'runtime refresh after palette edit', 'removed pack fallback and asset cleanup', 'restored pack reapplies', 'French PNG cursor', 'mouse door activation and Escape', 'wine progress follows retained native job percentage', 'Paris scene', 'six optional-theme viewports', 'no remote requests, writes or generation'], 'screenshots': str(shots)}
+        result = {'status': 'PASS', 'kind': 'Chromium with strict simulated IPC and actual pack manifests/assets', 'checks': ['all supplied classic palettes and navigation retention', 'deleted active Android White pack falls back to the always-available built-in; restoration reapplies the override', 'legacy IDs and reload', 'prompt retention', 'runtime refresh after palette edit', 'no remote requests, writes or generation'], 'screenshots': str(shots)}
         (shots/'result.json').write_text(json.dumps(result, indent=2)+'\n')
         print(json.dumps(result, indent=2), flush=True)
     finally:
