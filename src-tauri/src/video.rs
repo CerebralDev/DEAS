@@ -1,7 +1,6 @@
 //! Typed playback IPC. No frontend-supplied mpv commands or arbitrary network URLs.
 use serde::Deserialize;
 use serde_json::Value;
-#[cfg(target_os = "linux")]
 use tauri::Manager;
 
 #[cfg(target_os = "linux")]
@@ -11,6 +10,12 @@ mod linux;
 #[derive(Deserialize)]
 #[serde(untagged, deny_unknown_fields)]
 pub enum Source {
+    Preview {
+        #[serde(rename = "previewJobId")]
+        job_id: String,
+        #[serde(rename = "previewRevision")]
+        revision: u64,
+    },
     File {
         path: String,
     },
@@ -52,6 +57,7 @@ pub enum Action {
         volume: f64,
     },
     Status,
+    PreviewError,
     Close,
 }
 impl Action {
@@ -153,7 +159,25 @@ pub async fn native_video_open(
     auto_play: bool,
     repeat: bool,
     muted: Option<bool>,
-) -> Result<(), String> {
+) -> Result<Value, String> {
+    #[cfg(not(target_os = "linux"))]
+    if let Source::Preview {
+        ref job_id,
+        revision,
+    } = source
+    {
+        let result = (|| {
+            if window.label() != "main" || uuid::Uuid::parse_str(&id).is_err() {
+                return Err("Invalid video owner".into());
+            }
+            let lease = window.state::<crate::jobs::Jobs>().preview_video(job_id, revision)?;
+            let bytes = std::fs::read(lease.path()).map_err(|_| "Cannot read preview")?;
+            use base64::Engine;
+            Ok(serde_json::json!(format!("data:video/mp4;base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes))))
+        })();
+        notice(&id, "open", result.is_err());
+        return result;
+    }
     let result = open_inner(
         &window,
         id.clone(),
@@ -172,7 +196,7 @@ pub async fn native_video_open(
         if cancelled { "cancel" } else { "open" },
         result.is_err() && !cancelled,
     );
-    result
+    result.map(|()| Value::Null)
 }
 async fn open_inner(
     window: &tauri::WebviewWindow,
@@ -212,6 +236,12 @@ async fn prepare_video(
 ) -> Result<(), String> {
     let app = window.app_handle();
     let (path, temporary) = match source {
+        Source::Preview { job_id, revision } => {
+            let lease = app
+                .state::<crate::jobs::Jobs>()
+                .preview_video(&job_id, revision)?;
+            (lease.path().to_owned(), Some(lease))
+        }
         Source::File { path } => {
             let path = local_path(&path)?;
             if !app.asset_protocol_scope().is_allowed(&path) {
@@ -258,7 +288,7 @@ async fn prepare_video(
                 }
                 (&file).write_all(&chunk).map_err(|e| e.to_string())?;
             }
-            (file.path().to_owned(), Some(file))
+            (file.path().to_owned(), Some(std::sync::Arc::new(file)))
         }
     };
     check_signature(&path)?;
@@ -292,6 +322,10 @@ async fn update_inner(
     action: Action,
 ) -> Result<Value, String> {
     action.validate()?;
+    if matches!(action, Action::PreviewError) {
+        notice(&id, "temporal-preview", true);
+        return Ok(Value::Null);
+    }
     #[cfg(target_os = "linux")]
     if matches!(action, Action::Close) {
         Pending::cancel(&id);

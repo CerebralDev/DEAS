@@ -7,6 +7,9 @@ use std::{
 
 #[path = "jobs_audio_post.rs"]
 mod audio_post;
+#[path = "jobs_auto_refine.rs"]
+mod auto_refine;
+pub use auto_refine::native_auto_refine;
 #[path = "jobs_outputs.rs"]
 mod job_outputs;
 pub(crate) use job_outputs::validate_envelope as validate_png_envelope;
@@ -17,6 +20,8 @@ mod cancel;
 mod history;
 #[path = "jobs_observer.rs"]
 mod observer;
+#[path = "jobs_preview.rs"]
+pub(crate) mod preview;
 #[path = "jobs_stop.rs"]
 mod stop;
 #[path = "jobs_workbench.rs"]
@@ -48,6 +53,7 @@ pub struct Jobs(
 
 #[derive(Default)]
 struct Session {
+    auto_refine: bool,
     audio_post: Option<Arc<std::sync::atomic::AtomicBool>>,
     studio: bool,
     workbench: Vec<Arc<Jobs>>,
@@ -177,6 +183,10 @@ struct Live {
     value: u64,
     max: u64,
     preview: Option<String>,
+    temporal: Option<preview::Preview>,
+    preview_nodes: Vec<String>,
+    preview_job: String,
+    preview_revision: u64,
     // All Job clones share this owner; the observer task holds only a weak Live reference.
     observer: observer::Observer,
 }
@@ -187,8 +197,9 @@ impl Job {
     }
     fn stop_observer(&self) {
         // Cleanup does not consume display data, including after an optional view failure.
-        let live = self.live.lock().unwrap_or_else(|error| error.into_inner());
+        let mut live = self.live.lock().unwrap_or_else(|error| error.into_inner());
         live.observer.cancel();
+        live.temporal = None;
     }
     fn stop_observer_if_terminal(&self) {
         if self.terminal() {
@@ -209,6 +220,9 @@ impl Job {
             if let Ok(live) = self.live.lock() {
                 if live.max > 0 {
                     value["progress"] = json!({"value":live.value,"max":live.max});
+                }
+                if let Some(temporal) = &live.temporal {
+                    value["temporalPreview"] = temporal.data.clone();
                 }
                 if let Some(preview) = &live.preview {
                     value["preview"] = json!(preview);
@@ -298,6 +312,9 @@ pub(crate) fn compile(i: &Value) -> Result<Value, String> {
         let mut recipe = i.clone();
         recipe.as_object_mut().unwrap().remove("audioEnhance");
         return compile(&recipe);
+    }
+    if crate::jobs_sam3::is_sam3(i) {
+        return crate::jobs_sam3::compile(i);
     }
     if crate::jobs_music::is_music(i) {
         return crate::jobs_music::compile(i);
@@ -860,8 +877,31 @@ pub(crate) fn compile(i: &Value) -> Result<Value, String> {
         graph["N"] = json!({"class_type":"RandomNoise","inputs":{"noise_seed":i["seed"]}});
         graph["G"] = json!({"class_type":"CFGGuider","inputs":{"model":graph["5"]["inputs"]["model"],"positive":["2",0],"negative":["3",0],"cfg":i["cfg"]}});
         graph["Q"] = json!({"class_type":"KSamplerSelect","inputs":{"sampler_name":i["sampler"]}});
-        graph["Z"] = json!({"class_type":node,"inputs":{"steps":i["steps"],"width":i["width"],"height":i["height"]}});
+        let steps = i["steps"].as_f64().unwrap() as u64;
+        let denoise = i["denoise"].as_f64().unwrap_or(1.0);
+        let total = if image.is_some() && denoise > 0.0 && denoise < 1.0 {
+            (steps as f64 / denoise).floor() as u64
+        } else {
+            steps
+        };
+        if total > 10000 {
+            return Err(
+                "Derived scheduler steps exceed 10000; increase denoise or reduce steps".into(),
+            );
+        }
+        let (sw, sh) = if let Some(c) = crop {
+            (c["targetWidth"].clone(), c["targetHeight"].clone())
+        } else if let Some(r) = resize {
+            (r["width"].clone(), r["height"].clone())
+        } else {
+            (i["width"].clone(), i["height"].clone())
+        };
+        graph["Z"] = json!({"class_type":node,"inputs":{"steps":total,"width":sw,"height":sh}});
         graph["5"] = json!({"class_type":"SamplerCustomAdvanced","inputs":{"noise":["N",0],"guider":["G",0],"sampler":["Q",0],"sigmas":["Z",0],"latent_image":latent.clone()}});
+        if image.is_some() && denoise < 1.0 {
+            graph["ZD"] = json!({"class_type":"SplitSigmas","inputs":{"sigmas":["Z",0],"step":if denoise == 0.0 { steps } else { total-steps }}});
+            graph["5"]["inputs"]["sigmas"] = json!(["ZD", 1]);
+        }
     }
     if let Some(image) = image {
         graph["8"] = json!({"class_type":"LoadImage","inputs":{"image":image}});
@@ -955,7 +995,6 @@ pub(crate) fn compile(i: &Value) -> Result<Value, String> {
     }
     if let Some(r) = refine {
         let mut image = graph["7"]["inputs"]["images"].clone();
-        // shortcut: sibling savers cannot guarantee pre-failure retention; add a supported save dependency when that guarantee is required.
         graph["B7"] = graph["7"].clone();
         graph["B7"]["inputs"]["filename_prefix"] =
             json!(format!("{}_original", i["outputPrefix"].as_str().unwrap()));
@@ -1005,7 +1044,8 @@ pub(crate) fn compile(i: &Value) -> Result<Value, String> {
             graph["R5"]["inputs"]["denoise"] = r["denoise"].clone();
         }
         graph["R6"] = json!({"class_type":"VAEDecode","inputs":{"samples":["R5",0],"vae":vae}});
-        graph["7"]["inputs"]["images"] = json!(["R6", 0]);
+        graph["PG"] = json!({"class_type":"DEAS_ImagePostprocessGate","inputs":{"baseline":["B7",0],"image":["R6",0]}});
+        graph["7"]["inputs"]["images"] = json!(["PG", 0]);
     }
     if let Some(h) = h3 {
         h3_edit(&mut graph, i, h)?;
@@ -1303,7 +1343,7 @@ fn listed(available: &[serde_json::Value], field: &str, name: &str) -> bool {
 const MASK_FOLDER: &str = "deas-masks";
 
 /// Only names `native_mask_upload` hands out: `deas-masks/<uuid>.png` (inpaint masks and flattened painted layers).
-fn mask_name(s: &str) -> bool {
+pub(crate) fn mask_name(s: &str) -> bool {
     s.strip_prefix("deas-masks/")
         .and_then(|n| n.strip_suffix(".png"))
         .is_some_and(|id| id.len() == 36 && uuid::Uuid::parse_str(id).is_ok())
@@ -1369,6 +1409,30 @@ impl Drop for StatusPolling<'_> {
 }
 
 impl Jobs {
+    pub(crate) fn preview_video(
+        &self,
+        id: &str,
+        revision: u64,
+    ) -> Result<Arc<tempfile::NamedTempFile>, String> {
+        if !canonical_uuid(id) {
+            return Err("Invalid preview job".into());
+        }
+        let child = self.workbench_job(id)?;
+        let held = child.as_deref().unwrap_or(self);
+        let session = held.lock()?;
+        let job = session
+            .job
+            .as_ref()
+            .filter(|j| j.id == id && matches!(j.state, "queued" | "running"))
+            .ok_or("Preview job is no longer active")?;
+        let live = job.live.lock().map_err(|_| "Preview owner unavailable")?;
+        live.temporal
+            .as_ref()
+            .filter(|p| p.revision == revision)
+            .and_then(|p| p.video.clone())
+            .ok_or_else(|| "Preview revision is no longer held".into())
+    }
+
     /// Bind optional persistence once to the app's own data directory (never an environment/project).
     pub fn initialize_history(&self, path: &std::path::Path) {
         self.3.initialize(path);
@@ -1458,12 +1522,21 @@ impl Jobs {
             let diffusion = &intent["diffusion"];
             let split = diffusion.is_object();
             let video = crate::jobs_video::is_video(&intent);
+            if video { crate::jobs_video::validate_preview_capability(&intent, allow)?; }
             let music = crate::jobs_music::is_music(&intent);
-            if !video && !music {
+            let sam3 = crate::jobs_sam3::is_sam3(&intent);
+            if !video && !music && !sam3 {
                 civitai_saver(&mut graph, &allow["nodes"], &intent);
+                if intent.get("refine").is_some()
+                    && !allow["nodes"].as_array().is_some_and(|n| n.contains(&json!("DEAS_ImagePostprocessGate")))
+                {
+                    return Err("Refine requires the DEAS baseline-first lazy gate and a compatible post-save saver output. Update/reopen the owned backend or disable post-processing; unsupported external backends cannot run it".into());
+                }
             }
             // Video recipes name their models/encoders/VAEs/images per family; image recipes below.
-            let mut required: Vec<(&str, Vec<&str>)> = if music {
+            let mut required: Vec<(&str, Vec<&str>)> = if sam3 {
+                crate::jobs_sam3::requirements(&intent)
+            } else if music {
                 crate::jobs_music::requirements(&intent)
             } else if video {
                 crate::jobs_video::requirements(&intent)
@@ -1667,6 +1740,7 @@ impl Jobs {
                 }
             }
             local_models.validate()?;
+            preview::bind_nodes(&mut graph, &id);
             let plan = Plan {
                 id: id.clone(),
                 base,
@@ -1799,6 +1873,11 @@ impl Jobs {
             );
             job
         };
+        {
+            let mut live = job.live.lock().unwrap_or_else(|e| e.into_inner());
+            live.preview_nodes = preview::nodes(&job.plan.graph);
+            live.preview_job = job.id.clone();
+        }
         // Connect before POST so this client's progress/preview frames are not missed.
         watch(&job.plan.base, &job.client_id, job.live.clone()).await;
         // The observer connection yields: never submit a declaration invalidated during that gap.

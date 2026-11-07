@@ -12,7 +12,7 @@ import type { ForgeCanvasContext } from '../../lib/forgeCanvas';
 import { I18nProvider } from '../../i18n/I18nProvider';
 import { checkRecipePrerequisites } from '../../lib/recipePrerequisites';
 import { scanModels, writeModelFamily } from '../../lib/models';
-import { stopWorkbench, stopWorkbenchJob, runWorkbenchJob, readCurrentWorkbench, pollWorkbench, uploadMask, uploadInput, readH3Session, prepareH3Video, readRefMods, loadDiagnosticJobOutput, exportDiagnosticJobOutput, type JobStatus } from '../../lib/jobs';
+import { autoRefine, waitForWorkbenchJob, stopWorkbench, stopWorkbenchJob, runWorkbenchJob, readCurrentWorkbench, pollWorkbench, uploadMask, uploadInput, readH3Session, prepareH3Video, readRefMods, loadDiagnosticJobOutput, exportDiagnosticJobOutput, type JobStatus } from '../../lib/jobs';
 import { readImageMetadata } from '../../lib/imageMetadata';
 vi.mock('@tauri-apps/api/core',()=>({isTauri:vi.fn(()=>true),convertFileSrc:(p:string)=>`asset://localhost/${p}`,invoke:vi.fn(async()=>({path:'/env/ComfyUI/output',parent:'/env/ComfyUI',entries:[],truncated:false}))}));
 vi.mock('@tauri-apps/api/window',()=>({getCurrentWindow:()=>({onCloseRequested:async()=>()=>{}})}));
@@ -22,7 +22,7 @@ vi.mock('@tauri-apps/api/webview',()=>({getCurrentWebview:()=>{if(nativeDropFail
 vi.mock('../../lib/recipePrerequisites',()=>({checkRecipePrerequisites:vi.fn(async()=>{throw new Error('offline');})}));
 vi.mock('../../lib/models',()=>({scanModels:vi.fn(),writeModelFamily:vi.fn()}));
 vi.mock('../../lib/imageMetadata',async importOriginal=>({...await importOriginal<typeof import('../../lib/imageMetadata')>(),readImageMetadata:vi.fn(async()=>[] as [string,string][])}));
-vi.mock('../../lib/jobs',()=>({stopWorkbenchJob:vi.fn(),uploadMask:vi.fn(),uploadInput:vi.fn(),readH3Session:vi.fn(),prepareH3Video:vi.fn(),readRefMods:vi.fn(),stopWorkbench:vi.fn(),runWorkbenchJob:vi.fn(),readCurrentWorkbench:vi.fn(),pollWorkbench:vi.fn(),loadDiagnosticJobOutput:vi.fn(),exportDiagnosticJobOutput:vi.fn(),isImageIntent:(i:{recipeId?:string})=>!!i&&i.recipeId!=='video-generation'&&i.recipeId!=='music-generation'}));
+vi.mock('../../lib/jobs',()=>({autoRefine:vi.fn(),waitForWorkbenchJob:vi.fn(),stopWorkbenchJob:vi.fn(),uploadMask:vi.fn(),uploadInput:vi.fn(),readH3Session:vi.fn(),prepareH3Video:vi.fn(),readRefMods:vi.fn(),stopWorkbench:vi.fn(),runWorkbenchJob:vi.fn(),readCurrentWorkbench:vi.fn(),pollWorkbench:vi.fn(),loadDiagnosticJobOutput:vi.fn(),exportDiagnosticJobOutput:vi.fn(),isImageIntent:(i:{recipeId?:string})=>i?.recipeId==='checkpoint-text-to-image-diagnostic'}));
 const collection=(jobs:JobStatus[]=[],preparing=0)=>({jobs,preparing,capacity:20,stopAvailable:true,admissionEpoch:0,stopping:false});
 const evidence={baseUrl:'http://127.0.0.1:7801/',recipeId:'checkpoint-text-to-image-diagnostic' as const,version:1 as const,missingNodes:[],generationReady:false as const,
  allowlist:{nodes:['CheckpointLoaderSimple','CLIPTextEncode','EmptyLatentImage','KSampler','VAEDecode','SaveImage'],checkpoints:['a.safetensors','b.safetensors'],loras:['style.safetensors'],samplers:['euler','euler_ancestral','euler_cfg_pp','er_sde','dpmpp_2m','dpm_2','res_multistep','uni_pc','lcm'],schedulers:['normal','simple','linear_quadratic','karras','sgm_uniform','beta']}};
@@ -40,6 +40,40 @@ beforeEach(()=>{
  vi.spyOn(HTMLCanvasElement.prototype,'getContext').mockReturnValue({save:vi.fn(),restore:vi.fn(),arc:vi.fn(),fill:vi.fn(),beginPath:vi.fn(),clearRect:vi.fn(),fillRect:vi.fn(),drawImage:vi.fn(),getImageData:vi.fn(()=>({data:new Uint8ClampedArray([0,0,0,0])}))} as unknown as CanvasRenderingContext2D);
 });
 afterEach(()=>{cleanup();Reflect.deleteProperty(HTMLDialogElement.prototype,'showModal');Reflect.deleteProperty(HTMLDialogElement.prototype,'close');Reflect.deleteProperty(HTMLVideoElement.prototype,'src');vi.clearAllMocks();vi.unstubAllGlobals();});
+test('SAM refinement defaults off, preserves saved OFF/ON and uses an explicit checkpoint',async()=>{
+ const sam='SAM3/sam3.1_multiplex_fp16.safetensors';
+ vi.mocked(checkRecipePrerequisites).mockResolvedValue({...evidence,allowlist:{...evidence.allowlist,nodes:[...evidence.allowlist.nodes,'SAM3_Detect'],checkpoints:[...evidence.allowlist.checkpoints,sam]}});
+ vi.mocked(scanModels).mockResolvedValue([{category:'checkpoints',name:'a.safetensors',path:'/m/a',family:'sdxl',size:1,info:null}]);
+ const view=render(<I18nProvider><Workbench endpoint={evidence.baseUrl} roots={{models:'/m'}}/></I18nProvider>);
+ fireEvent.click(screen.getByRole('tab',{name:'Post-Processing'}));
+ const enabled=await waitFor(()=>{const el=document.querySelector<HTMLInputElement>('[data-sam="enabled"]');expect(el).not.toBeNull();return el!;});
+ expect(enabled.checked).toBe(false);
+ expect(document.querySelector<HTMLInputElement>('[data-sam="denoise"]')!.value).toBe('0.25');
+ expect(document.querySelector<HTMLInputElement>('[data-sam="margin"]')!.value).toBe('32');
+ await waitFor(()=>expect(document.querySelector<HTMLSelectElement>('[data-sam="model"]')!.options.length).toBe(2));
+ expect(document.querySelector<HTMLSelectElement>('[data-sam="model"]')!.value).toBe('');
+ fireEvent.click(enabled);expect(enabled.checked).toBe(true);
+ expect(autoRefine).not.toHaveBeenCalled();expect(runWorkbenchJob).not.toHaveBeenCalled();
+ view.unmount();render(<I18nProvider><Workbench endpoint={evidence.baseUrl} roots={{models:'/m'}}/></I18nProvider>);
+ expect(document.querySelector<HTMLInputElement>('[data-sam="enabled"]')!.checked).toBe(true);
+ fireEvent.click(document.querySelector('[data-sam="enabled"]')!);
+ expect(JSON.parse(localStorage.getItem('deas.pref.studio.run.samEnabled')!)).toBe(false);
+});
+test('SAM automatic refinement hands the exact submitted job to the native serial group chain',async()=>{
+ const sam='SAM3/sam3.1_multiplex_fp16.safetensors';
+ for(const [key,value] of Object.entries({samCheckpoint:sam,samTargets:'eyes, feet; hands',samEnabled:true,samDenoise:0.35,steps:23}))localStorage.setItem('deas.pref.studio.run.'+key,JSON.stringify(value));
+ vi.mocked(checkRecipePrerequisites).mockResolvedValue({...evidence,allowlist:{...evidence.allowlist,nodes:[...evidence.allowlist.nodes,'SAM3_Detect'],checkpoints:[...evidence.allowlist.checkpoints,sam]}});
+ vi.mocked(scanModels).mockResolvedValue([{category:'checkpoints',name:'a.safetensors',path:'/m/a',family:'sdxl',size:1,info:null}]);
+ const job:JobStatus={id:'base-job',baseUrl:evidence.baseUrl,promptId:'prompt',state:'queued',outputs:[],error:null,generationReady:false};
+ vi.mocked(runWorkbenchJob).mockResolvedValue(job);vi.mocked(autoRefine).mockResolvedValue({job:null,skipped:0});
+ render(<I18nProvider><Workbench endpoint={evidence.baseUrl} roots={{models:'/m'}}/></I18nProvider>);
+ const run=screen.getByRole('button',{name:'Run'});await waitFor(()=>expect(run).toHaveProperty('disabled',false));fireEvent.click(run);
+ await waitFor(()=>expect(autoRefine).toHaveBeenCalledTimes(1));
+ const [url,intent,settings,fence,sourceJob]=vi.mocked(autoRefine).mock.calls[0];
+ expect(url).toBe(evidence.baseUrl);expect(intent).toEqual(vi.mocked(runWorkbenchJob).mock.calls[0][1]);
+ expect(settings).toEqual({checkpoint:sam,targets:['eyes','feet','hands'],denoise:0.35,margin:32,threshold:0.5});
+ expect(fence).toBe(0);expect(sourceJob).toBe(job.id);expect(waitForWorkbenchJob).not.toHaveBeenCalled();
+});
 test('model metadata action enables an unknown supported file while GGUF stays usable',async()=>{
  const unknown={category:'diffusion_models',name:'unknown.safetensors',path:'/m/unknown.safetensors',size:1,info:null};
  const bad={...unknown,name:'bad.safetensors',path:'/m/bad.safetensors',family:'anima',metadataError:'invalid sidecar'};
@@ -271,6 +305,109 @@ test.each((['ltx-2','minimax-h3','yue2'] as const).flatMap(family=>(['off','clea
  const submitted=vi.mocked(runWorkbenchJob).mock.lastCall![1];
  if(audio)expect(submitted).toHaveProperty('audioEnhance',audio);else expect(submitted).not.toHaveProperty('audioEnhance');
  expect(invoke).not.toHaveBeenCalledWith('native_audio_enhance_export',expect.anything());
+});
+
+test.each((['ltx-2','minimax-h3'] as const).flatMap(family=>([undefined,true,false,'missing'] as const).map(preference=>({family,preference}))))('enhanced preview $family / $preference shares Run Plan and immutable Run',async({family,preference})=>{
+ const h3=family==='minimax-h3';
+ const config={decoder:'tiny' as const,model:h3?'taeh3.safetensors':'taeltx.safetensors'};
+ const files=h3?[
+  {category:'diffusion_models',name:'h3.safetensors',family},
+  {category:'text_encoders',name:'qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors'},
+  {category:'vae',name:'minimax_h3_video_vae_fp16.safetensors'},
+  {category:'vae',name:'minimax_h3_audio_vae_fp32.safetensors'}
+ ].map(m=>({...m,path:'/m/'+m.name,size:1,info:null})):[...ltxModels];
+ localStorage.setItem('deas.pref.studio.run.pipeline','"t2v"');
+ if(typeof preference==='boolean')localStorage.setItem('deas.pref.studio.run.options',JSON.stringify({...defaultOptions,enhancedPreview:preference}));
+ vi.mocked(scanModels).mockResolvedValue(files);
+ vi.mocked(checkRecipePrerequisites).mockResolvedValue({...evidence,allowlist:{...evidence.allowlist,videoPreviews:preference==='missing'?{}:{[family]:config}}});
+ vi.mocked(runWorkbenchJob).mockResolvedValue({...heldJob('preview-run','failed'),error:'fixture'});
+ const props={endpoint:evidence.baseUrl,roots:{models:'/m'}};
+ const view=render(<I18nProvider><Workbench {...props}/></I18nProvider>);
+ await waitFor(()=>expect(screen.getByRole('button',{name:'Run'})).toHaveProperty('disabled',false));
+ fireEvent.click(screen.getByRole('tab',{name:'Options'}));
+ const toggle=screen.getByRole('switch',{name:'Enhanced preview'});
+ const enabled=preference!==false&&preference!=='missing';
+ expect(toggle).toHaveProperty('checked',enabled);
+ expect(toggle).toHaveProperty('disabled',preference==='missing');
+ view.rerender(<I18nProvider><Workbench {...props} planVisible/></I18nProvider>);
+ const planned=JSON.parse(document.querySelector('[data-plan-intent]')!.textContent!);
+ if(enabled)expect(planned.enhancedPreview).toEqual(config);else expect(planned).not.toHaveProperty('enhancedPreview');
+ expect(runWorkbenchJob).not.toHaveBeenCalled();expect(uploadInput).not.toHaveBeenCalled();
+ view.rerender(<I18nProvider><Workbench {...props}/></I18nProvider>);
+ fireEvent.click(screen.getByRole('button',{name:'Run'}));
+ if(preference!=='missing')fireEvent.click(screen.getByRole('switch',{name:'Enhanced preview'}));
+ await waitFor(()=>expect(runWorkbenchJob).toHaveBeenCalledOnce());
+ const submitted=vi.mocked(runWorkbenchJob).mock.lastCall![1];
+ if(enabled)expect(submitted).toHaveProperty('enhancedPreview',config);else expect(submitted).not.toHaveProperty('enhancedPreview');
+});
+
+test('enhanced preview follows only the selected running video and cleans up on OFF, browsing, hidden panes, overlays and terminal selection',async()=>{
+ const config={decoder:'tiny' as const,model:'taeltx.safetensors'};
+ const previewImages:{src:string;onload:unknown;onerror:unknown}[]=[];
+ vi.stubGlobal('Image',class{src='';complete=false;onload=null;onerror=null;constructor(){previewImages.push(this);}});
+ const intent={recipeId:'video-generation',version:1,family:'ltx-2',positivePrompt:'preview',negativePrompt:'',model:ltxModels[0].name,textEncoder:ltxModels[1].name,vae:ltxModels[3].name,seed:42,width:768,height:512,frames:49,frameRate:24,steps:8,cfg:1,sampler:'euler',scheduler:'simple',outputPrefix:'raw/preview',output:defaultOptions.output!,ltx:{textProjection:ltxModels[2].name,audioVae:ltxModels[4].name,passes:1},enhancedPreview:config} as const;
+ const running:JobStatus={...heldJob('running-video','running'),intent,preview:'data:image/png;base64,ordinary',temporalPreview:{revision:1,nodeId:'preview',width:320,height:192,fps:8,frames:[{src:'data:image/png;base64,frame-a',durationMs:125},{src:'data:image/png;base64,frame-b',durationMs:125}]}};
+ const other:JobStatus={...running,id:'other-video',temporalPreview:{...running.temporalPreview!,width:160}};
+ const inactive=(['queued','succeeded','failed','cancelled','unknown'] as const).map(state=>({...running,id:state,state}));
+ const image:JobStatus={...running,id:'image-job',intent:undefined};
+ const jobs=[running,other,...inactive,image];
+ vi.mocked(readCurrentWorkbench).mockResolvedValue(collection(jobs));vi.mocked(pollWorkbench).mockResolvedValue(collection(jobs));
+ vi.mocked(scanModels).mockResolvedValue([...ltxModels]);
+ vi.mocked(checkRecipePrerequisites).mockResolvedValue({...evidence,allowlist:{...evidence.allowlist,videoPreviews:{'ltx-2':config}}});
+ vi.mocked(invoke).mockImplementation(async command=>command==='native_media_star_status'?{starred:false,unavailable:null}:{path:'/input',parent:'/',entries:[mediaEntries[0]],truncated:false});
+ localStorage.setItem('deas.pref.studio.run.pipeline','"t2v"');
+ const props={endpoint:evidence.baseUrl,roots:{models:'/m',input:'/input'}};
+ const content=(hidden=false,planVisible=false)=><div hidden={hidden}><I18nProvider><Workbench {...props} planVisible={planVisible}/></I18nProvider></div>;
+ const view=render(content());
+ const canvas=()=>document.querySelector<HTMLCanvasElement>('.wb-shown canvas');
+ const select=(id:string)=>fireEvent.click(document.querySelector(`[data-job-id="${id}"] .wb-queue-select`)!);
+ await waitFor(()=>expect(document.querySelector('[data-job-id="running-video"]')).not.toBeNull());
+ expect(canvas()).toBeNull();
+ select(running.id);await waitFor(()=>expect(canvas()?.width).toBe(320));
+ select(other.id);expect(canvas()?.width).toBe(160);
+ for(const job of [...inactive,image]){select(job.id);expect(canvas()).toBeNull();}
+ select(running.id);expect(canvas()?.width).toBe(320);
+ fireEvent.click(screen.getByRole('tab',{name:'Options'}));
+ fireEvent.click(screen.getByRole('switch',{name:'Enhanced preview'}));
+ expect(canvas()).toBeNull();
+ expect(previewImages.length).toBeGreaterThan(0);
+ expect(previewImages.every(image=>image.src===''&&image.onload===null&&image.onerror===null)).toBe(true);
+ expect(document.querySelector('.wb-shown img')?.getAttribute('src')).toBe(running.preview);
+ expect(running.intent).toHaveProperty('enhancedPreview',config);
+ fireEvent.click(screen.getByRole('switch',{name:'Enhanced preview'}));expect(canvas()?.width).toBe(320);
+ view.rerender(content(true));await waitFor(()=>expect(canvas()).toBeNull());
+ view.rerender(content());await waitFor(()=>expect(canvas()?.width).toBe(320));
+ view.rerender(content(false,true));await waitFor(()=>expect(canvas()).toBeNull());
+ view.rerender(content());await waitFor(()=>expect(canvas()?.width).toBe(320));
+ fireEvent.click(screen.getByRole('button',{name:'Stop'}));expect(canvas()).toBeNull();
+ fireEvent.click(document.querySelector('[data-run-stop-cancel]')!);
+ await waitFor(()=>expect(canvas()?.width).toBe(320));
+ fireEvent.click(screen.getByRole('tab',{name:'Media'}));fireEvent.click(await screen.findByRole('button',{name:'ref.png'}));
+ expect(canvas()).toBeNull();expect(document.querySelector('[data-browsed-preview]')).not.toBeNull();
+ fireEvent.click(document.querySelector('[data-preview-close]')!);expect(canvas()?.width).toBe(320);
+ vi.mocked(pollWorkbench).mockResolvedValue(collection(jobs.map(job=>job.id===running.id?{...job,state:'cancelled'}:job)));
+ await waitFor(()=>expect(document.querySelector('.wb-shown [data-state]')?.getAttribute('data-state')).toBe('cancelled'),{timeout:2000});
+ expect(canvas()).toBeNull();
+ fireEvent.click(document.querySelector('[data-preview-close]')!);expect(canvas()).toBeNull();
+ view.unmount();expect(canvas()).toBeNull();
+ expect(runWorkbenchJob).not.toHaveBeenCalled();expect(uploadInput).not.toHaveBeenCalled();
+});
+
+test('enhanced preview capability refresh preserves saved OFF without computation',async()=>{
+ localStorage.setItem('deas.pref.studio.run.pipeline','"t2v"');
+ localStorage.setItem('deas.pref.studio.run.options',JSON.stringify({...defaultOptions,enhancedPreview:false}));
+ vi.mocked(scanModels).mockResolvedValue([...ltxModels]);
+ vi.mocked(checkRecipePrerequisites).mockResolvedValue(evidence);
+ render(<I18nProvider><Workbench endpoint={evidence.baseUrl} roots={{models:'/m'}}/></I18nProvider>);
+ await waitFor(()=>expect(screen.getByRole('button',{name:'Run'})).toHaveProperty('disabled',false));
+ fireEvent.click(screen.getByRole('tab',{name:'Options'}));
+ expect(screen.getByRole('switch',{name:'Enhanced preview'})).toHaveProperty('disabled',true);
+ vi.mocked(checkRecipePrerequisites).mockResolvedValue({...evidence,allowlist:{...evidence.allowlist,videoPreviews:{'ltx-2':{decoder:'tiny',model:'taeltx.safetensors'}}}});
+ fireEvent.click(screen.getByRole('tab',{name:'Media'}));fireEvent.click(screen.getByRole('tab',{name:'Options'}));
+ await waitFor(()=>expect(screen.getByRole('switch',{name:'Enhanced preview'})).toHaveProperty('disabled',false));
+ expect(screen.getByRole('switch',{name:'Enhanced preview'})).toHaveProperty('checked',false);
+ expect(JSON.parse(localStorage.getItem('deas.pref.studio.run.options')!).enhancedPreview).toBe(false);
+ expect(runWorkbenchJob).not.toHaveBeenCalled();expect(uploadInput).not.toHaveBeenCalled();
 });
 
 test.each(['ltx-2','minimax-h3'] as const)('latent post-processing is opt-in, family scoped, and held in Run Plan and Run (%s)',async family=>{
@@ -729,7 +866,8 @@ test('More offers Refine and Upscale; Upscale runs the pass alone (denoise 0, no
  await waitFor(()=>expect(runWorkbenchJob).toHaveBeenCalledTimes(1));
  const sent=vi.mocked(runWorkbenchJob).mock.calls[0][1];
  expect(sent).toMatchObject({denoise:0,inputImage:'deas-inputs/result.png',width:2048,height:2048});
- expect(sent.sigmas).toEqual([]); // upscale-only: explicit empty sigma list = no diffusion tail
+ expect(sent.sigmas).toBeUndefined(); // upscale-only: sigmas absent (the backend's valid_sigmas rejects an empty [])
+ expect(sent.steps).toBeGreaterThan(0); // no empty-tail steps = -1
 });
 const settingsDrop=(path:string)=>fireEvent.drop(screen.getByRole('region',{name:'Preview'}),{dataTransfer:{types:['application/x-deas-media'],getData:()=>JSON.stringify({name:path.split('/').at(-1),path,src:'asset://localhost/'+path,media:path.endsWith('.mp4')?'video':'image'})}});
 test('preview settings drop reads the dropped file without submitting or replacing the editor source',async()=>{
@@ -2501,8 +2639,23 @@ test.each(['click','Enter',' '] as const)('retained original opens and stars sou
  expect(runWorkbenchJob).toHaveBeenCalledTimes(1);
 });
 
-test('IPC fixture: Post-process upscales the shown image alone, then the render; the opt-in tab adds a refine pass to Run',async()=>{
+test('baseline-first readiness blocks only enabled refine and recovers when disabled',async()=>{
+ localStorage.setItem('deas.pref.studio.run.post','true');
  vi.mocked(checkRecipePrerequisites).mockResolvedValue(evidence);
+ vi.mocked(scanModels).mockResolvedValue([{category:'checkpoints',name:'a.safetensors',path:'/m/a',size:1,info:null,family:'sdxl'}]);
+ render(<I18nProvider><Workbench endpoint={evidence.baseUrl} roots={{models:'/m'}}/></I18nProvider>);
+ await screen.findByText(/Refine requires the DEAS baseline-first adapter/);
+ expect(screen.getByRole('button',{name:'Run'})).toHaveProperty('disabled',true);
+ expect(runWorkbenchJob).not.toHaveBeenCalled();
+ fireEvent.click(screen.getByRole('tab',{name:/Post-Processing/}));
+ fireEvent.click(screen.getByRole('checkbox',{name:'Refine / Upscale after every run'}));
+ await waitFor(()=>expect(screen.getByRole('button',{name:'Run'})).toHaveProperty('disabled',false));
+ expect(screen.queryByText(/Refine requires the DEAS baseline-first adapter/)).toBeNull();
+ expect(runWorkbenchJob).not.toHaveBeenCalled();
+});
+
+test('IPC fixture: Post-process upscales the shown image alone, then the render; the opt-in tab adds a refine pass to Run',async()=>{
+ vi.mocked(checkRecipePrerequisites).mockResolvedValue({...evidence,allowlist:{...evidence.allowlist,nodes:[...evidence.allowlist.nodes,'DEAS_ImagePostprocessGate']}});
  vi.mocked(scanModels).mockResolvedValue([{category:'checkpoints',name:'a.safetensors',path:'/m/checkpoints/a.safetensors',size:1,info:null,family:'sdxl'}]);
  vi.mocked(invoke).mockImplementation(async(_c,args)=>({path:(args as {path:string}).path,parent:'/env',entries:[{name:'out.png',path:'/env/ComfyUI/output/out.png',kind:'file',symlink:false,media:'image',size:1,modified:1}],truncated:false}));
  let n=0;
@@ -2551,7 +2704,7 @@ test('IPC fixture: Post-process upscales the shown image alone, then the render;
  // Tiled refine is offered only when the backend lists the DaSiWa node; tiles = SDXL native 1024², overlap 128 on the 64 grid.
  const tiledBox=screen.getByRole('checkbox',{name:'Tiled refine (DaSiWa Tiled Diffusion)'});
  expect(tiledBox.hasAttribute('disabled')).toBe(true);
- vi.mocked(checkRecipePrerequisites).mockResolvedValue({...evidence,allowlist:{...evidence.allowlist,nodes:[...evidence.allowlist.nodes,'DaSiWaTiledDiffusion']}});
+ vi.mocked(checkRecipePrerequisites).mockResolvedValue({...evidence,allowlist:{...evidence.allowlist,nodes:[...evidence.allowlist.nodes,'DEAS_ImagePostprocessGate','DaSiWaTiledDiffusion']}});
  cleanup();
  render(<I18nProvider><Workbench endpoint="http://127.0.0.1:7801" roots={{models:'/m',input:'/env/ComfyUI/input',output:'/env/ComfyUI/output'}}/></I18nProvider>);
  await screen.findByRole('option',{name:'Text → Image',selected:true});
@@ -3722,7 +3875,7 @@ test.each(['image','ltx-2','wan','minimax-h3'] as const)('Run Plan uses the exac
   :family==='wan'?[m('diffusion_models','wan_high_noise.safetensors',family),m('diffusion_models','wan_low_noise.safetensors',family),m('text_encoders','umt5_xxl_fp8.safetensors'),m('vae','wan_2.1_vae.safetensors')]
   :[m('diffusion_models','h3.safetensors',family),m('text_encoders','qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors'),m('vae','minimax_h3_video_vae_fp16.safetensors'),m('vae','minimax_h3_audio_vae_fp32.safetensors')];
  vi.mocked(scanModels).mockResolvedValue(list);
- vi.mocked(checkRecipePrerequisites).mockResolvedValue({...evidence,allowlist:{...evidence.allowlist,nodes:[...evidence.allowlist.nodes,'DaSiWa_WildcardPresetPromptBuilder']}});
+ vi.mocked(checkRecipePrerequisites).mockResolvedValue({...evidence,allowlist:{...evidence.allowlist,nodes:[...evidence.allowlist.nodes,'DEAS_ImagePostprocessGate','DaSiWa_WildcardPresetPromptBuilder']}});
  const options={...defaultOptions,outputNaming:'test/%seed%'};
  localStorage.setItem('deas.pref.studio.run.options',JSON.stringify(options));
  localStorage.setItem('deas.pref.studio.run.seed','42');
@@ -3987,7 +4140,7 @@ test('Stop discards every unsent image preparation without claiming upload cance
  await waitFor(()=>expect(screen.getByRole('button',{name:'Run'}).hasAttribute('disabled')).toBe(false));
  fireEvent.click(screen.getByRole('button',{name:'Run'}));await waitFor(()=>expect(uploadInput).toHaveBeenCalledTimes(1));
  fireEvent.click(screen.getByRole('button',{name:'Run'}));await waitFor(()=>expect(uploadInput).toHaveBeenCalledTimes(2));
- fireEvent.click(document.querySelector('[data-run-stop]')!);
+ stopAll();
  await waitFor(()=>expect(stopWorkbench).toHaveBeenCalledTimes(1));
  await act(async()=>release('deas-inputs/late.png'));
  expect(runWorkbenchJob).not.toHaveBeenCalled();expect(document.querySelectorAll('[data-job-id]')).toHaveLength(0);
@@ -4014,7 +4167,7 @@ test('Stop drops delayed video preparation and the next press uses the new nativ
  await waitFor(()=>expect((document.querySelector('[data-run]') as HTMLButtonElement).disabled).toBe(false));
  fireEvent.click(document.querySelector('[data-run]')!);
  await waitFor(()=>expect(uploadInput).toHaveBeenCalledTimes(1));
- fireEvent.click(document.querySelector('[data-run-stop]')!);
+ stopAll();
  await screen.findByText('No native work remained. Unsent preparations were discarded.');
  await act(async()=>release('deas-inputs/late.mp4'));
  expect(runWorkbenchJob).not.toHaveBeenCalled();
@@ -4024,6 +4177,7 @@ test('Stop drops delayed video preparation and the next press uses the new nativ
 });
 
 
+const stopAll=()=>{fireEvent.click(document.querySelector('[data-run-stop]')!);fireEvent.click(screen.getByRole('button',{name:'Stop all'}));};
 const imageModels=[{category:'checkpoints',name:'a.safetensors',family:'sdxl',path:'/m/a',size:1,info:null}];
 test.each(['empty','settled','partial'] as const)('Stop %s preserves native products, stays quiet on partial and frees the queue',async outcome=>{
  vi.mocked(scanModels).mockResolvedValue(imageModels);
@@ -4035,7 +4189,7 @@ test.each(['empty','settled','partial'] as const)('Stop %s preserves native prod
  await waitFor(()=>expect(document.querySelector('[data-job-id="foreign"]')).not.toBeNull());
  fireEvent.change(screen.getByLabelText('Width'),{target:{value:'1'}});
  expect(document.querySelector<HTMLButtonElement>('[data-run-stop]')!.disabled).toBe(false);
- fireEvent.click(document.querySelector('[data-run-stop]')!);
+ stopAll();
  await waitFor(()=>expect(stopWorkbench).toHaveBeenCalledTimes(1));
  if(outcome==='partial'){await waitFor(()=>expect(document.querySelector('[data-run-stop]')).toBeNull());expect(document.querySelector('[data-run-stop-status]')).toBeNull();expect(screen.queryByRole('alert')).toBeNull();}
  else await waitFor(()=>expect(document.querySelector('[data-run-stop-status]')!.textContent).toContain(outcome==='empty'?'No native work':'Stop finished'));
@@ -4056,6 +4210,142 @@ test('without backend capabilities Studio shows one calm notice and disables Run
  expect(screen.getByText('Backend not ready – backend features unavailable.')).toBeTruthy();
  expect(screen.queryByRole('alert')).toBeNull();
  expect(document.body.textContent).not.toContain('Unavailable or incompatible');
+});
+test.each(['selected','cancel','escape'] as const)('Stop choice %s preserves a peer upload and admission epoch',async action=>{
+ const previous={invoke:vi.mocked(invoke).getMockImplementation(),upload:vi.mocked(uploadInput).getMockImplementation(),run:vi.mocked(runWorkbenchJob).getMockImplementation()};
+ try{
+ vi.mocked(checkRecipePrerequisites).mockResolvedValue(evidence);
+ vi.mocked(uploadInput).mockReset();vi.mocked(runWorkbenchJob).mockReset();
+ vi.mocked(scanModels).mockResolvedValue(imageModels);
+ const saved={...projectFixture,draft:{...projectFixture.draft,checkpoint:'a.safetensors',pipeline:'i2i'},input:{id:'input-1',path:'/projects/one/assets/input.png',sha256:'a'.repeat(64),width:1024,height:1024}};
+ vi.mocked(invoke).mockImplementation(async c=>c==='native_project_open'?saved:{entries:[],truncated:false});
+ let release!:(name:string)=>void;
+ vi.mocked(uploadInput).mockResolvedValueOnce('deas-inputs/first.png').mockReturnValueOnce(new Promise(resolve=>{release=resolve;}));
+ let snapshot={...collection(),admissionEpoch:7};
+ vi.mocked(readCurrentWorkbench).mockImplementation(async()=>snapshot);vi.mocked(pollWorkbench).mockImplementation(async()=>snapshot);
+ vi.mocked(runWorkbenchJob).mockImplementation(async(baseUrl,intent)=>{const job={...heldJob(snapshot.jobs.length?'second':'first','queued',baseUrl),intent};snapshot={...snapshot,jobs:[...snapshot.jobs,job]};return job;});
+ vi.mocked(stopWorkbenchJob).mockImplementation(async job=>{const next={...job,state:'cancelled' as const};snapshot={...snapshot,jobs:[next]};return next;});
+ render(<I18nProvider><Workbench endpoint={evidence.baseUrl} roots={{models:'/m',input:'/env/in'}}/></I18nProvider>);
+ await waitFor(()=>expect(screen.getByRole('button',{name:'Open project'}).hasAttribute('disabled')).toBe(false));
+ fireEvent.click(screen.getByRole('button',{name:'Open project'}));
+ await waitFor(()=>expect((screen.getByLabelText('Prompt') as HTMLTextAreaElement).value).toBe('saved project prompt'));
+ const run=screen.getByRole('button',{name:'Run'});await waitFor(()=>expect(run.hasAttribute('disabled')).toBe(false));
+ fireEvent.click(run);await waitFor(()=>expect(document.querySelector('[data-job-id="first"]')).not.toBeNull());
+ await waitFor(()=>expect(run.hasAttribute('disabled')).toBe(false),{timeout:2500});
+ fireEvent.click(run);await waitFor(()=>expect(uploadInput).toHaveBeenCalledTimes(2));
+ fireEvent.click(document.querySelector('[data-run-stop]')!);
+ const dialog=screen.getByRole('dialog',{name:'Stop Workbench work'});
+ if(action==='escape')fireEvent(dialog,new Event('cancel',{cancelable:true}));
+ else fireEvent.click(within(dialog).getByRole('button',{name:action==='selected'?'Stop selected item':'Cancel'}));
+ if(action==='selected')await waitFor(()=>expect(stopWorkbenchJob).toHaveBeenCalledTimes(1));else expect(stopWorkbenchJob).not.toHaveBeenCalled();
+ await act(async()=>release('deas-inputs/second.png'));
+ await waitFor(()=>expect(runWorkbenchJob).toHaveBeenCalledTimes(2));
+ expect(vi.mocked(runWorkbenchJob).mock.calls.map(call=>call[2])).toEqual([7,7]);expect(stopWorkbench).not.toHaveBeenCalled();
+ await waitFor(()=>expect(document.querySelector('[data-job-id="second"]')).not.toBeNull());
+ }finally{cleanup();vi.mocked(invoke).mockImplementation(previous.invoke!);vi.mocked(uploadInput).mockReset().mockImplementation(previous.upload!);vi.mocked(runWorkbenchJob).mockReset().mockImplementation(previous.run!);}
+});
+test('Stop choice disables a captured item that finishes while the dialog is open',async()=>{
+ const selected=heldJob('selected','running'),peer=heldJob('peer','queued');
+ vi.mocked(readCurrentWorkbench).mockResolvedValue(collection([peer,selected]));
+ vi.mocked(pollWorkbench).mockResolvedValue(collection([peer,{...selected,state:'succeeded'}]));
+ render(<I18nProvider><Workbench endpoint=""/></I18nProvider>);
+ await waitFor(()=>expect(document.querySelector('[data-run-stop]')).not.toBeNull());
+ fireEvent.click(document.querySelector('[data-run-stop]')!);
+ const button=screen.getByRole('button',{name:'Stop selected item'});
+ await waitFor(()=>expect(button.hasAttribute('disabled')).toBe(true),{timeout:2500});
+ expect(button.title).toBe('The selected item is no longer queued or running.');
+ fireEvent.click(button);expect(stopWorkbenchJob).not.toHaveBeenCalled();expect(stopWorkbench).not.toHaveBeenCalled();
+});
+test.each(['queued','running'] as const)('Stop choice pins the %s selection and leaves peers progressing',async state=>{
+ const selected=heldJob('selected',state),peer=heldJob('peer','queued');
+ vi.mocked(readCurrentWorkbench).mockResolvedValue(collection([peer,selected]));
+ vi.mocked(stopWorkbenchJob).mockResolvedValue({...selected,state:'cancelled'});
+ vi.mocked(pollWorkbench).mockResolvedValue(collection([{...peer,state:'running'},{...selected,state:'cancelled'}]));
+ render(<I18nProvider><Workbench endpoint=""/></I18nProvider>);
+ await waitFor(()=>expect(document.querySelector('[data-job-id="selected"]')).not.toBeNull());
+ fireEvent.click(document.querySelector('[data-run-stop]')!);
+ const dialog=screen.getByRole('dialog',{name:'Stop Workbench work'});
+ expect(document.activeElement).toBe(within(dialog).getByRole('button',{name:'Cancel'}));
+ expect(stopWorkbenchJob).not.toHaveBeenCalled();expect(stopWorkbench).not.toHaveBeenCalled();
+ // A native modal prevents pointer changes, but asynchronous selection changes must not retarget it either.
+ fireEvent.click(document.querySelector('[data-job-id="peer"] .wb-queue-select')!);
+ expect(within(dialog).getByText('selected')).toBeTruthy();
+ fireEvent.click(within(dialog).getByRole('button',{name:'Stop selected item'}));
+ await waitFor(()=>expect(stopWorkbenchJob).toHaveBeenCalledWith(expect.objectContaining({id:'selected',state})));
+ expect(stopWorkbench).not.toHaveBeenCalled();
+ await waitFor(()=>expect(document.querySelector('[data-job-id="peer"] [data-state]')?.getAttribute('data-state')).toBe('running'),{timeout:2500});
+});
+test.each(['cancel','escape'] as const)('Stop choice %s leaves jobs and preparation untouched and restores focus',async action=>{
+ vi.mocked(readCurrentWorkbench).mockResolvedValue(collection([heldJob('held','running')],1));
+ render(<I18nProvider><Workbench endpoint=""/></I18nProvider>);
+ await waitFor(()=>expect(document.querySelector('[data-run-stop]')).not.toBeNull());
+ const trigger=document.querySelector<HTMLButtonElement>('[data-run-stop]')!;trigger.focus();fireEvent.click(trigger);
+ const dialog=screen.getByRole('dialog',{name:'Stop Workbench work'});
+ if(action==='cancel')fireEvent.click(within(dialog).getByRole('button',{name:'Cancel'}));else fireEvent(dialog,new Event('cancel',{cancelable:true}));
+ expect(screen.queryByRole('dialog',{name:'Stop Workbench work'})).toBeNull();expect(document.activeElement).toBe(trigger);
+ expect(stopWorkbench).not.toHaveBeenCalled();expect(stopWorkbenchJob).not.toHaveBeenCalled();
+ expect(document.querySelector('[data-job-id="held"] [data-state]')?.getAttribute('data-state')).toBe('running');
+});
+test.each(['missing','succeeded','unknown','unsupported'] as const)('Stop choice explains disabled %s selection',async state=>{
+ const selected=heldJob('selected',state==='unsupported'?'running':state==='missing'?'queued':state);
+ vi.mocked(readCurrentWorkbench).mockResolvedValue({...collection(state==='missing'?[]:[selected],1),stopAvailable:state!=='unsupported'});
+ render(<I18nProvider><Workbench endpoint=""/></I18nProvider>);
+ await waitFor(()=>expect(document.querySelector('[data-run-stop]')).not.toBeNull());
+ fireEvent.click(document.querySelector('[data-run-stop]')!);
+ const dialog=screen.getByRole('dialog',{name:'Stop Workbench work'}),button=within(dialog).getByRole('button',{name:'Stop selected item'});
+ expect(button.hasAttribute('disabled')).toBe(true);expect(button.getAttribute('title')).toBeTruthy();
+ expect(within(dialog).getByText(button.getAttribute('title')!)).toBeTruthy();
+ fireEvent.click(button);expect(stopWorkbenchJob).not.toHaveBeenCalled();expect(stopWorkbench).not.toHaveBeenCalled();
+});
+test.each(['rejected','unknown'] as const)('selected Stop keeps %s truthful without global fallback',async outcome=>{
+ const job={...heldJob('retained','running'),outputs:[{filename:'keep.png',subfolder:'',type:'output' as const}],outputRoot:'/old/output'};
+ vi.mocked(readCurrentWorkbench).mockResolvedValue(collection([job]));
+ if(outcome==='rejected')vi.mocked(stopWorkbenchJob).mockRejectedValue(new Error('Scoped interrupt unsupported'));
+ else vi.mocked(stopWorkbenchJob).mockResolvedValue({...job,state:'unknown',error:'Scoped interrupt outcome unknown'});
+ render(<I18nProvider><Workbench endpoint=""/></I18nProvider>);
+ await waitFor(()=>expect(document.querySelector('[data-run-stop]')).not.toBeNull());
+ fireEvent.click(document.querySelector('[data-run-stop]')!);fireEvent.click(screen.getByRole('button',{name:'Stop selected item'}));
+ await waitFor(()=>expect(document.querySelector('.wb-stage-warning[role="alert"]')?.textContent).toContain(outcome==='rejected'?'Scoped interrupt unsupported':'Scoped interrupt outcome unknown'));
+ expect(stopWorkbench).not.toHaveBeenCalled();expect(document.querySelector('[data-job-id="retained"] [data-state]')?.getAttribute('data-state')).toBe(outcome==='rejected'?'running':'unknown');
+});
+test('selected Stop owns only its H3 Run all sequence',async()=>{
+ vi.mocked(scanModels).mockResolvedValue([
+  {category:'diffusion_models',name:'MiniMaxH3/h3.safetensors',path:'/m/h3',size:1,info:null,family:'minimax-h3'},
+  {category:'text_encoders',name:'qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors',path:'/m/t',size:1,info:null},
+  {category:'vae',name:'MiniMaxH3/minimax_h3_video_vae_fp16.safetensors',path:'/m/v',size:1,info:null},
+  {category:'vae',name:'MiniMaxH3/minimax_h3_audio_vae_fp32.safetensors',path:'/m/a',size:1,info:null}]);
+ localStorage.setItem('deas.pref.studio.run.pipeline','"t2v"');
+ vi.mocked(checkRecipePrerequisites).mockResolvedValue(evidence);
+ const job=heldJob('continuity-selected-stop','queued');
+ vi.mocked(runWorkbenchJob).mockResolvedValue(job);
+ vi.mocked(pollWorkbench).mockResolvedValue(collection([job]));
+ vi.mocked(stopWorkbenchJob).mockResolvedValue({...job,state:'cancelled'});
+ render(<I18nProvider><Workbench endpoint={evidence.baseUrl} roots={{models:'/m'}}/></I18nProvider>);
+ fireEvent.click(await screen.findByRole('button',{name:'Continuity · off'}));
+ fireEvent.click(screen.getByRole('checkbox',{name:'Continuity active'}));
+ fireEvent.click(screen.getByRole('button',{name:'Add step'}));fireEvent.click(screen.getByRole('button',{name:'Add step'}));
+ await waitFor(()=>expect(screen.getByRole('button',{name:'Run all'}).hasAttribute('disabled')).toBe(false));
+ fireEvent.click(screen.getByRole('button',{name:'Run all'}));
+ fireEvent.click(within(screen.getByRole('dialog',{name:'Continuity'})).getByRole('button',{name:'Close'}));
+ await waitFor(()=>expect(document.querySelector('[data-job-id="continuity-selected-stop"]')).not.toBeNull());
+ fireEvent.click(document.querySelector('[data-run-stop]')!);fireEvent.click(screen.getByRole('button',{name:'Stop selected item'}));
+ await waitFor(()=>expect(document.querySelector('[data-job-id="continuity-selected-stop"] [data-state]')?.getAttribute('data-state')).toBe('cancelled'));
+ expect(stopWorkbench).not.toHaveBeenCalled();expect(runWorkbenchJob).toHaveBeenCalledTimes(1);
+ expect(document.querySelector<HTMLButtonElement>('[data-run]')!.disabled).toBe(false);
+});
+test('late selected Stop cannot overwrite a newer Stop all result',async()=>{
+ const job=heldJob('selected','running');let finish!:(job:JobStatus)=>void;
+ vi.mocked(readCurrentWorkbench).mockResolvedValue(collection([job]));
+ vi.mocked(stopWorkbenchJob).mockReturnValue(new Promise(resolve=>{finish=resolve;}));
+ vi.mocked(stopWorkbench).mockResolvedValue({...collection([{...job,state:'succeeded',outputs:[{filename:'keep.png',subfolder:'',type:'output'}],outputRoot:'/old/output'}]),admissionEpoch:1,outcome:'settled',discarded:0,issues:[]});
+ render(<I18nProvider><Workbench endpoint=""/></I18nProvider>);
+ await waitFor(()=>expect(document.querySelector('[data-run-stop]')).not.toBeNull());
+ fireEvent.click(document.querySelector('[data-run-stop]')!);fireEvent.click(screen.getByRole('button',{name:'Stop selected item'}));
+ await waitFor(()=>expect(stopWorkbenchJob).toHaveBeenCalledTimes(1));stopAll();
+ await screen.findByText('Stop finished. Check the retained job states.');
+ await act(async()=>finish({...job,state:'unknown',error:'Late unknown'}));
+ expect(document.querySelector('[data-job-id="selected"] [data-state]')?.getAttribute('data-state')).toBe('succeeded');
+ expect(document.querySelector('[data-job-id="selected"] img')?.getAttribute('src')).toContain('/old/output/keep.png');
 });
 test('right-click on an active queue entry stops only that generation',async()=>{
  vi.mocked(scanModels).mockResolvedValue(imageModels);
@@ -4079,7 +4369,7 @@ test.each(['unreachable','unsupported'])('Stop %s leaves held states intact and 
  vi.mocked(stopWorkbench).mockRejectedValue(new Error('IPC unavailable'));
  render(<I18nProvider><Workbench endpoint=""/></I18nProvider>);
  await waitFor(()=>expect(document.querySelector('[data-run-stop]')).not.toBeNull());
- fireEvent.click(document.querySelector('[data-run-stop]')!);
+ stopAll();
  await waitFor(()=>expect(screen.getByRole('alert').textContent).toContain(failure==='unsupported'?'does not support Workbench Stop':'IPC unavailable'));
  expect(document.querySelector('[data-job-id="retained"] [data-state]')!.getAttribute('data-state')).toBe('running');
  expect(stopWorkbench).toHaveBeenCalledTimes(failure==='unsupported'?0:1);
@@ -4095,7 +4385,7 @@ test('Stop fences a sent Run reply, coalesces presses and passes the captured na
  fireEvent.click(document.querySelector('[data-run]')!);await waitFor(()=>expect(runWorkbenchJob).toHaveBeenCalledTimes(1));
  expect(vi.mocked(runWorkbenchJob).mock.calls[0][2]).toBe(7);
  const stop=document.querySelector<HTMLButtonElement>('[data-run-stop]')!;
- fireEvent.click(stop);fireEvent.click(stop);fireEvent.click(document.querySelector('[data-run]')!);
+ fireEvent.click(stop);fireEvent.click(screen.getByRole('button',{name:'Stop all'}));fireEvent.click(stop);fireEvent.click(document.querySelector('[data-run]')!);
  expect(stopWorkbench).toHaveBeenCalledTimes(1);expect(runWorkbenchJob).toHaveBeenCalledTimes(1);
  await act(async()=>finishStop({...collection([heldJob('stopped','cancelled')]),admissionEpoch:8,outcome:'settled',discarded:0,issues:[]}));
  await act(async()=>finishRun(heldJob('stale-run','running')));
@@ -4109,7 +4399,7 @@ test('poll reply already in flight cannot overwrite Stop',async()=>{
  vi.mocked(stopWorkbench).mockResolvedValue({...collection([heldJob('held','cancelled')]),admissionEpoch:1,outcome:'settled',discarded:0,issues:[]});
  render(<I18nProvider><Workbench endpoint=""/></I18nProvider>);
  await waitFor(()=>expect(pollWorkbench).toHaveBeenCalledTimes(1),{timeout:2500});
- fireEvent.click(document.querySelector('[data-run-stop]')!);
+ stopAll();
  await screen.findByText('Stop finished. Check the retained job states.');
  await act(async()=>finish(collection([heldJob('held','running')])));
  expect(document.querySelector('[data-job-id="held"] [data-state]')!.getAttribute('data-state')).toBe('cancelled');
@@ -4166,7 +4456,7 @@ test('Stop disables serial Continuity before a pending clip read can continue Ru
  fireEvent.click(within(screen.getByRole('dialog',{name:'Continuity'})).getByRole('button',{name:'Close'}));
  await waitFor(()=>expect(readH3Session).toHaveBeenCalledTimes(1),{timeout:3000});
  expect(runWorkbenchJob).toHaveBeenCalledTimes(1);
- fireEvent.click(document.querySelector('[data-run-stop]')!);
+ stopAll();
  await waitFor(()=>expect(stopWorkbench).toHaveBeenCalledTimes(1));
  await act(async()=>finish({latestId:'root',clips:[{clipId:'root',parent:null,frames:124,completed:1,export:null}]}));
  await act(async()=>{});
@@ -4192,7 +4482,7 @@ test('real IPC Stop ownership survives remount, blocks Run and releases after cu
  try{
   const first=render(<I18nProvider><Workbench {...props}/></I18nProvider>);
   await waitFor(()=>expect(document.querySelector('[data-run-stop]')).not.toBeNull());
-  fireEvent.click(document.querySelector('[data-run-stop]')!);first.unmount();
+  stopAll();first.unmount();
   render(<I18nProvider><Workbench {...props}/></I18nProvider>);
   await waitFor(()=>expect(document.querySelector<HTMLButtonElement>('[data-run-stop]')?.disabled).toBe(true));
   expect(document.querySelector<HTMLButtonElement>('[data-run]')!.disabled).toBe(true);
@@ -4322,7 +4612,7 @@ test('history restores exact rich settings without probing or submitting and kee
  vi.mocked(readCurrentWorkbench).mockResolvedValue(collection([live]));
  const liveBefore=JSON.stringify(live);
  vi.mocked(scanModels).mockResolvedValue([{category:'checkpoints',name:'a.safetensors',family:'sdxl',path:'/m/a',size:1,info:null},{category:'loras',name:'style.safetensors',family:'sdxl',path:'/m/lora',size:1,info:null}]);
- vi.mocked(checkRecipePrerequisites).mockResolvedValue({...evidence,allowlist:{...evidence.allowlist,nodes:[...evidence.allowlist.nodes,'ModelAttentionBackend','EasyCache','TorchCompileModel','VAEDecodeTiled','CLIPVisionLoader','LoadImage','CLIPVisionEncode','unCLIPConditioning'],attention:['sdpa'],compile:['inductor'],visionModels:['vision.safetensors'],images:['first.png','second.png']}});
+ vi.mocked(checkRecipePrerequisites).mockResolvedValue({...evidence,allowlist:{...evidence.allowlist,nodes:[...evidence.allowlist.nodes,'DEAS_ImagePostprocessGate','ModelAttentionBackend','EasyCache','TorchCompileModel','VAEDecodeTiled','CLIPVisionLoader','LoadImage','CLIPVisionEncode','unCLIPConditioning'],attention:['sdpa'],compile:['inductor'],visionModels:['vision.safetensors'],images:['first.png','second.png']}});
  vi.mocked(invoke).mockImplementation(async c=>c==='native_jobs_history'?{schemaVersion:1,records:[original],readOnly:false,error:null}:{path:'/env/ComfyUI/input',parent:'/env',entries:['first.png','second.png'].map(name=>({name,path:'/env/ComfyUI/input/'+name,kind:'file',media:'image',size:1,modified:1,symlink:false})),truncated:false});
  render(<I18nProvider><Workbench endpoint={evidence.baseUrl} roots={{models:'/m',input:'/env/ComfyUI/input',output:'/env/ComfyUI/output'}}/></I18nProvider>);
  await waitFor(()=>expect(document.querySelector<HTMLButtonElement>('[data-run]')!.disabled).toBe(false));
@@ -4598,6 +4888,18 @@ async function mountMusic(pipeline:'Music (Text to Music)'|'Music (Cover Music)'
  return view;
 }
 const music=()=>({style:screen.getByRole('textbox',{name:'Style'}) as HTMLTextAreaElement,lyrics:screen.getByRole('textbox',{name:'Lyrics'}) as HTMLTextAreaElement});
+
+test('remembered image refinement does not require its baseline gate for music',async()=>{
+ localStorage.setItem('deas.pref.studio.run.post','true');
+ await mountMusic('Music (Text to Music)');
+ fireEvent.change(music().style,{target:{value:'Instrumental ambient'}});
+ const run=screen.getByRole('button',{name:'Run'});
+ await waitFor(()=>expect(run).toHaveProperty('disabled',false));
+ expect(screen.queryByText(/Refine requires the DEAS baseline-first adapter/)).toBeNull();
+ fireEvent.click(run);
+ await waitFor(()=>expect(runWorkbenchJob).toHaveBeenCalledTimes(1));
+ expect(vi.mocked(runWorkbenchJob).mock.calls[0][1]).not.toHaveProperty('refine');
+});
 
 test('text-to-music lists only YuE2 checkpoints, two music editors, no canvas/negative, and submits the music intent without uploads',async()=>{
  await mountMusic('Music (Text to Music)');

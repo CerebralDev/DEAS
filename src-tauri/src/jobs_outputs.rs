@@ -90,7 +90,7 @@ pub struct OutputPreview {
     width: u32,
     height: u32,
     sha256: String,
-    bytes: Vec<u8>,
+    pub(super) bytes: Vec<u8>,
 }
 pub(super) struct CachedOutput {
     job_id: String,
@@ -298,7 +298,11 @@ impl Jobs {
         Ok(job.clone())
     }
 
-    async fn output(&self, job_id: String, index: usize) -> Result<OutputPreview, String> {
+    pub(super) async fn output(
+        &self,
+        job_id: String,
+        index: usize,
+    ) -> Result<OutputPreview, String> {
         if let Some(held) = self.workbench_job(&job_id)? {
             return held.output_local(job_id, index).await;
         }

@@ -680,6 +680,123 @@ async fn wildcard_prepare_requires_original_plugin_without_submitting() {
     }
 }
 
+#[tokio::test]
+async fn sam3_prepare_checks_only_emitted_nodes_explicit_checkpoint_and_safe_sources() {
+    for scenario in [
+        "ok",
+        "model",
+        "node",
+        "image",
+        "uploaded-mask",
+        "uploaded-input",
+        "output-id",
+        "unrelated-sam-missing",
+    ] {
+        let mut i = json!({"recipeId":"sam3-mask","version":1,"checkpoint":"sam3.1.safetensors","inputImage":"ref.png","width":641,"height":479,"outputPrefix":"DEAS/mask","prompt":"eyes","threshold":0.5});
+        if scenario == "uploaded-mask" {
+            i["inputImage"] = json!("deas-masks/12345678-1234-1234-1234-123456789abc.png");
+        }
+        if scenario == "uploaded-input" {
+            i["inputImage"] = json!("deas-inputs/source.png");
+        }
+        if scenario == "output-id" {
+            i["inputImage"] = json!("DEAS/out.png [output]");
+        }
+        let (base, task) = server(move |path, _| {
+            assert_eq!(path, "GET /comfy/object_info HTTP/1.1");
+            let mut n = nodes();
+            if scenario != "model" {
+                n["CheckpointLoaderSimple"]["input"]["required"]["ckpt_name"] =
+                    json!([["sam3.1.safetensors"]]);
+            }
+            if scenario != "node" && scenario != "unrelated-sam-missing" {
+                n["SAM3_Detect"] = json!({});
+            }
+            n["MaskToImage"] = json!({});
+            // The optional metadata saver must never replace the lossless mask saver.
+            n["DaSiWa_MetadataImageSaver"] = json!({});
+            n["DaSiWa_MetadataConfig"] = json!({});
+            if scenario == "image" {
+                n["LoadImage"]["input"]["required"]["image"] = json!([[]]);
+            }
+            (200, n.to_string())
+        })
+        .await;
+        let jobs = Jobs::default();
+        if scenario == "unrelated-sam-missing" {
+            let mut ordinary = intent();
+            ordinary["checkpoint"] = json!("sam3.1.safetensors");
+            assert!(jobs.prepare(base, ordinary).await.is_ok());
+        } else {
+            let result = jobs.prepare(base, i).await;
+            match scenario {
+                "model" => assert!(result.unwrap_err().contains("checkpoints")),
+                "node" => assert!(result.unwrap_err().contains("SAM3_Detect")),
+                "image" | "output-id" => assert!(result.unwrap_err().contains("images")),
+                _ => {
+                    let result = result.unwrap();
+                    assert_eq!(result["graph"]["7"]["class_type"], "SaveImage");
+                }
+            }
+        }
+        task.abort();
+    }
+}
+
+#[tokio::test]
+async fn sam3_workbench_submits_and_correlates_mask_completion_without_generation_fields() {
+    let i = json!({"recipeId":"sam3-mask","version":1,"checkpoint":"sam3.1.safetensors","inputImage":"ref.png","width":641,"height":479,"outputPrefix":"DEAS/mask","prompt":"eyes","threshold":0.5});
+    let expected = compile(&i).unwrap();
+    let mut tuple = Value::Null;
+    let (base, task) = server(move |path, body| match path.as_str() {
+        "GET /comfy/object_info HTTP/1.1" => {
+            let mut n = nodes();
+            n["CheckpointLoaderSimple"]["input"]["required"]["ckpt_name"] = json!([["sam3.1.safetensors"]]);
+            n["SAM3_Detect"] = json!({}); n["MaskToImage"] = json!({});
+            (200, n.to_string())
+        }
+        "POST /comfy/prompt HTTP/1.1" => {
+            assert_eq!(body["prompt"], expected);
+            tuple = json!([1,PROMPT_ID,body["prompt"],{"client_id":body["client_id"]},["7"]]);
+            (200, json!({"prompt_id":PROMPT_ID,"number":1,"node_errors":{}}).to_string())
+        }
+        p if p == format!("GET /comfy/history/{PROMPT_ID} HTTP/1.1") => (200, json!({PROMPT_ID:{"prompt":tuple,"outputs":{"7":{"images":[{"filename":"mask.png","subfolder":"DEAS","type":"output"}]}},"status":{"completed":true,"status_str":"success","messages":[]}}}).to_string()),
+        _ => panic!("Unexpected SAM3 request: {path}"),
+    }).await;
+    let jobs = Jobs::default();
+    let queued = jobs
+        .workbench_run(base, i.clone(), true, 0, None)
+        .await
+        .unwrap();
+    assert_eq!(queued["state"], "queued");
+    let status = jobs.workbench_poll().await.unwrap();
+    assert_eq!(status["jobs"][0]["state"], "succeeded", "{status}");
+    assert_eq!(status["jobs"][0]["intent"], i);
+    assert_eq!(status["jobs"][0]["outputs"][0]["filename"], "mask.png");
+    let history = serde_json::to_value(jobs.3.view()).unwrap();
+    assert_eq!(history["records"], json!([]));
+    assert!(history["error"].is_null());
+    task.abort();
+}
+
+#[tokio::test]
+async fn sam3_workbench_validation_failures_use_shared_redacted_logs() {
+    workbench::reset_workbench_failure_logging();
+    let i = json!({"recipeId":"sam3-mask","version":1,"checkpoint":"secret-token","prompt":"private prompt"});
+    assert!(Jobs::default()
+        .workbench_run("http://127.0.0.1:1/".into(), i, true, 0, None)
+        .await
+        .is_err());
+    let entries = crate::logs::native_logs(0);
+    let log = entries
+        .iter()
+        .rev()
+        .find(|e| e.text.starts_with("ERROR: Workbench run:"))
+        .unwrap();
+    assert_eq!(log.source, crate::logs::Source::Deas);
+    assert!(!log.text.contains("secret-token") && !log.text.contains("private prompt"));
+}
+
 fn nodes() -> Value {
     json!({"CheckpointLoaderSimple":{"input":{"required":{"ckpt_name":[["sd/model.safetensors"]]}}},
         "CLIPTextEncode":{},"EmptyLatentImage":{},"KSampler":{"input":{"required":{"sampler_name":[["euler"]],"scheduler":[["normal"]]}}},"VAEDecode":{},"SaveImage":{},
@@ -1181,6 +1298,7 @@ fn workbench_commands_are_registered_exported_and_local_only() {
         .unwrap();
     for command in [
         "native_workbench_run",
+        "native_auto_refine",
         "native_workbench_current",
         "native_workbench_poll",
         "native_workbench_cancel_pending",
@@ -1203,6 +1321,7 @@ fn workbench_commands_are_registered_exported_and_local_only() {
         .unwrap()
         .contains(&json!("allow-native-diagnostic-jobs")));
     let _ = crate::native_workbench_run;
+    let _ = crate::native_auto_refine;
     let _ = crate::native_workbench_current;
     let _ = crate::native_workbench_poll;
     let _ = crate::native_workbench_cancel_pending;
@@ -2652,7 +2771,11 @@ fn refine_pass_upscales_resizes_and_resamples_after_the_first_decode() {
     assert_eq!(g["R5"]["inputs"]["latent_image"], json!(["RE", 0]));
     assert_eq!(g["R5"]["inputs"]["denoise"], json!(0.3));
     assert_eq!(g["R5"]["inputs"]["seed"], json!(123));
-    assert_eq!(g["7"]["inputs"]["images"], json!(["R6", 0]));
+    assert_eq!(g["7"]["inputs"]["images"], json!(["PG", 0]));
+    assert_eq!(
+        g["PG"],
+        json!({"class_type":"DEAS_ImagePostprocessGate","inputs":{"baseline":["B7",0],"image":["R6",0]}})
+    );
     // Same size without a model: no resample of the first pass.
     i["refine"] = json!({"width":512,"height":768,"denoise":0.3});
     let g = compile(&i).unwrap();
@@ -2721,9 +2844,59 @@ fn upscale_model_runs_on_the_source_before_the_exact_resize() {
     assert_eq!(g["9"]["inputs"]["pixels"], json!(["S", 0]));
 }
 
+fn image_postprocess_nodes() -> Value {
+    let mut info = nodes();
+    info["SaveImage"]["output"] = json!(["IMAGE"]);
+    info["DEAS_ImagePostprocessGate"] = json!({"input":{"required":{"baseline":["IMAGE,STRING"],"image":["IMAGE",{"lazy":true}]}},"output":["IMAGE"]});
+    info
+}
+
+#[tokio::test]
+async fn image_postprocess_prepare_rechecks_effective_saver_without_blocking_plain_jobs() {
+    for metadata in [false, true] {
+        for compatible in [false, true] {
+            let mut info = image_postprocess_nodes();
+            if metadata {
+                info["DaSiWa_MetadataConfig"] = json!({});
+                info["DaSiWa_MetadataImageSaver"] =
+                    json!({"output":if compatible {json!(["STRING"])} else {json!([])}});
+            } else if !compatible {
+                info["SaveImage"]["output"] = json!([]);
+            }
+            let (base, task) = server(move |path, _| {
+                assert_eq!(path, "GET /comfy/object_info HTTP/1.1");
+                (200, info.to_string())
+            })
+            .await;
+            let jobs = Jobs::default();
+            assert!(jobs.prepare(base.clone(), intent()).await.is_ok());
+            let mut i = intent();
+            i["refine"] = json!({"width":512,"height":768,"denoise":0.3});
+            let result = jobs.prepare(base, i).await;
+            if compatible {
+                result.unwrap();
+                let session = jobs.lock().unwrap();
+                let g = &session.plan.as_ref().unwrap().graph;
+                assert_eq!(g["PG"]["inputs"]["baseline"], json!(["B7", 0]));
+                assert_eq!(
+                    g["B7"]["class_type"],
+                    if metadata {
+                        "DaSiWa_MetadataImageSaver"
+                    } else {
+                        "SaveImage"
+                    }
+                );
+            } else {
+                assert!(result.unwrap_err().contains("baseline-first lazy gate"));
+            }
+            task.abort();
+        }
+    }
+}
+
 #[tokio::test]
 async fn prepare_checks_upscale_models_against_the_v3_backend_list() {
-    let mut list = nodes();
+    let mut list = image_postprocess_nodes();
     list["UpscaleModelLoader"] = json!({"input":{"required":{"model_name":["COMBO",{"multiselect":false,"options":["2x-Sharp.safetensors"]}]}}});
     list["ImageUpscaleWithModel"] = json!({});
     list["ImageScale"] = json!({});
@@ -3072,7 +3245,7 @@ async fn paired_history_preserves_terminal_partial_outputs_but_never_partial_suc
     ] {
         let mut tuple = Value::Null;
         let (base, task) = server(move |path, body| {
-            if path == "GET /comfy/object_info HTTP/1.1" { return (200, nodes().to_string()); }
+            if path == "GET /comfy/object_info HTTP/1.1" { return (200, image_postprocess_nodes().to_string()); }
             if path == "POST /comfy/prompt HTTP/1.1" {
                 tuple = json!([0,PROMPT_ID,body["prompt"],{"client_id":body["client_id"]},["7","B7"]]);
                 return (200,json!({"prompt_id":PROMPT_ID,"number":0,"node_errors":{}}).to_string());
@@ -4200,7 +4373,11 @@ fn native_reference_graphs_match_typescript_compiler_end_to_end() {
                 }
                 before["7"]["inputs"]["filename_prefix"] = json!("DEAS_test_original");
                 assert_eq!(g["B7"], before["7"]);
-                assert_eq!(g["7"]["inputs"]["images"], json!(["R6", 0]));
+                assert_eq!(g["7"]["inputs"]["images"], json!(["PG", 0]));
+                assert_eq!(
+                    g["PG"],
+                    json!({"class_type":"DEAS_ImagePostprocessGate","inputs":{"baseline":["B7",0],"image":["R6",0]}})
+                );
                 assert_eq!(
                     g.as_object()
                         .unwrap()

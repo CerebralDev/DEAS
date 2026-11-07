@@ -63,7 +63,7 @@ test('Qwen native reference trust boundary rejects malformed, mixed, unsupported
 });
 
 test('Qwen native references preserve i2i denoise and route wildcard conditioning through sigmas and both refiners', () => {
-  const nodes = [...qwenAllowlist.nodes, 'VAEEncode', 'RandomNoise', 'CFGGuider', 'KSamplerSelect', 'ManualSigmas', 'SamplerCustomAdvanced', 'DaSiWaTiledDiffusion', 'DaSiWa_WildcardPresetPromptBuilder', 'LoraLoader'];
+  const nodes = [...qwenAllowlist.nodes, 'DEAS_ImagePostprocessGate', 'VAEEncode', 'RandomNoise', 'CFGGuider', 'KSamplerSelect', 'ManualSigmas', 'SamplerCustomAdvanced', 'DaSiWaTiledDiffusion', 'DaSiWa_WildcardPresetPromptBuilder', 'LoraLoader'];
   for (const custom of [false, true]) {
     const qwen = { ...intent, diffusion: qwenDiffusion, nativeImageReference: nativeReference, inputImage: 'first.png', denoise: 0.35,
       loras: [{ name: 'style.safetensors', strength: 0.5 }],
@@ -422,8 +422,16 @@ test('options chain model patches after LoRAs, tile the VAE and must be listed b
   }
 });
 
+test('refine fails closed without the verified baseline gate while plain graphs stay byte-identical', () => {
+  const nodes = [...allowlist.nodes, 'VAEEncode', 'DEAS_ImagePostprocessGate'];
+  const lists = {...allowlist, nodes};
+  const without = {...lists, nodes:nodes.filter(n=>n!=='DEAS_ImagePostprocessGate')};
+  assert.equal(JSON.stringify(compileRecipe(intent,lists).graph), JSON.stringify(compileRecipe(intent,without).graph));
+  rejects({...intent,refine:{width:512,height:768,denoise:0.3}},without,'MISSING_CAPABILITY','DEAS_ImagePostprocessGate');
+});
+
 test('paired baseline saves the complete first pass without extra sampling for every refine path', () => {
-  const nodes = [...allowlist.nodes, 'LoadImage', 'VAEEncode', 'LoadImageMask', 'SetLatentNoiseMask', 'ImageCompositeMasked', 'ImageCrop', 'ImageScale', 'CropMask', 'MaskToImage', 'ImageToMask', 'UpscaleModelLoader', 'ImageUpscaleWithModel', 'VAEDecodeTiled', 'VAEEncodeTiled', 'DaSiWaTiledDiffusion', 'RandomNoise', 'CFGGuider', 'KSamplerSelect', 'ManualSigmas', 'SamplerCustomAdvanced'];
+  const nodes = [...allowlist.nodes, 'LoadImage', 'VAEEncode', 'LoadImageMask', 'SetLatentNoiseMask', 'ImageCompositeMasked', 'ImageCrop', 'ImageScale', 'CropMask', 'MaskToImage', 'ImageToMask', 'UpscaleModelLoader', 'ImageUpscaleWithModel', 'DEAS_ImagePostprocessGate', 'VAEDecodeTiled', 'VAEEncodeTiled', 'DaSiWaTiledDiffusion', 'RandomNoise', 'CFGGuider', 'KSamplerSelect', 'ManualSigmas', 'SamplerCustomAdvanced'];
   const mask = 'deas-masks/3f2b1c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d.png';
   const variants = [
     {},
@@ -440,7 +448,8 @@ test('paired baseline saves the complete first pass without extra sampling for e
       const { refine: _, ...first } = input;
       const before = compileRecipe(first, lists).graph;
       assert.deepEqual(graph.B7, { ...before['7'], inputs: { ...before['7'].inputs, filename_prefix: `${intent.outputPrefix}_original` } });
-      assert.deepEqual(graph['7'].inputs.images, ['R6', 0]);
+      assert.deepEqual(graph.PG, { class_type: 'DEAS_ImagePostprocessGate', inputs: { baseline: ['B7', 0], image: ['R6', 0] } });
+      assert.deepEqual(graph['7'].inputs.images, ['PG', 0]);
       assert.equal(graph['7'].inputs.filename_prefix, intent.outputPrefix);
       for (const [id, node] of Object.entries(before)) if (id !== '7') assert.deepEqual(graph[id], node, id);
       assert.equal(Object.values(graph).filter(n => ['KSampler', 'SamplerCustomAdvanced'].includes(n.class_type)).length, 2);
@@ -449,6 +458,8 @@ test('paired baseline saves the complete first pass without extra sampling for e
         if (metadata.length === 2) { assert.equal(graph[id].inputs.file_format, 'webp'); assert.equal(graph[id].inputs.compression, 73); }
       }
       assert.equal(before.B7, undefined);
+      assert.equal(before.PG, undefined);
+      assert.equal(JSON.stringify(before), JSON.stringify(compileRecipe(first, {...lists,nodes:lists.nodes.filter(n=>n!=='DEAS_ImagePostprocessGate')}).graph));
     }
     rejects({ ...intent, refine: { width: 512, height: 768, denoise: 0.3 } }, { ...lists, nodes: [] }, 'MISSING_CAPABILITY', 'CheckpointLoaderSimple');
   }
@@ -460,12 +471,12 @@ test('paired baseline saves the complete first pass without extra sampling for e
 });
 
 test('refine pass and source upscale model mirror the native compiler', () => {
-  const lists = { ...allowlist, nodes: [...allowlist.nodes, 'LoadImage', 'VAEEncode', 'ImageScale', 'UpscaleModelLoader', 'ImageUpscaleWithModel'], images: ['ref.png'], upscaleModels: ['2x-Sharp.safetensors'] };
+  const lists = { ...allowlist, nodes: [...allowlist.nodes, 'LoadImage', 'VAEEncode', 'ImageScale', 'UpscaleModelLoader', 'ImageUpscaleWithModel', 'DEAS_ImagePostprocessGate'], images: ['ref.png'], upscaleModels: ['2x-Sharp.safetensors'] };
   const g = compileRecipe({ ...intent, refine: { width: 1024, height: 1536, denoise: 0.3, upscaleModel: '2x-Sharp.safetensors' } }, lists).graph;
   assert.deepEqual(g.RU.inputs, { upscale_model: ['RL', 0], image: ['6', 0] });
   assert.deepEqual(g.RS.inputs, { image: ['RU', 0], upscale_method: 'lanczos', width: 1024, height: 1536, crop: 'disabled' });
   assert.deepEqual(g.R5.inputs, { ...g['5'].inputs, latent_image: ['RE', 0], denoise: 0.3 });
-  assert.deepEqual(g['7'].inputs.images, ['R6', 0]);
+  assert.deepEqual(g['7'].inputs.images, ['PG', 0]);
   const same = compileRecipe({ ...intent, refine: { width: 512, height: 768, denoise: 0.3 } }, lists).graph;
   assert.equal(same.RS, undefined);
   assert.deepEqual(same.RE.inputs.pixels, ['6', 0]);

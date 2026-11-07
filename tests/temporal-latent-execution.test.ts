@@ -11,7 +11,7 @@ const base: DiagnosticImageIntentV1 = {
 };
 const tiled = { tileWidth: 512, tileHeight: 768, overlap: 64 };
 const allow = {
-  nodes: ['CheckpointLoaderSimple', 'UNETLoader', 'CLIPLoader', 'VAELoader', 'CLIPTextEncode', 'EmptyLatentImage', 'KSampler', 'VAEDecode', 'SaveImage', 'VAEEncode', 'ImageScale', 'DaSiWaTiledDiffusion'],
+  nodes: ['CheckpointLoaderSimple', 'UNETLoader', 'CLIPLoader', 'VAELoader', 'CLIPTextEncode', 'EmptyLatentImage', 'KSampler', 'VAEDecode', 'SaveImage', 'DEAS_ImagePostprocessGate', 'VAEEncode', 'ImageScale', 'DaSiWaTiledDiffusion'],
   checkpoints: [base.checkpoint], diffusionModels: [base.checkpoint],
   textEncoders: ['clip.safetensors'], vaes: ['vae.safetensors'],
   clipTypes: ['stable_diffusion', 'krea2', 'minimax'], samplers: ['euler'], schedulers: ['normal'],

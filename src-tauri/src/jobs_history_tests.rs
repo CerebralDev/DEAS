@@ -26,6 +26,20 @@ fn job(intent: Value) -> Job {
         live: Arc::default(),
     }
 }
+#[test]
+fn sam3_intermediate_masks_do_not_displace_or_degrade_generation_history() {
+    let history = History::default();
+    history.admit(&job(image()), "studio");
+    let before = document(&history);
+    let mask = job(
+        json!({"recipeId":"sam3-mask","version":1,"checkpoint":"sam3.1.safetensors","inputImage":"source.png","width":641,"height":479,"outputPrefix":"DEAS/mask","prompt":"eyes","threshold":0.5}),
+    );
+    history.admit(&mask, "studio");
+    history.observe(&mask);
+    assert_eq!(document(&history).records, before.records);
+    assert!(history.view().error.is_none());
+}
+
 fn image() -> Value {
     super::super::tests::intent()
 }

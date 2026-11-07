@@ -2,6 +2,117 @@ use super::*;
 use serde_json::json;
 
 #[test]
+fn enhanced_preview_patches_all_sampling_branches_and_preserves_every_other_graph_value() {
+    let mut multi = ltx();
+    multi["ltx"]["passes"] = json!(3);
+    multi["ltx"]["spatialUpscaler"] = json!("ltx-spatial-upscaler.safetensors");
+    let mut upscale = h3();
+    upscale["latentUpscale"] =
+        json!({"model":"minimax_h3_latent_upscaler.safetensors","scale":2,"steps":3,"denoise":0.3});
+    let mut hyper = h3();
+    hyper["family"] = json!("minimax-h3-hyperflow");
+    hyper["model"] = json!("hyperflow.gguf");
+    for mut intent in [ltx(), multi, wan(), h3(), upscale, hyper] {
+        let old = compile(&intent).unwrap();
+        let family = intent["family"].as_str().unwrap().to_owned();
+        let preview = match family.as_str() {
+            "ltx-2" => json!({"decoder":"vae","model":"LTX2/taeltx2_3.safetensors"}),
+            "wan" => json!({"decoder":"tiny","model":"Wan/taew2_1.safetensors"}),
+            _ => json!({"decoder":"tiny","model":"taeh3.safetensors"}),
+        };
+        intent["enhancedPreview"] = preview.clone();
+        let graph = compile(&intent).unwrap();
+        assert_eq!(graph, compile(&intent).unwrap());
+        let wrappers: Vec<_> = graph
+            .as_object()
+            .unwrap()
+            .iter()
+            .filter(|(_, n)| n["class_type"] == "ModelPreviewOverrideKJ")
+            .collect();
+        assert_eq!(wrappers.len(), if family == "wan" { 2 } else { 1 });
+        for (_, node) in &wrappers {
+            let p = &node["inputs"];
+            assert_eq!(p["max_resolution"], 512);
+            assert_eq!(p["jpeg_quality"], 80);
+            assert_eq!(p["suppress_default_preview"], false);
+            assert_eq!(p["preview_frames"], 120);
+            assert_eq!(p["preview_fps"], 8);
+            assert!(p.get("audio_vae").is_none());
+            if family == "ltx-2" {
+                assert_eq!(p["tiny_vae"], "none");
+                assert_eq!(p["vae"], json!(["VPV", 0]));
+            } else {
+                assert_eq!(p["tiny_vae"], preview["model"]);
+                assert!(p.get("vae").is_none());
+            }
+        }
+        if family == "ltx-2" {
+            assert_eq!(graph["VPV"]["inputs"]["vae_name"], preview["model"]);
+            assert!(requirements(&intent)
+                .iter()
+                .any(|(k, v)| *k == "vaes" && v.contains(&"LTX2/taeltx2_3.safetensors")));
+        }
+        let mut restored = graph.clone();
+        restored
+            .as_object_mut()
+            .unwrap()
+            .retain(|id, _| !id.starts_with("VP"));
+        for node in restored.as_object_mut().unwrap().values_mut() {
+            if let Some(id) = node["inputs"]["model"][0]
+                .as_str()
+                .filter(|id| id.starts_with("VP"))
+            {
+                node["inputs"]["model"] = graph[id]["inputs"]["model"].clone();
+            }
+        }
+        assert_eq!(
+            serde_json::to_vec(&restored).unwrap(),
+            serde_json::to_vec(&old).unwrap()
+        );
+        intent.as_object_mut().unwrap().remove("enhancedPreview");
+        assert_eq!(compile(&intent).unwrap(), old);
+    }
+}
+
+#[test]
+fn enhanced_preview_admission_requires_exact_fresh_family_config() {
+    let mut intent = h3();
+    let preview = json!({"decoder":"tiny","model":"H3/taeh3.safetensors"});
+    let allow = json!({"nodes":["ModelPreviewOverrideKJ"],"videoPreviews":{"minimax-h3":preview}});
+    assert!(validate_preview_capability(&intent, &json!({})).is_ok());
+    intent["enhancedPreview"] = preview.clone();
+    assert!(validate_preview_capability(&intent, &allow).is_ok());
+    assert!(validate_preview_capability(&intent, &json!({})).is_err());
+    let mut wrong = allow.clone();
+    wrong["videoPreviews"]["minimax-h3"]["model"] = json!("taeh3.safetensors");
+    assert!(validate_preview_capability(&intent, &wrong).is_err());
+    wrong = allow.clone();
+    wrong["nodes"] = json!([]);
+    assert!(validate_preview_capability(&intent, &wrong).is_err());
+    for invalid in [
+        json!(null),
+        json!(false),
+        json!({"decoder":"vae","model":"taeh3.safetensors"}),
+        json!({"decoder":"tiny","model":"../taeh3.safetensors"}),
+        json!({"decoder":"tiny","model":"taeh3.safetensors","extra":true}),
+    ] {
+        intent["enhancedPreview"] = invalid;
+        assert!(compile(&intent).is_err());
+    }
+    let mut ltx = ltx();
+    ltx["enhancedPreview"] = json!({"decoder":"vae","model":"LTX2/taeltx2_3.safetensors"});
+    let mut allow = json!({"nodes":["ModelPreviewOverrideKJ","VAELoader"],"vaes":["LTX2/taeltx2_3.safetensors"],"videoPreviews":{"ltx-2":ltx["enhancedPreview"]}});
+    assert!(validate_preview_capability(&ltx, &allow).is_ok());
+    allow["vaes"] = json!([]);
+    assert!(validate_preview_capability(&ltx, &allow).is_err());
+    let mut wan = wan();
+    wan["enhancedPreview"] = json!({"decoder":"tiny","model":"taew2_2.safetensors"});
+    assert!(compile(&wan).is_err());
+    wan["enhancedPreview"] = json!({"decoder":"vae","model":"lighttaew2_1.safetensors"});
+    assert!(compile(&wan).is_err());
+}
+
+#[test]
 fn gguf_video_models_load_via_gguf_loader_and_loras_stay_rejected() {
     for original in [ltx(), wan(), h3()] {
         let mut i = original.clone();

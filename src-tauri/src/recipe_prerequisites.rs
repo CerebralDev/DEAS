@@ -13,10 +13,12 @@ const REQUIRED_NODES: [&str; 6] = [
 ];
 /// Image-to-image (`LoadImage`, `VAEEncode`), split diffusion-model loading and the DaSiWa
 /// Civitai-metadata saver; their absence blocks only the recipe variant that needs them.
-const OPTIONAL_NODES: [&str; 34] = [
+const OPTIONAL_NODES: [&str; 36] = [
+    "DEAS_ImagePostprocessGate",
     "TextEncodeQwenImage21",
     "DEAS_ImagePromptEncode",
     "EmptyFlux2LatentImage",
+    "SplitSigmas",
     "EmptySD3LatentImage",
     "ModelSamplingAuraFlow",
     "ConditioningZeroOut",
@@ -157,6 +159,115 @@ fn option(s: &str) -> bool {
     crate::jobs::safe_option(s) && s != "disabled"
 }
 
+// Advertise the gate only with the effective saver's post-save socket and our lazy ABI.
+fn image_postprocess_ready(nodes: &Value) -> bool {
+    let gate = &nodes["DEAS_ImagePostprocessGate"];
+    let required = json!({"baseline":["IMAGE,STRING"],"image":["IMAGE",{"lazy":true}]});
+    let metadata = nodes.get("DaSiWa_MetadataImageSaver").is_some()
+        && nodes.get("DaSiWa_MetadataConfig").is_some();
+    let (saver, output) = if metadata {
+        ("DaSiWa_MetadataImageSaver", "STRING")
+    } else {
+        ("SaveImage", "IMAGE")
+    };
+    gate["output"] == json!(["IMAGE"])
+        && gate["input"]["required"] == required
+        && nodes[saver]["output"][0] == output
+}
+
+fn preview_input<'a>(nodes: &'a Value, field: &str) -> &'a Value {
+    let input = &nodes["ModelPreviewOverrideKJ"]["input"];
+    input["required"]
+        .get(field)
+        .unwrap_or(&input["optional"][field])
+}
+
+fn preview_choices(nodes: &Value) -> Vec<String> {
+    let schema = preview_input(nodes, "tiny_vae");
+    let choices = if schema[0] == "COMBO" {
+        &schema[1]["options"]
+    } else {
+        &schema[0]
+    };
+    choices
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .filter(|name| *name == "none" || crate::jobs::comfy_model_name(name))
+        .map(str::to_owned)
+        .collect()
+}
+
+// An older/same-named wrapper must not advertise support for fields it cannot execute.
+fn video_preview_ready(nodes: &Value) -> bool {
+    let node = &nodes["ModelPreviewOverrideKJ"];
+    if node["output"] != json!(["MODEL"])
+        || preview_input(nodes, "model")[0] != "MODEL"
+        || preview_input(nodes, "suppress_default_preview")[0] != "BOOLEAN"
+        || preview_input(nodes, "vae")[0] != "VAE"
+        || node["input"]["required"].get("vae").is_some()
+        || !preview_choices(nodes).iter().any(|c| c == "none")
+    {
+        return false;
+    }
+    let required = [
+        "model",
+        "max_resolution",
+        "jpeg_quality",
+        "suppress_default_preview",
+        "preview_frames",
+        "preview_fps",
+        "tiny_vae",
+        "vae",
+    ];
+    if node["input"]["required"]
+        .as_object()
+        .is_none_or(|r| r.keys().any(|k| !required.contains(&k.as_str())))
+    {
+        return false;
+    }
+    [
+        ("max_resolution", 512),
+        ("jpeg_quality", 80),
+        ("preview_frames", 120),
+        ("preview_fps", 8),
+    ]
+    .iter()
+    .all(|(field, value)| {
+        let schema = preview_input(nodes, field);
+        schema[0] == "INT"
+            && schema[1]["min"].as_i64().is_some_and(|min| min <= *value)
+            && schema[1]["max"].as_i64().is_some_and(|max| max >= *value)
+    })
+}
+
+fn video_previews(nodes: &Value) -> Value {
+    let mut previews = json!({});
+    if !video_preview_ready(nodes) {
+        return previews;
+    }
+    let tiny = preview_choices(nodes);
+    let vaes = options(
+        nodes,
+        "VAELoader",
+        "vae_name",
+        crate::jobs::comfy_model_name,
+    );
+    for family in crate::jobs_video::FAMILIES {
+        for (decoder, models) in [("tiny", &tiny), ("vae", &vaes)] {
+            if let Some(model) = models
+                .iter()
+                .find(|model| crate::jobs_video::preview_model_compatible(family, decoder, model))
+            {
+                previews[family] = json!({"decoder":decoder,"model":model});
+                break;
+            }
+        }
+    }
+    previews
+}
+
 fn parse(base: &reqwest::Url, nodes: &Value) -> Result<Value, String> {
     let definitions = nodes
         .as_object()
@@ -167,7 +278,7 @@ fn parse(base: &reqwest::Url, nodes: &Value) -> Result<Value, String> {
     Ok(json!({
         "baseUrl":base.as_str(), "recipeId":"checkpoint-text-to-image-diagnostic", "version":1,
         "allowlist":{
-            "nodes":REQUIRED_NODES.iter().chain(OPTIONAL_NODES.iter()).chain(SIGMA_NODES.iter()).chain(OPTION_NODES.iter()).chain(crate::jobs::H3_EDIT_NODES.iter()).chain(crate::jobs_video::VIDEO_NODES.iter()).chain(crate::jobs_video::H3_CONTINUITY_NODES.iter()).chain(crate::jobs_video_post::POST_NODES.iter()).chain(crate::jobs_music::MUSIC_NODES.iter()).chain(crate::jobs_music::ace::NODES.iter()).filter(|name| definitions.contains_key(**name)).collect::<Vec<_>>(),
+            "nodes":REQUIRED_NODES.iter().chain(OPTIONAL_NODES.iter()).chain(SIGMA_NODES.iter()).chain(OPTION_NODES.iter()).chain(crate::jobs_sam3::NODES.iter()).chain(crate::jobs::H3_EDIT_NODES.iter()).chain(crate::jobs_video::VIDEO_NODES.iter()).chain(crate::jobs_video::H3_CONTINUITY_NODES.iter()).chain(crate::jobs_video_post::POST_NODES.iter()).chain(crate::jobs_music::MUSIC_NODES.iter()).chain(crate::jobs_music::ace::NODES.iter()).filter(|name| definitions.contains_key(**name) && (**name != "DEAS_ImagePostprocessGate" || image_postprocess_ready(nodes)) && (**name != "ModelPreviewOverrideKJ" || video_preview_ready(nodes))).collect::<Vec<_>>(),
             "checkpoints":combo(nodes, "CheckpointLoaderSimple", "ckpt_name")?,
             "loras":combo(nodes, "LoraLoader", "lora_name")?,
             "images":combo(nodes, "LoadImage", "image")?,
@@ -184,6 +295,7 @@ fn parse(base: &reqwest::Url, nodes: &Value) -> Result<Value, String> {
             "ggufDualClipTypes":combo(nodes, "DualCLIPLoaderGGUF", "type")?,
             "clipTypes":combo(nodes, "CLIPLoader", "type")?,
             "vaes":combo(nodes, "VAELoader", "vae_name")?,
+            "videoPreviews":video_previews(nodes),
             "visionModels":combo(nodes, "CLIPVisionLoader", "clip_name")?,
             "attention":options(nodes, "ModelAttentionBackend", "attention", option),
             "sage":options(nodes, "PathchSageAttentionKJ", "sage_attention", option),
@@ -229,6 +341,132 @@ mod tests {
     use super::*;
     use serde_json::{json, Value};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    #[test]
+    fn video_preview_discovery_uses_only_compatible_backend_listed_decoders() {
+        let mut info = nodes();
+        info["ModelPreviewOverrideKJ"] = preview_schema();
+        info["VAELoader"]["input"]["required"]["vae_name"] = json!([[
+            "LTX2/taeltx2_3.safetensors",
+            "Wan/lighttaew2_1.safetensors",
+            "MiniMaxH3/taeh3.safetensors"
+        ]]);
+        let base = reqwest::Url::parse("http://127.0.0.1:8188/").unwrap();
+        let allow = parse(&base, &info).unwrap()["allowlist"].clone();
+        assert_eq!(
+            allow["videoPreviews"],
+            json!({
+                "minimax-h3":{"decoder":"tiny","model":"H3/taeh3.safetensors"},
+                "minimax-h3-hyperflow":{"decoder":"tiny","model":"H3/taeh3.safetensors"},
+                "ltx-2":{"decoder":"vae","model":"LTX2/taeltx2_3.safetensors"},
+                "wan":{"decoder":"tiny","model":"Wan/taew2_1.safetensors"}
+            })
+        );
+        info["ModelPreviewOverrideKJ"]["input"]["optional"]["tiny_vae"] = json!(["COMBO",{"options":["none","taew2_2.safetensors","../taeh3.safetensors","unknown.safetensors"]}]);
+        assert_eq!(
+            video_previews(&info),
+            json!({"ltx-2":{"decoder":"vae","model":"LTX2/taeltx2_3.safetensors"}})
+        );
+        info["VAELoader"]["input"]["required"]["vae_name"] = json!([[
+            "taeltx.safetensors",
+            "full-ltx-vae.safetensors",
+            "taeltx2_3-copy.safetensors"
+        ]]);
+        assert_eq!(video_previews(&info), json!({}));
+        info["ModelPreviewOverrideKJ"]["input"]["optional"]["tiny_vae"] =
+            json!([["none", "Wan\\lighttaew2_1.safetensors"]]);
+        assert_eq!(
+            video_previews(&info)["wan"],
+            json!({"decoder":"tiny","model":"Wan\\lighttaew2_1.safetensors"})
+        );
+    }
+
+    fn preview_schema() -> Value {
+        json!({"input":{"required":{
+            "model":["MODEL"],"max_resolution":["INT",{"min":0,"max":8192}],
+            "jpeg_quality":["INT",{"min":30,"max":100}],"suppress_default_preview":["BOOLEAN"],
+            "preview_frames":["INT",{"min":1,"max":1024}],"preview_fps":["INT",{"min":1,"max":60}]
+        },"optional":{"vae":["VAE"],"tiny_vae":[["none","H3/taeh3.safetensors","Wan/taew2_1.safetensors","taew2_2.safetensors"]]}},"output":["MODEL"]})
+    }
+
+    #[test]
+    fn video_preview_discovery_rejects_missing_or_incompatible_wrapper_without_blocking_probe() {
+        let base = reqwest::Url::parse("http://127.0.0.1:8188/").unwrap();
+        let mut info = nodes();
+        assert_eq!(
+            parse(&base, &info).unwrap()["allowlist"]["videoPreviews"],
+            json!({})
+        );
+        for field in [
+            "model",
+            "preview_frames",
+            "preview_fps",
+            "suppress_default_preview",
+        ] {
+            info["ModelPreviewOverrideKJ"] = preview_schema();
+            info["ModelPreviewOverrideKJ"]["input"]["required"]
+                .as_object_mut()
+                .unwrap()
+                .remove(field);
+            let allow = parse(&base, &info).unwrap()["allowlist"].clone();
+            assert_eq!(allow["videoPreviews"], json!({}));
+            assert!(!allow["nodes"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("ModelPreviewOverrideKJ")));
+        }
+        info["ModelPreviewOverrideKJ"] = preview_schema();
+        info["ModelPreviewOverrideKJ"]["input"]["required"]["preview_frames"][1]["max"] =
+            json!(119);
+        assert_eq!(video_previews(&info), json!({}));
+        info["ModelPreviewOverrideKJ"] = preview_schema();
+        info["ModelPreviewOverrideKJ"]["input"]["required"]["unknown"] = json!(["STRING"]);
+        assert_eq!(video_previews(&info), json!({}));
+    }
+
+    #[test]
+    fn image_postprocess_gate_requires_lazy_abi_and_effective_post_save_socket() {
+        let base = reqwest::Url::parse("http://127.0.0.1:8188/").unwrap();
+        let mut info = nodes();
+        let gate = json!({"input":{"required":{"baseline":["IMAGE,STRING"],"image":["IMAGE",{"lazy":true}]}},"output":["IMAGE"]});
+        info["DEAS_ImagePostprocessGate"] = gate.clone();
+        let listed = |info: &Value| {
+            parse(&base, info).unwrap()["allowlist"]["nodes"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("DEAS_ImagePostprocessGate"))
+        };
+        assert!(!listed(&info)); // Legacy SaveImage has no post-save output.
+        info["SaveImage"]["output"] = json!(["IMAGE"]);
+        assert!(listed(&info));
+        for (field, value) in [
+            ("image", json!(["IMAGE"])),
+            ("image", json!(["IMAGE",{"lazy":false}])),
+            ("baseline", json!(["IMAGE,STRING",{"lazy":true}])),
+            ("baseline", json!(["IMAGE"])),
+            ("extra", json!(["STRING"])),
+        ] {
+            info["DEAS_ImagePostprocessGate"]["input"]["required"][field] = value;
+            assert!(!listed(&info));
+            info["DEAS_ImagePostprocessGate"] = gate.clone();
+        }
+        info["DEAS_ImagePostprocessGate"]["output"] = json!(["STRING"]);
+        assert!(!listed(&info));
+        info["DEAS_ImagePostprocessGate"] = gate;
+        info["DaSiWa_MetadataImageSaver"] = json!({"output":[]});
+        assert!(listed(&info)); // Incomplete metadata pair still selects core.
+        info["DaSiWa_MetadataConfig"] = json!({});
+        assert!(!listed(&info)); // Selection must not invalidate the baseline proof.
+        info["DaSiWa_MetadataImageSaver"]["output"] = json!(["STRING"]);
+        assert!(listed(&info));
+        info["SaveImage"]["output"] = json!([]);
+        assert!(listed(&info)); // Effective metadata saver needs no core socket.
+        info.as_object_mut()
+            .unwrap()
+            .remove("DEAS_ImagePostprocessGate");
+        assert!(!listed(&info));
+        assert!(parse(&base, &info).is_ok()); // Plain generation stays available.
+    }
 
     #[test]
     fn latent_post_upscale_catalogs_use_own_safe_model_choices() {

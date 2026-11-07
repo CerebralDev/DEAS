@@ -181,6 +181,7 @@
 .wb-loras input[type="number"] { width: 4.4rem; padding: 2px 5px; font-size: .72rem; }
 .wb-options { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: 8px; align-content: start; align-items: start; }
 .wb-option[data-video-post] { overflow-wrap: anywhere; }
+[data-sam-controls] > .wb-options { grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); }
 /* TVE post stages (shared by the Post dock and the TVE tab); the badge marks controls pulled from TVE. */
 .tve-post { display: grid; gap: 8px; margin-bottom: 12px; }
 .tve-post .wb-option-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }

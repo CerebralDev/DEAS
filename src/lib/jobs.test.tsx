@@ -1,6 +1,6 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { invoke, isTauri } from '@tauri-apps/api/core';
-import { stopWorkbench, runWorkbenchJob, readCurrentWorkbench, pollWorkbench, prepareDiagnosticJob, submitDiagnosticJob, readDiagnosticJobStatus, readCurrentDiagnosticJob, loadDiagnosticJobOutput, exportDiagnosticJobOutput } from './jobs';
+import { autoRefine, waitForWorkbenchJob, isImageIntent, stopWorkbench, runWorkbenchJob, readCurrentWorkbench, pollWorkbench, prepareDiagnosticJob, submitDiagnosticJob, readDiagnosticJobStatus, readCurrentDiagnosticJob, loadDiagnosticJobOutput, exportDiagnosticJobOutput } from './jobs';
 import { compileRecipe, type DiagnosticImageIntentV1 } from './execution';
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(), isTauri: vi.fn(() => true) }));
 afterEach(() => { vi.resetAllMocks(); vi.unstubAllGlobals(); });
@@ -9,6 +9,19 @@ const intent: DiagnosticImageIntentV1 = {
   checkpoint: 'observed.safetensors', seed: 0, width: 512, height: 512, steps: 20, cfg: 7,
   sampler: 'euler', scheduler: 'normal', outputPrefix: 'DEAS_diagnostic',
 };
+test('auto-refine forwards explicit consent, immutable settings, target order and the admission fence',async()=>{
+ vi.mocked(isTauri).mockReturnValue(true);vi.mocked(invoke).mockResolvedValue({job:null,skipped:2});
+ const settings={checkpoint:'SAM3/sam3.1.safetensors',targets:['eyes','feet','hands'],denoise:0.3,margin:32,threshold:0.5};
+ expect(await autoRefine('http://127.0.0.1:9',intent,settings,7,'source-job')).toEqual({job:null,skipped:2});
+ expect(invoke).toHaveBeenCalledWith('native_auto_refine',{baseUrl:'http://127.0.0.1:9',intent,settings,confirmed:true,admissionEpoch:7,sourceJobId:'source-job',masks:[]});
+ vi.mocked(invoke).mockResolvedValue({state:'running'});await expect(autoRefine('http://127.0.0.1:9',intent,settings,7)).rejects.toThrow('Invalid native auto-refine result');
+});
+test('SAM jobs cannot be mistaken for image-generation intents or retried on unknown status',async()=>{
+ const sam={recipeId:'sam3-mask',version:1,checkpoint:'sam.safetensors',inputImage:'in.png',width:512,height:512,outputPrefix:'mask',threshold:0.5,prompt:'eyes'} as const;
+ expect(isImageIntent(sam)).toBe(false);expect(isImageIntent(intent)).toBe(true);
+ const job={id:'sam-job',baseUrl:'http://127.0.0.1:9',promptId:'p',state:'unknown' as const,outputs:[],error:null,generationReady:false as const,intent:sam};
+ await expect(waitForWorkbenchJob(job,()=>true)).rejects.toThrow('unknown');expect(invoke).not.toHaveBeenCalled();
+});
 // Mage-Flow: one encode node carries prompt, negative and latent (no EmptyLatentImage, no separate negative node).
 test('Mage-Flow compiles the combined encode node', () => {
   const nodes = ['UNETLoader', 'CLIPLoader', 'VAELoader', 'KSampler', 'VAEDecode', 'SaveImage', 'TextEncodeMageFlowEdit'];
@@ -31,6 +44,15 @@ test('Flux.2 compiles Flux2Scheduler instead of KSampler', () => {
   expect(g['5'].class_type).toBe('SamplerCustomAdvanced');
   expect(g['5'].inputs.sigmas).toEqual(['Z', 0]);
   expect(g.G.inputs.cfg).toBe(5);
+});
+test('Flux.2 masked refinement keeps sampler step count and derives denoise at the cropped canvas',()=>{
+ const mask='deas-masks/00000000-0000-0000-0000-000000000001.png';
+ const nodes=['UNETLoader','CLIPLoader','VAELoader','CLIPTextEncode','VAEDecode','SaveImage','EmptyFlux2LatentImage','RandomNoise','CFGGuider','KSamplerSelect','Flux2Scheduler','SamplerCustomAdvanced','SplitSigmas','LoadImage','VAEEncode','LoadImageMask','SetLatentNoiseMask','ImageCompositeMasked','ImageCrop','ImageScale','CropMask','MaskToImage','ImageToMask'];
+ const allow={nodes,checkpoints:[],diffusionModels:['flux.safetensors'],textEncoders:['qwen.safetensors'],clipTypes:['flux2'],vaes:['ae.safetensors'],samplers:['euler'],schedulers:['normal']};
+ const graph=compileRecipe({...intent,checkpoint:'flux.safetensors',diffusion:{textEncoder:'qwen.safetensors',clipType:'flux2',vae:'ae.safetensors',family:'flux2'},inputImage:mask,inputMask:mask,denoise:0.25,inpaintCrop:{x:0,y:0,width:256,height:256,targetWidth:1024,targetHeight:1024}},allow).graph;
+ expect(graph.Z.inputs).toEqual({steps:80,width:1024,height:1024});
+ expect(graph.ZD).toEqual({class_type:'SplitSigmas',inputs:{sigmas:['Z',0],step:60}});
+ expect(graph['5'].inputs.sigmas).toEqual(['ZD',1]);
 });
 // Lumina2 is a checkpoint family: the top-level family id supplies the SD3 latent and the AuraFlow shift.
 test('Lumina2 compiles the checkpoint recipe points by family id', () => {

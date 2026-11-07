@@ -90,7 +90,7 @@ struct Player {
     dirty: AtomicBool,
     status: RefCell<Value>,
     id: String,
-    _temporary: Option<tempfile::NamedTempFile>,
+    _temporary: Option<std::sync::Arc<tempfile::NamedTempFile>>,
     probe: bool,
     frames: Cell<u64>,
     crop: Cell<bool>,
@@ -269,7 +269,7 @@ pub fn install(app: &tauri::AppHandle) -> Result<(), String> {
 pub fn open(
     id: String,
     path: PathBuf,
-    temporary: Option<tempfile::NamedTempFile>,
+    temporary: Option<std::sync::Arc<tempfile::NamedTempFile>>,
     auto_play: bool,
     repeat: bool,
     muted: bool,
@@ -390,7 +390,7 @@ pub fn update(id: &str, action: Action) -> Result<Value, String> {
                 p.poll();
                 return Ok(p.status.borrow().clone());
             }
-            Action::Close => unreachable!(),
+            Action::Close | Action::PreviewError => unreachable!(),
         };
         Ok(Value::Null)
     })

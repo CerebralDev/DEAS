@@ -1,12 +1,14 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import type { CompiledRecipe, DiagnosticImageIntentV1 } from './execution';
-import { isMusicIntent, type MusicIntentV1 } from './musicIntent';
-import { isVideoEnhanceIntent, isVideoIntent, type VideoEnhanceIntentV1, type VideoIntentV1 } from './videoIntent';
+import type { Sam3MaskIntentV1 } from './sam3';
+import { type MusicIntentV1 } from './musicIntent';
+import { type VideoEnhanceIntentV1, type VideoIntentV1 } from './videoIntent';
 
 /** Image recipe, one of the video family recipes or a YuE2 music recipe; all compile natively.
  * TVE enhance jobs (`VideoEnhanceIntentV1`) share the native session: readers check `isVideoEnhanceIntent` before narrowing. */
 export type JobIntent = DiagnosticImageIntentV1 | VideoIntentV1 | MusicIntentV1;
-export const isImageIntent = (i: JobIntent | VideoEnhanceIntentV1): i is DiagnosticImageIntentV1 => !isVideoIntent(i) && !isVideoEnhanceIntent(i) && !isMusicIntent(i);
+export type WorkbenchIntent = JobIntent | VideoEnhanceIntentV1 | Sam3MaskIntentV1;
+export const isImageIntent = (i: WorkbenchIntent): i is DiagnosticImageIntentV1 => i.recipeId === 'checkpoint-text-to-image-diagnostic';
 
 export interface DiagnosticJobPlan {
   id: string;
@@ -15,6 +17,10 @@ export interface DiagnosticJobPlan {
   graph: CompiledRecipe['graph'];
   generationReady: false;
 }
+export type TemporalPreviewData = {revision:number;nodeId:string;width:number;height:number;fps:number} & (
+  {video:{previewJobId:string;previewRevision:number};frames?:never} |
+  {frames:{src:string;durationMs:number}[];video?:never}
+);
 export interface JobStatus {
   id: string;
   baseUrl: string;
@@ -25,7 +31,7 @@ export interface JobStatus {
   error: string | null;
   generationReady: false;
   /** Immutable native-held intent, never the workbench's current controls; TVE tab jobs carry the enhance recipe. */
-  intent?: JobIntent | VideoEnhanceIntentV1;
+  intent?: WorkbenchIntent;
   /** Native-captured output directory, omitted if its filesystem identity is no longer valid. */
   outputRoot?: string;
   appVersion?: string;
@@ -37,6 +43,7 @@ export interface JobStatus {
   /** Live sampler steps and latest preview data URL, only while queued/running. */
   progress?: { value: number; max: number };
   preview?: string;
+  temporalPreview?: TemporalPreviewData;
 }
 async function native<T>(command: string, args: Record<string, unknown>): Promise<T> {
   if (!isTauri()) throw new Error('Native job execution requires the DEAS desktop app.');
@@ -50,19 +57,30 @@ async function native<T>(command: string, args: Record<string, unknown>): Promis
   }
 }
 /** Native-held Studio session; oldest job first, independent of the diagnostic slot. */
-export interface WorkbenchSnapshot { jobs: JobStatus[]; preparing: number; capacity: number; stopAvailable: boolean; admissionEpoch: number; stopping: boolean; /** Frontend Run IPC still awaiting a reply; not a native reservation count. */ frontendAdmitting?: boolean }
+export interface WorkbenchSnapshot { jobs: JobStatus[]; preparing: number; capacity: number; stopAvailable: boolean; admissionEpoch: number; stopping: boolean; autoRefining?: boolean; /** Frontend Run IPC still awaiting a reply; not a native reservation count. */ frontendAdmitting?: boolean }
 export interface WorkbenchStopResult extends WorkbenchSnapshot { outcome: 'empty'|'settled'|'partial'; discarded: number; issues: {jobId:string;error:string}[] }
 const pendingWorkbenchRuns = new Map<number, number>();
 let pendingWorkbenchStop: Promise<WorkbenchStopResult> | undefined;
+export function runWorkbenchJob(baseUrl: string, intent: Sam3MaskIntentV1, admissionEpoch: number): Promise<JobStatus>;
 export function runWorkbenchJob(baseUrl: string, intent: VideoIntentV1, admissionEpoch: number): Promise<JobStatus>;
 export function runWorkbenchJob(baseUrl: string, intent: VideoEnhanceIntentV1, admissionEpoch: number): Promise<JobStatus>;
 export function runWorkbenchJob(baseUrl: string, intent: JobIntent, admissionEpoch: number): Promise<JobStatus>;
 export function runWorkbenchJob(baseUrl: string, intent: DiagnosticImageIntentV1, admissionEpoch: number): Promise<JobStatus>;
-export function runWorkbenchJob(baseUrl: string, intent: JobIntent | VideoEnhanceIntentV1, admissionEpoch: number): Promise<JobStatus> {
+export function runWorkbenchJob(baseUrl: string, intent: WorkbenchIntent, admissionEpoch: number): Promise<JobStatus> {
   if (!baseUrl.trim()) return Promise.reject(new Error('An explicit backend endpoint is required.'));
   if (pendingWorkbenchStop) return Promise.reject(new Error('Workbench Stop is in progress.'));
   pendingWorkbenchRuns.set(admissionEpoch, (pendingWorkbenchRuns.get(admissionEpoch) ?? 0) + 1);
   return native<JobStatus>('native_workbench_run', { baseUrl, intent, confirmed: true, admissionEpoch }).finally(() => { const left = (pendingWorkbenchRuns.get(admissionEpoch) ?? 1) - 1; if (left) pendingWorkbenchRuns.set(admissionEpoch, left); else pendingWorkbenchRuns.delete(admissionEpoch); });
+}
+export interface AutoRefineSettings {checkpoint:string;targets:string[];denoise:number;margin:number;threshold:number}
+export interface RefineMask {name:string;png:number[]}
+export interface AutoRefineResult {job:JobStatus|null;skipped:number}
+/** Native owns all serial passes and the Stop fence, even if this IPC waiter disappears. */
+export async function autoRefine(baseUrl:string,intent:DiagnosticImageIntentV1,settings:AutoRefineSettings,admissionEpoch:number,sourceJobId:string|null=null,masks:RefineMask[]=[]):Promise<AutoRefineResult>{
+ if(pendingWorkbenchStop)throw new Error('Workbench Stop is in progress.');
+ const value=await native<AutoRefineResult>('native_auto_refine',{baseUrl,intent,settings,sourceJobId,masks,confirmed:true,admissionEpoch});
+ if(!value||!Number.isSafeInteger(value.skipped)||value.skipped<0||(value.job!==null&&(!value.job||typeof value.job.id!=='string'||value.job.state!=='succeeded'||!Array.isArray(value.job.outputs))))throw new Error('Invalid native auto-refine result.');
+ return value;
 }
 export function stopWorkbench(): Promise<WorkbenchStopResult> {
   if (!pendingWorkbenchStop) pendingWorkbenchStop = native<WorkbenchStopResult>('native_workbench_stop', {confirmed:true}).finally(() => { pendingWorkbenchStop = undefined; });
@@ -72,7 +90,7 @@ export function stopWorkbench(): Promise<WorkbenchStopResult> {
 export async function generationActive(): Promise<boolean> {
   const busy = (state?: string) => state === 'queued' || state === 'running';
   const [job, bench] = await Promise.all([invoke<{ state?: string } | null>('native_job_current'), invoke<WorkbenchSnapshot | null>('native_workbench_current')]);
-  return busy(job?.state) || !!bench?.jobs?.some(j => busy(j.state));
+  return busy(job?.state) || !!bench?.autoRefining || !!bench?.jobs?.some(j => busy(j.state));
 }
 /** Stops one generation: deletes it from the backend queue or interrupts it while running. */
 export async function stopWorkbenchJob(job: JobStatus): Promise<JobStatus> {
@@ -92,6 +110,18 @@ async function observeWorkbench(command: string): Promise<WorkbenchSnapshot> {
 }
 export const readCurrentWorkbench = (): Promise<WorkbenchSnapshot> => observeWorkbench('native_workbench_current');
 export const pollWorkbench = (): Promise<WorkbenchSnapshot> => observeWorkbench('native_workbench_poll');
+/** Observe an explicitly submitted editor selection; never retry an uncertain submission. */
+export async function waitForWorkbenchJob(job:JobStatus,active:()=>boolean):Promise<JobStatus>{
+ while(active()){
+  if(job.state==='succeeded')return job;
+  if(['failed','cancelled','unknown'].includes(job.state))throw new Error(job.error||`SAM selection ${job.state}`);
+  await new Promise(resolve=>setTimeout(resolve,500));
+  if(!active())break;
+  const next=await pollWorkbench();const found=next.jobs.find(j=>j.id===job.id);
+  if(!found)throw new Error('SAM selection job is no longer retained.');job=found;
+ }
+ throw new Error('SAM selection cancelled.');
+}
 // Overloads: the image signature stays last so `Parameters<>` in existing tests still resolve to the image intent.
 export function prepareDiagnosticJob(baseUrl: string, intent: VideoIntentV1): Promise<DiagnosticJobPlan>;
 export function prepareDiagnosticJob(baseUrl: string, intent: DiagnosticImageIntentV1): Promise<DiagnosticJobPlan>;

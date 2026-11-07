@@ -6,7 +6,7 @@ import builtinFamilies from '../../families/builtin.json' with { type: 'json' };
 import { audioBitrates, audioCodecs, bitDepths, defaultVideoOutput, isVideoOutput, videoCodecs, videoContainers, type VideoOutput } from '../../lib/videoIntent';
 
 /** Remembered Options tab state; only what the backend lists is ever submitted. `attention` is `a:<ModelAttentionBackend>`, `s:<Sage mode>` or '' (launch default). `sigmas` is the custom schedule text ('' = the model's own, if any). */
-export interface OptionsPref { attention:string; vae:'full'|'tiled'; tile:number; cache:''|'EasyCache'|'LazyCache'; threshold:number; compile:string; sigmas?:string; outputNaming?:string; /** Feed-forward chunking headroom for video (0 = off; 1 ≈ 24 GB … 4 ≈ 8 GB, the DaSiWa workflows' table). */ chunkHeadroom?:number; output?:VideoOutput }
+export interface OptionsPref { attention:string; vae:'full'|'tiled'; tile:number; cache:''|'EasyCache'|'LazyCache'; threshold:number; compile:string; sigmas?:string; outputNaming?:string; /** Feed-forward chunking headroom for video (0 = off; 1 ≈ 24 GB … 4 ≈ 8 GB, the DaSiWa workflows' table). */ chunkHeadroom?:number; output?:VideoOutput; enhancedPreview?:boolean }
 const tiles=[256,512,768,1024];
 const headrooms=[0,1,2,3,4];
 const namingPlaceholders=['type','date_yyyy-mm-dd','time','seed','model'];
@@ -25,9 +25,9 @@ const kitchen=(p:OptionsPref)=>p.attention==='a:comfy kitchen attention';
 export const isOptionsPref=(v:unknown):v is OptionsPref=>{
  const o=v as OptionsPref;
  return !!o&&typeof o==='object'&&typeof o.attention==='string'&&(o.vae==='full'||o.vae==='tiled')&&Number.isInteger(o.tile)&&o.tile>=256&&o.tile<=4096&&o.tile%64===0
-  &&['','EasyCache','LazyCache'].includes(o.cache)&&typeof o.threshold==='number'&&o.threshold>=0&&o.threshold<=3&&typeof o.compile==='string'&&(o.sigmas===undefined||typeof o.sigmas==='string')&&(o.outputNaming===undefined||typeof o.outputNaming==='string')&&(o.chunkHeadroom===undefined||headrooms.includes(o.chunkHeadroom))&&(o.output===undefined||isVideoOutput(o.output));
+  &&['','EasyCache','LazyCache'].includes(o.cache)&&typeof o.threshold==='number'&&o.threshold>=0&&o.threshold<=3&&typeof o.compile==='string'&&(o.sigmas===undefined||typeof o.sigmas==='string')&&(o.outputNaming===undefined||typeof o.outputNaming==='string')&&(o.chunkHeadroom===undefined||headrooms.includes(o.chunkHeadroom))&&(o.output===undefined||isVideoOutput(o.output))&&(o.enhancedPreview===undefined||typeof o.enhancedPreview==='boolean');
 };
-type Allow=Pick<RecipeAllowlist,'nodes'|'attention'|'sage'|'compile'>;
+type Allow=Pick<RecipeAllowlist,'nodes'|'attention'|'sage'|'compile'|'videoPreviews'>;
 
 /** Intent `options` from the remembered state. Choices a read backend does not list are left out; an unread backend leaves the check to native preparation. */
 export function runOptions(p:OptionsPref,allow:Allow|null):RunOptions|undefined{
@@ -44,9 +44,9 @@ export function runOptions(p:OptionsPref,allow:Allow|null):RunOptions|undefined{
  return Object.keys(o).length?o:undefined;
 }
 
-export interface OptionsPanelProps { value:OptionsPref; onChange:(next:OptionsPref)=>void; allow:Allow|null; /** Model family id: the Spectrum step cache belongs to MiniMax H3 only. */ family?:string; imageInput:boolean; onRead:()=>void; canRead:boolean }
+export interface OptionsPanelProps { value:OptionsPref; onChange:(next:OptionsPref)=>void; allow:Allow|null; /** Model family id: the Spectrum step cache belongs to MiniMax H3 only. */ family?:string; video?:boolean; imageInput:boolean; onRead:()=>void; canRead:boolean }
 /** Options tab: per-job speed/memory patches compiled into the graph, so no backend restart is needed. */
-export function OptionsPanel({value:p,onChange,allow,family,imageInput,onRead,canRead}:OptionsPanelProps){
+export function OptionsPanel({value:p,onChange,allow,family,video=false,imageInput,onRead,canRead}:OptionsPanelProps){
  const {t}=useI18n();
  const [help,setHelp]=useState('');
  const set=(patch:Partial<OptionsPref>)=>onChange({...p,...patch});
@@ -56,6 +56,8 @@ export function OptionsPanel({value:p,onChange,allow,family,imageInput,onRead,ca
  // A remembered value the backend does not (yet) list stays visible instead of silently changing.
  const keep=(list:string[],v:string)=>v&&!list.includes(v)?[...list,v]:list;
  const attentions=[...(allow?.attention??[]).map(a=>`a:${a}`),...(allow?.sage??[]).map(s=>`s:${s}`)];
+ const preview=video&&family?allow?.videoPreviews?.[family]:undefined;
+ const previewReason=!video?'studio.run.opt.enhancedPreview.videoOnly':!allow?'studio.run.opt.enhancedPreview.unread':!preview?'studio.run.opt.enhancedPreview.missing':'';
  const h3=family!=='minimax-h3'?'studio.run.opt.cache.h3Only':has('SpectrumApplyMiniMaxH3')?'studio.run.pipe.noRecipe':'studio.run.opt.missing.h3';
  // Help sits behind "?" to keep the grid dense; an invalid value stays visible below the control.
  const card=(id:string,control:React.ReactNode,note:React.ReactNode,error?:string,reset?:()=>void)=><div className="wb-option" data-option={id}>
@@ -73,6 +75,7 @@ export function OptionsPanel({value:p,onChange,allow,family,imageInput,onRead,ca
  return <div className="wb-options">
   {!allow&&<p className="media-help wb-options-read">{t('studio.run.opt.unread')} <button type="button" className="wb-dock-action" disabled={!canRead} onClick={onRead}>{t('studio.run.opt.read')}</button></p>}
   {card('outputNaming',<input type="text" aria-label={t('studio.run.opt.outputNaming')} aria-invalid={!namingValid} value={naming} maxLength={512} spellCheck={false} onChange={e=>set({outputNaming:e.target.value})}/>,namingHelp,namingValid?undefined:t('studio.run.opt.outputNaming.invalid'),()=>set({outputNaming:defaultOutputNaming}))}
+  {card('enhancedPreview',<input type="checkbox" role="switch" aria-label={t('studio.run.opt.enhancedPreview')} checked={!!preview&&p.enhancedPreview!==false} disabled={!preview} title={t(previewReason||'studio.run.opt.enhancedPreview.hint')} onChange={e=>set({enhancedPreview:e.target.checked})}/>,t(previewReason||'studio.run.opt.enhancedPreview.hint'))}
   {card('attention',<select aria-label={t('studio.run.opt.attention')} value={p.attention} onChange={e=>set({attention:e.target.value})}>
    <option value="">{t('studio.run.opt.attention.default')}</option>
    {keep(attentions,p.attention).map(v=><option key={v} value={v} disabled={!attentions.includes(v)}>{v.startsWith('s:')?`Sage · ${v.slice(2)}`:v.slice(2)}</option>)}

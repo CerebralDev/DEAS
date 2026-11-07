@@ -78,6 +78,46 @@ describe('run options', () => {
   });
 });
 
+describe('enhanced preview preference', () => {
+  it('accepts legacy, on and off values but rejects non-booleans', () => {
+    expect(defaultOptions).not.toHaveProperty('enhancedPreview');
+    for (const enhancedPreview of [undefined, true, false]) expect(isOptionsPref({ ...defaultOptions, enhancedPreview })).toBe(true);
+    for (const enhancedPreview of [null, 0, 'false', {}]) expect(isOptionsPref({ ...defaultOptions, enhancedPreview })).toBe(false);
+    expect(runOptions({ ...defaultOptions, enhancedPreview: true }, allow)).toBeUndefined();
+  });
+
+  it('derives ON only from the selected video family capability and preserves saved OFF across refreshes', () => {
+    const onChange = vi.fn();
+    const compatible = { ...allow, videoPreviews: { 'ltx-2': { decoder: 'tiny' as const, model: 'taeltx.safetensors' }, 'minimax-h3': { decoder: 'vae' as const, model: 'h3-preview.safetensors' } } };
+    const props = { value: defaultOptions, onChange, allow: compatible, family: 'ltx-2', video: true, imageInput: false, onRead: vi.fn(), canRead: true };
+    const { rerender } = render(<I18nProvider><OptionsPanel {...props}/></I18nProvider>);
+    const toggle = () => screen.getByRole('switch', { name: 'Enhanced preview' }) as HTMLInputElement;
+    expect(toggle().checked).toBe(true); expect(toggle().disabled).toBe(false);
+    expect(toggle().closest('[data-option="enhancedPreview"]')).not.toBeNull();
+    fireEvent.click(toggle());
+    expect(onChange).toHaveBeenLastCalledWith({ ...defaultOptions, enhancedPreview: false });
+    const off = { ...defaultOptions, enhancedPreview: false };
+    for (const available of [null, allow, compatible]) {
+      rerender(<I18nProvider><OptionsPanel {...props} value={off} allow={available}/></I18nProvider>);
+      expect(toggle().checked).toBe(false); expect(toggle().disabled).toBe(available !== compatible);
+    }
+    rerender(<I18nProvider><OptionsPanel {...props} value={off} family="minimax-h3"/></I18nProvider>);
+    expect(toggle().checked).toBe(false); expect(toggle().disabled).toBe(false);
+    fireEvent.click(toggle()); expect(onChange).toHaveBeenLastCalledWith({ ...off, enhancedPreview: true });
+    rerender(<I18nProvider><OptionsPanel {...props} family="wan"/></I18nProvider>);
+    expect(toggle().checked).toBe(false); expect(toggle().disabled).toBe(true);
+    expect(toggle().title).toMatch(/No compatible/);
+    rerender(<I18nProvider><OptionsPanel {...props} video={false}/></I18nProvider>);
+    expect(toggle().checked).toBe(false); expect(toggle().disabled).toBe(true);
+    expect(toggle().title).toMatch(/Select a video/);
+    rerender(<I18nProvider><OptionsPanel {...props} allow={null}/></I18nProvider>);
+    expect(toggle().title).toMatch(/Read backend/);
+    fireEvent.click(screen.getByRole('button', { name: 'Explain Enhanced preview' }));
+    expect(screen.getByText(/^Read backend options/)).toBeTruthy();
+    expect(onChange).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe('output and chunking cards', () => {
   it('store the video combine settings, the image format and the chunking headroom', () => {
     const onChange = vi.fn();

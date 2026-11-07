@@ -4,7 +4,7 @@ import { useI18n } from '../../i18n/I18nProvider';
 import './nativeVideo.css';
 
 export const nativeVideo = () => isTauri() && /Linux/.test(navigator.userAgent);
-export type VideoSource = {path:string} | {baseUrl:string;filename:string;subfolder:string;type:string};
+export type VideoSource = {previewJobId:string;previewRevision:number} | {path:string} | {baseUrl:string;filename:string;subfolder:string;type:string};
 export type NativeVideoStatus = {position:number;duration:number;width:number;height:number;paused:boolean;muted:boolean;volume:number;error?:string};
 export type NativeVideoControl = {seek:(seconds:number)=>void;pause:()=>void;play:()=>void;playCrop:(start:number,end:number)=>void};
 const clock=(seconds:number)=>{const whole=Math.max(0,Math.floor(seconds));return `${Math.floor(whole/60)}:${String(whole%60).padStart(2,'0')}`;};

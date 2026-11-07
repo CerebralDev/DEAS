@@ -288,6 +288,35 @@ fn image_prompting_python_contract_fixture() {
 }
 
 #[test]
+fn image_postprocess_python_contract_fixture() {
+    let script = r#"
+import sys
+scope = {}
+exec(sys.argv[1], scope)
+Gate = scope['NODE_CLASS_MAPPINGS']['DEAS_ImagePostprocessGate']
+gate = Gate()
+assert Gate.INPUT_TYPES() == {'required': {'baseline': ('IMAGE,STRING',), 'image': ('IMAGE', {'lazy': True})}}
+assert Gate.RETURN_TYPES == ('IMAGE',)
+image = object()
+for baseline in [object(), 'saved.png']:
+    assert gate.check_lazy_status(baseline) == ['image']
+    assert gate.check_lazy_status(baseline, image) == []
+    assert gate.forward(baseline, image)[0] is image
+"#;
+    let result = Command::new("/usr/bin/python3")
+        .args(["-c", script, include_str!("image_postprocess.py")])
+        .env_remove("PYTHONPATH")
+        .env("PYTHONDONTWRITEBYTECODE", "1")
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+}
+
+#[test]
 fn image_prompting_installed_before_owned_child_start() {
     let script = SERVER.replace(
         "args=sys.argv[1:]",
@@ -304,6 +333,10 @@ fn image_prompting_installed_before_owned_child_start() {
         fs::read(directory.join("deas_image_prompting.py")).unwrap(),
         include_bytes!("image_prompting.py")
     );
+    assert_eq!(
+        fs::read(directory.join("deas_image_postprocess.py")).unwrap(),
+        include_bytes!("image_postprocess.py")
+    );
     let mut entries: Vec<_> = fs::read_dir(&directory)
         .unwrap()
         .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
@@ -311,7 +344,11 @@ fn image_prompting_installed_before_owned_child_start() {
     entries.sort();
     assert_eq!(
         entries,
-        ["deas_image_prompting.py", "deas_output_naming.py"]
+        [
+            "deas_image_postprocess.py",
+            "deas_image_prompting.py",
+            "deas_output_naming.py"
+        ]
     );
     lifecycle.stop();
 }

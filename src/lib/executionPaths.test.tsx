@@ -14,7 +14,7 @@ it('preserves exact Windows checkpoint and LoRA IDs, including allowlist identit
 });
 
 it('preserves Windows split-loader and upscale IDs',()=>{
- const graph=compileRecipe({...intent,checkpoint:id,diffusion:{textEncoder:id,vae:id,clipType:'sdxl'},inputImage:'sub/ref.png',denoise:0.5,inputResize:{width:512,height:768,crop:'disabled'},upscaleModel:id,refine:{width:512,height:768,denoise:0.3,upscaleModel:id}},{...allow,diffusionModels:[id],textEncoders:[id],vaes:[id],clipTypes:['sdxl'],upscaleModels:[id]}).graph;
+ const graph=compileRecipe({...intent,checkpoint:id,diffusion:{textEncoder:id,vae:id,clipType:'sdxl'},inputImage:'sub/ref.png',denoise:0.5,inputResize:{width:512,height:768,crop:'disabled'},upscaleModel:id,refine:{width:512,height:768,denoise:0.3,upscaleModel:id}},{...allow,nodes:[...allow.nodes,'DEAS_ImagePostprocessGate'],diffusionModels:[id],textEncoders:[id],vaes:[id],clipTypes:['sdxl'],upscaleModels:[id]}).graph;
  for(const [type,key] of [['UNETLoader','unet_name'],['CLIPLoader','clip_name'],['VAELoader','vae_name'],['UpscaleModelLoader','model_name']])expect(Object.values(graph).find(n=>n.class_type===type)!.inputs[key]).toBe(id);
 });
 

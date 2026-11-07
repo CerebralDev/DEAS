@@ -1,5 +1,13 @@
 # News
 
+## 0.2.19 BETA (unreleased)
+
+- **Image refinement saves Original first.** Optional image refinement now waits for the encoded Original before starting its post-processing branch, so a later upscale/refine failure does not lose that completed image. Requires the compatible DEAS adapter and saver; start the owned backend explicitly with this build to install the adapter. This does not yet change video ordering.
+
+- **Stop one generation or the whole queue.** Stop now opens a choice instead of immediately stopping everything. Cancel or Escape leaves work running. The selected-item action keeps other jobs and preparations intact; real-backend/native-platform acceptance is still open.
+
+- **SAM masking and Auto Refine are being integrated.** Select objects with text, points (Alt-click excludes) or a box; refine ordered targets such as `eyes; feet; hands` without changing the generation prompt. Automatic post-generation refinement is opt-in, with manual refinement for existing images and retained originals. SAM weights require separate license acceptance and manual installation. This unreleased integration is not yet real-model or native Linux/Windows accepted. [Guide](STUDIO.md#sam-31-masking-and-auto-refine).
+
 ## 0.2.18 BETA
 
 - **Audio enhancement is ready when you open the tab.** Processing options load immediately, **Enhance audio and save…** accepts bookmarked (symlinked) folders, and enhanced video keeps the container and audio codec your TVE/video-combine output picked instead of forcing MKV/FLAC.

@@ -15,6 +15,7 @@ enum Failure {
     Receive,
     Flush,
     Close,
+    Decode,
 }
 
 impl Failure {
@@ -24,13 +25,14 @@ impl Failure {
             Self::Receive => (1, "receive"),
             Self::Flush => (2, "flush"),
             Self::Close => (3, "close"),
+            Self::Decode => (4, "decode"),
         }
     }
 }
 
 struct FailureLog {
-    last: [Option<Instant>; 4],
-    suppressed: [u64; 4],
+    last: [Option<Instant>; 5],
+    suppressed: [u64; 5],
 }
 
 impl FailureLog {
@@ -58,8 +60,8 @@ impl FailureLog {
 
 fn report_failure(failure: Failure, client_id: &str) {
     static REPORTS: Mutex<FailureLog> = Mutex::new(FailureLog {
-        last: [None; 4],
-        suppressed: [0; 4],
+        last: [None; 5],
+        suppressed: [0; 5],
     });
     REPORTS
         .lock()
@@ -163,12 +165,24 @@ fn publish(
 /// Best-effort live view over `/ws?clientId=`; failures only mean no preview.
 // Plain ws only, preserving the existing optional transport and its lack of reconnects.
 pub(super) async fn watch(base: &reqwest::Url, client_id: &str, live: Arc<Mutex<Live>>) {
+    let (expected, job_id) = live
+        .lock()
+        .map(|l| (l.preview_nodes.clone(), l.preview_job.clone()))
+        .unwrap_or_default();
     let started = live.lock().ok().and_then(|mut live| live.observer.begin());
     let weak = Arc::downgrade(&live);
     // Neither connection work nor the spawned receiver keeps native ownership alive.
     drop(live);
     let Some((mut cancel, completion)) = started else {
         return;
+    };
+    // One proportional budget per observer; telemetry must not retain Live or delay cancellation.
+    let budget = if expected.is_empty() { 0 } else {
+        tokio::select! {
+            biased;
+            _ = cancelled(&mut cancel) => return,
+            sample = crate::monitoring::sample(None) => sample.ram.map_or(0, |m| (m.total.saturating_sub(m.used) / 128) as usize),
+        }
     };
     let Ok(mut url) = base.join("ws") else {
         return;
@@ -237,6 +251,52 @@ pub(super) async fn watch(base: &reqwest::Url, client_id: &str, live: Arc<Mutex<
                                 .filter(|id| !id.is_empty())
                                 .map(str::to_owned);
                         }
+                        Some("kj_preview_override")
+                            if prompt_id.is_some()
+                                && event["data"]["node_id"]
+                                    .as_str()
+                                    .is_some_and(|id| expected.iter().any(|n| n == id)) =>
+                        {
+                            let revision = weak
+                                .upgrade()
+                                .and_then(|l| {
+                                    l.lock().ok().map(|l| l.preview_revision.saturating_add(1))
+                                })
+                                .unwrap_or(1);
+                            let data = event["data"].clone();
+                            let job = job_id.clone();
+                            // Decode without Live held, then recheck cancellation under the publication lock.
+                            let decode = tokio::task::spawn_blocking(move || {
+                                let temporal = super::preview::parse(&data, &job, revision, budget);
+                                let still = if temporal.is_none() {
+                                    super::preview::jpeg(&data, budget)
+                                } else {
+                                    None
+                                };
+                                (temporal, still)
+                            });
+                            let decoded = tokio::select! {
+                                biased;
+                                _ = cancelled(&mut cancel) => break,
+                                result = decode => result,
+                            };
+                            match decoded {
+                                Ok((Some(preview), _)) => {
+                                    if !publish(&weak, &cancel, |live| {
+                                        live.preview_revision = revision;
+                                        live.temporal = Some(preview);
+                                    }) {
+                                        break;
+                                    }
+                                }
+                                Ok((_, Some(still))) => {
+                                    if !publish(&weak, &cancel, |live| live.preview = Some(still)) {
+                                        break;
+                                    }
+                                }
+                                _ => report_failure(Failure::Decode, &client_id),
+                            }
+                        }
                         Some("progress")
                             if event["data"]["prompt_id"].is_null()
                                 || (prompt_id.is_some()
@@ -254,6 +314,7 @@ pub(super) async fn watch(base: &reqwest::Url, client_id: &str, live: Arc<Mutex<
                             if prompt_id.is_some()
                                 && event["data"]["prompt_id"].as_str() == prompt_id.as_deref() =>
                         {
+                            publish(&weak, &cancel, |live| live.temporal = None);
                             break;
                         }
                         _ => {}
@@ -321,10 +382,19 @@ mod tests {
     use super::*;
 
     #[test]
+    fn watch_malformed_preview_logging_is_bounded_and_shared() {
+        let mut reports=FailureLog {last:[None;5],suppressed:[0;5]};
+        let id=uuid::Uuid::new_v4().to_string();
+        reports.report(Failure::Decode,&id);reports.report(Failure::Decode,&id);
+        let entries: Vec<_>=crate::logs::native_logs(0).into_iter().filter(|e| e.text.contains(&id)).collect();
+        assert_eq!(entries.len(),1);assert!(entries[0].text.starts_with("WARN: preview-observer operation=decode"));
+        assert_eq!(entries[0].source,crate::logs::Source::Deas);assert_eq!(reports.suppressed[4],1);
+    }
+    #[test]
     fn watch_failure_logging_is_shared_redacted_and_rate_limited() {
         let mut reports = FailureLog {
-            last: [None; 4],
-            suppressed: [0; 4],
+            last: [None; 5],
+            suppressed: [0; 5],
         };
         let client = uuid::Uuid::new_v4().to_string();
         reports.report(Failure::Connect, &client);

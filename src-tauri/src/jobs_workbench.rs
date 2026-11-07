@@ -17,7 +17,7 @@ pub(super) fn reset_workbench_failure_logging() {
 
 impl Session {
     pub(super) fn workbench_busy(&self) -> Result<bool, String> {
-        if self.stop.is_some() {
+        if self.stop.is_some() || self.auto_refine {
             return Ok(true);
         }
         for held in &self.workbench {
@@ -56,7 +56,7 @@ impl Jobs {
             }
         }
         Ok(
-            json!({"jobs":jobs,"preparing":preparing,"capacity":WORKBENCH_LIMIT,"stopAvailable":true,"admissionEpoch":session.admission_epoch,"stopping":session.stop.is_some()}),
+            json!({"jobs":jobs,"preparing":preparing,"capacity":WORKBENCH_LIMIT,"stopAvailable":true,"admissionEpoch":session.admission_epoch,"stopping":session.stop.is_some(),"autoRefining":session.auto_refine}),
         )
     }
 
@@ -120,7 +120,7 @@ impl Jobs {
         engine: Option<&crate::install::Engine>,
     ) -> Result<Value, String> {
         let result = self
-            .workbench_run_inner(base_url, intent, confirmed, admission_epoch, engine)
+            .workbench_run_inner(base_url, intent, confirmed, admission_epoch, engine, false)
             .await;
         match &result {
             Ok(job) => report_job("run", job),
@@ -140,6 +140,23 @@ impl Jobs {
         result
     }
 
+    pub(super) async fn workbench_auto_refine_run(
+        &self,
+        base_url: String,
+        intent: Value,
+        admission_epoch: u64,
+        engine: &crate::install::Engine,
+    ) -> Result<Value, String> {
+        let result = self
+            .workbench_run_inner(base_url, intent, true, admission_epoch, Some(engine), true)
+            .await;
+        if let Ok(job) = &result {
+            report_job("auto-refine", job);
+        }
+        result
+    }
+
+    #[allow(clippy::too_many_arguments)]
     async fn workbench_run_inner(
         &self,
         base_url: String,
@@ -147,6 +164,7 @@ impl Jobs {
         confirmed: bool,
         admission_epoch: u64,
         engine: Option<&crate::install::Engine>,
+        auto_refine: bool,
     ) -> Result<Value, String> {
         if !confirmed {
             return Err("Explicit Workbench submission confirmation is required".into());
@@ -168,6 +186,12 @@ impl Jobs {
         ));
         {
             let mut session = self.lock()?;
+            if session.auto_refine && !auto_refine {
+                return Err(
+                    "Auto Refine owns Workbench admission until its serial operation finishes"
+                        .into(),
+                );
+            }
             if session.stop.is_some() {
                 return Err("Workbench Stop is in progress; no admission".into());
             }
@@ -183,7 +207,10 @@ impl Jobs {
             if session.workbench.len() == WORKBENCH_LIMIT {
                 let mut evict = None;
                 for (index, entry) in session.workbench.iter().enumerate() {
-                    if entry.lock()?.job.as_ref().is_some_and(Job::terminal) {
+                    if entry.lock()?.job.as_ref().is_some_and(|job| {
+                        job.terminal()
+                            && (!auto_refine || job.plan.intent["recipeId"] == "sam3-mask")
+                    }) {
                         evict = Some(index);
                         break;
                     }
@@ -211,6 +238,33 @@ impl Jobs {
         })
         .await
         .map_err(|_| "Workbench Run task failed")?
+    }
+
+    /// Auto Refine retains every non-SAM pass permanently in the queue; check the whole run fits
+    /// before the first upload, with SAM intermediates counted as evictable.
+    pub(super) fn refine_slots_ok(&self, passes: usize) -> Result<(), String> {
+        let occupied = self
+            .lock()?
+            .workbench
+            .iter()
+            .filter(|held| {
+                held.lock()
+                    .map(|session| {
+                        session.job.as_ref().is_none_or(|job| {
+                            !job.terminal() || job.plan.intent["recipeId"] != "sam3-mask"
+                        })
+                    })
+                    .unwrap_or(true)
+            })
+            .count();
+        if occupied + passes > WORKBENCH_LIMIT {
+            return Err(format!(
+                "Auto Refine needs {} retained queue slots but only {} are free; reduce targets or masks",
+                passes,
+                WORKBENCH_LIMIT - occupied
+            ));
+        }
+        Ok(())
     }
 
     async fn workbench_execute(

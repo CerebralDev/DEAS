@@ -30,7 +30,7 @@ window.__TAURI_INTERNALS__={metadata:{currentWindow:{label:'main'},currentWebvie
    if(window.__holdUpload)await new Promise(resolve=>{window.__releaseUpload=resolve;});
    return maskName;
   }
-  if(command==='native_workbench_current')return {jobs:window.__job?[window.__job]:[],preparing:0,capacity:20,stopAvailable:false};
+  if(command==='native_workbench_current'||command==='native_workbench_poll')return {jobs:window.__job?[window.__job]:[],preparing:0,capacity:20,stopAvailable:false};
   if(command==='native_workbench_run'){window.__plans.push(structuredClone(args.intent));return window.__job={id:'job-'+window.__plans.length,baseUrl:'http://127.0.0.1:7801',promptId:'p',state:'failed',outputs:[],error:'fixture: no generation',generationReady:false,intent:window.__plans.at(-1)};}
   window.__unexpected.push(command);throw Error('Unexpected IPC '+command);
  }};
@@ -40,7 +40,7 @@ window.__TAURI_INTERNALS__={metadata:{currentWindow:{label:'main'},currentWebvie
 def open_editor(page):
     page.goto(URL + '/tools/inpaint-fixture.html', wait_until='networkidle')
     page.get_by_role('button', name='base.png', exact=True).click()
-    page.locator('[data-browsed-preview] [data-use-input]').click()
+    page.locator('[data-use-input]').click()
     page.get_by_role('button', name='Inpaint', exact=True).click()
     page.locator('[data-editor-viewport]').wait_for()
     expect(page.get_by_role('button', name='Mask 1', exact=True)).to_have_attribute('aria-pressed', 'true')
@@ -81,11 +81,16 @@ def pixels(page, points, index=-1):
 
 def export_mask(page):
     before = page.evaluate('window.__plans.length')
+    canvases = page.locator('.sie-mask, .sie-paint canvas').element_handles()
+    snapshots = [canvas.evaluate('(c)=>c.toDataURL()') for canvas in canvases]
     click_tool(page, 'Run')
     page.wait_for_function('(n)=>window.__plans.length===n+1', arg=before)
     # Edit jobs open side by side: the live editor stays visible, no return step.
     expect(page.locator('.wb-stage.wb-split [data-editor-viewport]')).to_be_visible()
     expect(page.locator('[data-editor-return]')).to_have_count(0)
+    for canvas, snapshot in zip(canvases, snapshots):
+        assert canvas.evaluate('(c)=>c.isConnected'), 'Split view replaced a painted canvas'
+        assert canvas.evaluate('(c)=>c.toDataURL()') == snapshot, 'Split view lost painted pixels'
     return page.evaluate('window.__plans.at(-1)')
 
 
@@ -198,7 +203,7 @@ with sync_playwright() as p:
     # Reselecting the same source must preserve the entire draft, not just canvas pixels.
     editor_node = page.get_by_test_id('editor-world').element_handle()
     page.get_by_role('button',name='base.png',exact=True).click()
-    page.locator('[data-browsed-preview] [data-use-input]').click()
+    page.locator('[data-use-input]').click()
     expect(page.locator('.sie-image:not([data-layer="base"])')).to_have_count(1)
     expect(page.get_by_role('button',name='Run',exact=True)).to_be_enabled()
     assert page.get_by_test_id('editor-world').evaluate('(el,old)=>el===old',editor_node)
@@ -247,7 +252,7 @@ with sync_playwright() as p:
     expect(page.locator('.wb-stage.wb-split [data-editor-viewport]')).to_be_visible()
     # A model-invalid source must be explained, not silently rounded.
     page.get_by_role('button', name='odd.png', exact=True).click()
-    page.locator('[data-browsed-preview] [data-use-input]').click()
+    page.locator('[data-use-input]').click()
     click_tool(page, 'Inpaint')
     expect(page.get_by_role('button', name='Run', exact=True)).to_be_disabled()
     expect(page.get_by_text('Resample this image to the selected model’s resolution grid before inpainting.', exact=True)).to_be_visible()
@@ -288,7 +293,7 @@ with sync_playwright() as p:
     }''')
     drop_tile(page,'cat.png')
     page.get_by_role('button',name='other.png',exact=True).click()
-    page.locator('[data-browsed-preview] [data-use-input]').click()
+    page.locator('[data-use-input]').click()
     page.evaluate('window.__releaseProbe();window.__restoreImage()')
     page.wait_for_function('window.__probeDone')
     assert page.locator('.sie-image:not([data-layer="base"])').count()==0

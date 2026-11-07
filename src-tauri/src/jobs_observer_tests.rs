@@ -1,5 +1,113 @@
 //! Loopback protocol fixtures. Completion is the observer task's bounded-cleanup acknowledgement,
 //! not merely a cancellation flag, peer Close receipt, or a sampled process-memory value.
+
+#[tokio::test]
+async fn watch_temporal_preview_disabled_graph_never_accepts_kj_payloads() {
+    use base64::Engine;
+    let mut server=fixture().await;let jobs=Jobs::default();
+    let (_,mut peer)=server.diagnostic(&jobs,92).await;
+    let job=jobs.lock().unwrap().job.as_ref().unwrap().clone();
+    peer.send(Message::Text(json!({"type":"execution_start","data":{"prompt_id":"own"}}).to_string().into())).await;
+    peer.send(Message::Text(json!({"type":"kj_preview_override","data":{"node_id":"old-node","w":32,"h":32,"fps":8,"mime":"image/webp","image":base64::engine::general_purpose::STANDARD.encode(include_bytes!("../test-data/preview/h3.webp"))}}).to_string().into())).await;
+    peer.ping().await;assert!(job.live.lock().unwrap().temporal.is_none());
+    job.stop_observer();peer.closed().await;
+}
+#[tokio::test]
+async fn watch_temporal_preview_is_directed_node_bound_latest_owned_and_stop_cleaned() {
+    use base64::Engine;
+    for terminal in [false, true] {
+        let mut server = fixture().await;
+        let jobs = Jobs::default();
+        let (status, mut old_peer) = server.diagnostic(&jobs, 91).await;
+        let id = status["id"].as_str().unwrap();
+        let job = jobs.lock().unwrap().job.as_ref().unwrap().clone();
+        job.stop_observer();
+        old_peer.closed().await;
+        {
+            let mut live = job.live.lock().unwrap();
+            live.preview_nodes = vec!["deas-preview-unique-plan-node".into()];
+            live.preview_job = id.into();
+        }
+        let mut peer = attach_observer(&job).await;
+        let event = |node: &str, bytes: &[u8], mime: &str| {
+            Message::Text(json!({"type":"kj_preview_override","data":{"node_id":node,"w":32,"h":32,"fps":8,"mime":mime,"image":base64::engine::general_purpose::STANDARD.encode(bytes)}}).to_string().into())
+        };
+        let webp = include_bytes!("../test-data/preview/h3.webp");
+        peer.send(event("deas-preview-unique-plan-node", webp, "image/webp"))
+            .await;
+        peer.ping().await;
+        assert!(
+            job.live.lock().unwrap().temporal.is_none(),
+            "no directed execution_start yet"
+        );
+        peer.send(Message::Text(
+            json!({"type":"execution_start","data":{"prompt_id":"own-prompt"}})
+                .to_string()
+                .into(),
+        ))
+        .await;
+        peer.send(event("deas-preview-previous-plan-node", webp, "image/webp"))
+            .await;
+        peer.ping().await;
+        assert!(
+            job.live.lock().unwrap().temporal.is_none(),
+            "foreign async producer on the current socket"
+        );
+        peer.send(event("deas-preview-unique-plan-node", webp, "image/webp"))
+            .await;
+        peer.ping().await;
+        assert_eq!(
+            job.snapshot()["temporalPreview"]["frames"]
+                .as_array()
+                .unwrap()
+                .len(),
+            3
+        );
+        // KJ's valid message intentionally has no prompt_id.
+        peer.send(event(
+            "deas-preview-unique-plan-node",
+            include_bytes!("../test-data/preview/preview.mp4"),
+            "video/mp4",
+        ))
+        .await;
+        peer.ping().await;
+        assert!(jobs.preview_video(id, 1).is_err());
+        let lease = jobs.preview_video(id, 2).unwrap();
+        let path = lease.path().to_owned();
+        peer.send(event(
+            "deas-preview-unique-plan-node",
+            b"not a video",
+            "video/mp4",
+        ))
+        .await;
+        peer.ping().await;
+        assert_eq!(
+            job.snapshot()["temporalPreview"]["revision"],
+            2,
+            "malformed replacement preserves the latest playable asset"
+        );
+        if terminal {
+            peer.send(Message::Text(
+                json!({"type":"execution_success","data":{"prompt_id":"own-prompt"}})
+                    .to_string()
+                    .into(),
+            ))
+            .await;
+        } else {
+            job.stop_observer();
+        }
+        peer.closed().await;
+        assert!(job.live.lock().unwrap().temporal.is_none());
+        assert!(jobs.preview_video(id, 2).is_err());
+        assert!(
+            path.exists(),
+            "active player retains its lease through close"
+        );
+        drop(lease);
+        assert!(!path.exists());
+    }
+}
+
 use super::*;
 use futures_util::{SinkExt, StreamExt};
 use std::collections::{HashMap, HashSet};

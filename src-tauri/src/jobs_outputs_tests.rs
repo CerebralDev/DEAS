@@ -1,6 +1,45 @@
 use super::*;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+#[tokio::test]
+async fn sam3_output_decodes_rgb_at_exact_unaligned_source_size() {
+    let i = json!({"recipeId":"sam3-mask","version":1,"checkpoint":"sam3.1.safetensors","inputImage":"source.png","width":641,"height":479,"outputPrefix":"DEAS/mask","prompt":"eyes","threshold":0.5});
+    let graph = compile(&i).unwrap();
+    let references = job_outputs(&json!({"outputs":{"7":{"images":[{"filename":"mask.png","subfolder":"DEAS","type":"output"}]}}}), &graph).unwrap();
+    assert_eq!(references.len(), 1);
+    for width in [641, 640] {
+        let mut bytes = vec![];
+        {
+            let mut encoder = png::Encoder::new(&mut bytes, width, 479);
+            encoder.set_color(png::ColorType::Rgb);
+            encoder.set_depth(png::BitDepth::Eight);
+            encoder
+                .write_header()
+                .unwrap()
+                .write_image_data(&vec![255; width as usize * 479 * 3])
+                .unwrap();
+        }
+        let (base, server) = binary_server(bytes.clone(), 200, "Content-Type: image/png").await;
+        let jobs = completed(&base);
+        {
+            let mut state = jobs.lock().unwrap();
+            let job = state.job.as_mut().unwrap();
+            job.plan.intent = i.clone();
+            job.plan.graph = graph.clone();
+            job.outputs = references.clone();
+        }
+        let result = jobs.output("job-a".into(), 0).await;
+        if width == 641 {
+            let output = result.unwrap();
+            assert_eq!((output.width, output.height), (641, 479));
+            assert_eq!(output.bytes, bytes);
+        } else {
+            assert!(result.err().unwrap().contains("dimensions"));
+        }
+        server.await.unwrap();
+    }
+}
+
 fn png_bytes(width: u32, height: u32) -> Vec<u8> {
     let mut bytes = vec![];
     {

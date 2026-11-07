@@ -732,6 +732,11 @@ impl Lifecycle {
             "deas_image_prompting.py",
             include_bytes!("image_prompting.py"),
         )?;
+        install_adapter(
+            root,
+            "deas_image_postprocess.py",
+            include_bytes!("image_postprocess.py"),
+        )?;
         // Optional capability: unsupported sources must not prevent normal backend startup.
         let mut interrupt_source = InterruptSource::capture(root).ok().and_then(|mut proof| {
             install_adapter(

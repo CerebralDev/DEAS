@@ -21,7 +21,8 @@
 .sie-shape.is-round { border-radius:50%; }
 .sie-viewport[data-tool="brush"],.sie-viewport[data-tool="erase"] { cursor:none; }
 .sie-viewport[data-tool="pan"] { cursor:grab; }
-.sie-viewport[data-tool="wand"] { cursor:crosshair; }
+.sie-viewport[data-tool="wand"],.sie-viewport[data-tool="samPoint"],.sie-viewport[data-tool="samBox"] { cursor:crosshair; }
+.sie-sam-box { position:absolute; pointer-events:none; box-sizing:border-box; border:1px dashed var(--chalk); background:rgb(var(--ink-rgb) / .15); }
 .sie-tools output { min-width:2.4em; font-variant-numeric:tabular-nums; color:var(--chalk); }
 .sie-viewport[data-tool="pan"]:active { cursor:grabbing; }
 .sie-viewport[data-tool="off"] { cursor:not-allowed; }

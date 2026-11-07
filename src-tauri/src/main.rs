@@ -108,6 +108,7 @@ fn main() {
             deas::native_workbench_current,
             deas::native_workbench_poll,
             deas::native_workbench_run,
+            deas::native_auto_refine,
             deas::native_theme_packs,
             deas::native_theme_editor,
             deas::native_workbench_stop,

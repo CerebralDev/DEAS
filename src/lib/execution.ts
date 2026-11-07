@@ -83,6 +83,7 @@ export interface RunOptions {
 export const isGguf = (name: string) => /\.gguf$/i.test(name);
 export const clipLoaderName = (name: string, dual = false) => `${dual ? 'DualCLIPLoader' : 'CLIPLoader'}${isGguf(name) ? 'GGUF' : ''}`;
 export interface RecipeAllowlist {
+  readonly videoPreviews?: Record<string, import('./videoPreview').VideoPreviewConfig>;
   readonly nodes: readonly string[];
   readonly checkpoints: readonly string[];
   readonly loras?: readonly string[];
@@ -392,10 +393,15 @@ export function compileRecipe(input: unknown, verified: unknown): CompiledRecipe
       ...(intent.inputImage !== undefined ? { '8': { class_type: 'LoadImage', inputs: { image: intent.inputImage } }, '9': { class_type: 'VAEEncode', inputs: { pixels: ['8', 0], vae } } } : {}),
     },
   };
+  // Match KSampler's denoise schedule while keeping the requested number of sampler steps.
+  const inputDenoise=intent.denoise??1;
+  const scheduleSteps=intent.inputImage&&inputDenoise>0&&inputDenoise<1?Math.floor(intent.steps/inputDenoise):intent.steps;
+  if(recipe?.sigmaNode&&!intent.sigmas&&scheduleSteps>10000)throw new RecipeCompileError('INVALID_INPUT','denoise','Derived scheduler steps exceed 10000.','Increase denoise or reduce steps.');
+  const scheduleSize=intent.inpaintCrop?{width:intent.inpaintCrop.targetWidth,height:intent.inpaintCrop.targetHeight}:intent.inputResize??intent;
   // Model-fixed schedule: explicit sigmas (ManualSigmas) or a family-declared scheduler node (Flux.2's Flux2Scheduler).
   const schedule: ApiNode | undefined = intent.sigmas
     ? { class_type: 'ManualSigmas', inputs: { sigmas: intent.sigmas.join(', ') } }
-    : recipe?.sigmaNode ? { class_type: recipe.sigmaNode, inputs: { steps: intent.steps, width: intent.width, height: intent.height } } : undefined;
+    : recipe?.sigmaNode ? { class_type: recipe.sigmaNode, inputs: { steps: scheduleSteps, width: scheduleSize.width, height: scheduleSize.height } } : undefined;
   if (schedule) {
     const graph = result.graph as Record<string, ApiNode>;
     graph.N = { class_type: 'RandomNoise', inputs: { noise_seed: intent.seed } };
@@ -403,6 +409,7 @@ export function compileRecipe(input: unknown, verified: unknown): CompiledRecipe
     graph.Q = { class_type: 'KSamplerSelect', inputs: { sampler_name: intent.sampler } };
     graph.Z = schedule;
     graph['5'] = { class_type: 'SamplerCustomAdvanced', inputs: { noise: ['N', 0], guider: ['G', 0], sampler: ['Q', 0], sigmas: ['Z', 0], latent_image: latent } };
+    if(recipe?.sigmaNode&&!intent.sigmas&&intent.inputImage&&inputDenoise<1){graph.ZD={class_type:'SplitSigmas',inputs:{sigmas:['Z',0],step:intent.denoise===0?intent.steps:scheduleSteps-intent.steps}};graph['5']={...graph['5'],inputs:{...graph['5'].inputs,sigmas:['ZD',1]}};}
   }
   if (intent.imageReference) {
     // Core ReVision chain: each reference picture's CLIP-vision features blended into the positive conditioning.
@@ -480,7 +487,6 @@ export function compileRecipe(input: unknown, verified: unknown): CompiledRecipe
     const graph = result.graph as Record<string, ApiNode>;
     const r = intent.refine;
     let image = graph['7'].inputs.images as ApiLink;
-    // shortcut: sibling savers cannot guarantee pre-failure retention; add a supported save dependency when that guarantee is required.
     graph.B7 = { ...graph['7'], inputs: { ...graph['7'].inputs, filename_prefix: `${intent.outputPrefix}_original` } };
     if (r.upscaleModel) {
       graph.RL = { class_type: 'UpscaleModelLoader', inputs: { model_name: r.upscaleModel } };
@@ -505,7 +511,8 @@ export function compileRecipe(input: unknown, verified: unknown): CompiledRecipe
       : { class_type: 'KSampler', inputs: { ...graph['5'].inputs, model, latent_image: ['RE', 0], denoise: r.denoise } };
     if (r.sigmas) graph.RZ = { class_type: 'ManualSigmas', inputs: { sigmas: r.sigmas.join(', ') } };
     graph.R6 = { class_type: tiled ? 'VAEDecodeTiled' : 'VAEDecode', inputs: { samples: ['R5', 0], vae, ...tiles } };
-    graph['7'] = { ...graph['7'], inputs: { ...graph['7'].inputs, images: ['R6', 0] } };
+    graph.PG = { class_type: 'DEAS_ImagePostprocessGate', inputs: { baseline: ['B7', 0], image: ['R6', 0] } };
+    graph['7'] = { ...graph['7'], inputs: { ...graph['7'].inputs, images: ['PG', 0] } };
   }
   // Civitai links resources only by hash from an A1111 `parameters` chunk, which core SaveImage cannot write; the DaSiWa saver (Output package) adds it beside prompt/workflow.
   if (['DaSiWa_MetadataImageSaver', 'DaSiWa_MetadataConfig'].every(node => allowlist.nodes.includes(node))) {
@@ -552,7 +559,7 @@ export function compileRecipe(input: unknown, verified: unknown): CompiledRecipe
   }
   const emitted = Object.freeze([...new Set(Object.values(result.graph).map(node => node.class_type))]);
   for (const node of emitted) {
-    if (!allowlist.nodes.includes(node)) throw new RecipeCompileError('MISSING_CAPABILITY', node, 'Required built-in node is unavailable.', 'Verify a compatible backend with this built-in node before compiling.');
+    if (!allowlist.nodes.includes(node)) throw new RecipeCompileError('MISSING_CAPABILITY', node, node === 'DEAS_ImagePostprocessGate' ? 'Refine requires the DEAS lazy gate and a compatible post-save saver output; update the owned backend or disable post-processing.' : 'Required built-in node is unavailable.', 'Verify a compatible backend with this built-in node before compiling.');
   }
   if (!(d ? (isGguf(intent.checkpoint) ? allowlist.ggufDiffusionModels : allowlist.diffusionModels) ?? [] : allowlist.checkpoints).includes(intent.checkpoint)) throw new RecipeCompileError('MISSING_MODEL', 'checkpoint', 'Checkpoint is not in the verified model list.', 'Select an exact checkpoint identifier from the verified backend model list.');
   if (d && !((isGguf(d.textEncoder) ? allowlist.ggufTextEncoders : allowlist.textEncoders)?.includes(d.textEncoder) && allowlist.vaes?.includes(d.vae) && (isGguf(d.textEncoder) ? allowlist.ggufClipTypes : allowlist.clipTypes)?.includes(d.clipType))) throw new RecipeCompileError('MISSING_MODEL', 'diffusion', 'Text encoder, VAE or CLIP type is not in the verified backend lists.', 'Select files and a CLIP type the backend lists.');

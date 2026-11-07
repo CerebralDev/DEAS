@@ -17,7 +17,7 @@ function context(canvas:HTMLCanvasElement):MockContext{
  clearRect(){c.pixels.clear();c.opaque=false;},
  drawImage(other){for(const n of context(other).pixels)c.pixels.add(n);},
  getImageData(){const data=new Uint8ClampedArray(canvas.width*canvas.height*4);if(c.opaque)for(let i=3;i<data.length;i+=4)data[i]=255;for(const n of c.pixels)data.set([255,255,255,255],n*4);return {data};},
- putImageData({data}){c.pixels.clear();for(let i=0;i<data.length;i+=4)if(data[i])c.pixels.add(i/4);c.opaque=true;}
+ putImageData({data}){c.pixels.clear();for(let i=0;i<data.length;i+=4)if(data[i]&&data[i+3])c.pixels.add(i/4);c.opaque=false;}
  };
  function raster(x:number,y:number,w:number,h:number,inside:(x:number,y:number)=>boolean){
  for(let py=Math.max(0,Math.ceil(y));py<Math.min(canvas.height,y+h);py++)for(let px=Math.max(0,Math.ceil(x));px<Math.min(canvas.width,x+w);px++)if(inside(px+.5,py+.5)){const n=py*canvas.width+px;if(c.globalCompositeOperation==='destination-out')c.pixels.delete(n);else c.pixels.add(n);}}
@@ -90,6 +90,29 @@ test('Inpaint: moving the base off the source frame outpaints the uncovered part
  expect(ref.current!.maskBounds(0)).toEqual({x:1016,y:0,width:8,height:640});
  fireEvent.keyDown(base,{key:'ArrowRight'});
  expect(onMask).toHaveBeenLastCalledWith(false);
+});
+
+test('layout repaint restores the overlay and refreshes paint without replacing canvases or editing the draft',()=>{
+ const frames=new Map<number,FrameRequestCallback>();let next=0;
+ vi.spyOn(window,'requestAnimationFrame').mockImplementation(callback=>{frames.set(++next,callback);return next;});
+ const cancel=vi.spyOn(window,'cancelAnimationFrame').mockImplementation(id=>{frames.delete(id);});
+ const flush=()=>act(()=>{const pending=[...frames.values()];frames.clear();pending.forEach(callback=>callback(0));});
+ const ref=createRef<EditorHandle>(),onMask=vi.fn();
+ const ui=(layout:string)=><I18nProvider><StudioImageEditor ref={ref} source={source} layers={[]} onLayers={vi.fn()} maskMode onMask={onMask} onInsert={vi.fn()} layout={layout}/></I18nProvider>;
+ const view=render(ui('full'));flush();
+ const vp=document.querySelector('[data-editor-viewport]')!,overlay=document.querySelector('.sie-mask') as HTMLCanvasElement;
+ paint(vp);const maskPixels=[...context(overlay).pixels];expect(maskPixels.length).toBeGreaterThan(0);
+ fireEvent.click(screen.getByRole('button',{name:'Base image'}));fireEvent.click(screen.getByRole('button',{name:'Brush'}));paint(vp);
+ const canvas=document.querySelector('[data-layer="base"] .sie-paint canvas') as HTMLCanvasElement;
+ const paintPixels=[...context(canvas).pixels],draw=vi.spyOn(context(canvas),'drawImage');
+ const revision=ref.current!.contentRevision();context(overlay).clearRect();
+ view.rerender(ui('split'));expect(draw).not.toHaveBeenCalled();flush();
+ expect(document.querySelector('.sie-mask')).toBe(overlay);expect(document.querySelector('.sie-paint canvas')).toBe(canvas);
+ expect([...context(overlay).pixels]).toEqual(maskPixels);expect([...context(canvas).pixels]).toEqual(paintPixels);
+ expect(draw).toHaveBeenCalledWith(canvas,0,0);expect(context(canvas).globalCompositeOperation).toBe('source-over');
+ expect(ref.current!.contentRevision()).toBe(revision);expect(onMask).toHaveBeenLastCalledWith(true);
+ view.rerender(ui('full'));flush();expect(draw).toHaveBeenCalledTimes(2);
+ view.rerender(ui('split'));view.unmount();expect(cancel).toHaveBeenCalled();expect(frames.size).toBe(0);
 });
 
 test('session snapshot retains masks, base paint and transforms, isolated from later edits and other sources',()=>{
@@ -349,6 +372,111 @@ test('wheel zoom anchors at the cursor and paint cancellation stops further stam
 
 function pointer(el:Element,type:string,x=20,y=20,button=0){const e=new MouseEvent(type,{bubbles:true,clientX:x,clientY:y,button});Object.defineProperty(e,'pointerId',{value:1});fireEvent(el,e);}
 function paint(el:Element,x=20,y=20){pointer(el,'pointerdown',x,y);pointer(el,'pointerup',x,y);}
+
+function samFixture(){
+ const onPick=vi.fn(),ref=createRef<EditorHandle>();
+ const ui=(options:{src?:string;generation?:number;busy?:boolean;unavailable?:string;maskMode?:boolean}={})=><I18nProvider><StudioImageEditor ref={ref} source={{...source,src:options.src??source.src}} draftGeneration={options.generation} layers={[]} onLayers={vi.fn()} maskMode={options.maskMode??true} onMask={vi.fn()} onInsert={vi.fn()} sam={{busy:options.busy??false,unavailable:options.unavailable,onPick}}/></I18nProvider>;
+ const view=render(ui());return {...view,ui,onPick,ref,vp:document.querySelector('[data-editor-viewport]')!};
+}
+const samTool=(name:'samPoint'|'samBox')=>document.querySelector<HTMLButtonElement>(`[data-sam-tool="${name}"]`)!;
+test('SAM points use the source transform, accumulate Alt exclusions and reset with tool/source/draft',()=>{
+ const view=samFixture();
+ vi.spyOn(screen.getByTestId('editor-world'),'getBoundingClientRect').mockReturnValue({left:100,top:50,width:512,height:320} as DOMRect);
+ fireEvent.click(samTool('samPoint'));pointer(view.vp,'pointerdown',110,60);
+ const alt=new MouseEvent('pointerdown',{bubbles:true,button:0,clientX:120,clientY:70,altKey:true});fireEvent(view.vp,alt);
+ expect(view.onPick.mock.lastCall![0]).toEqual({positivePoints:[{x:20,y:20}],negativePoints:[{x:40,y:40}]});
+ expect(view.onPick.mock.calls[0][0]).toEqual({positivePoints:[{x:20,y:20}],negativePoints:[]});
+ for(const options of [{},{src:'other.png'},{src:'other.png',generation:2}]){
+  if(!options.src){fireEvent.click(screen.getByRole('button',{name:'Pan'}));fireEvent.click(samTool('samPoint'));}
+  else view.rerender(view.ui(options));
+  pointer(view.vp,'pointerdown',130,80);
+  expect(view.onPick.mock.lastCall![0]).toEqual({positivePoints:[{x:60,y:60}],negativePoints:[]});
+ }
+ const calls=view.onPick.mock.calls.length;pointer(view.vp,'pointerdown',99,60);expect(view.onPick).toHaveBeenCalledTimes(calls);
+});
+test('SAM box clips reverse drags to the frame, previews, and rejects empty/cancelled gestures',()=>{
+ const {vp,onPick}=samFixture();fireEvent.click(samTool('samBox'));
+ pointer(vp,'pointerdown',1100,700);pointer(vp,'pointermove',100,80);
+ expect(document.querySelector<HTMLElement>('.sie-sam-box')!.style.width).toBe('924px');
+ pointer(vp,'pointerup',100,80);
+ expect(onPick).toHaveBeenLastCalledWith({box:{x:100,y:80,width:924,height:560}});
+ expect(document.querySelector('.sie-sam-box')).toBeNull();
+ pointer(vp,'pointerdown',30,30);pointer(vp,'pointerup',30,30);
+ pointer(vp,'pointerdown',20,20);pointer(vp,'pointermove',80,80);pointer(vp,'pointercancel');
+ pointer(vp,'pointerdown',20,20);pointer(vp,'lostpointercapture');
+ expect(onPick).toHaveBeenCalledTimes(1);
+});
+test('SAM is gated by busy/unavailable even when selected, and stays inpaint-only',()=>{
+ const view=samFixture();fireEvent.click(samTool('samPoint'));
+ view.rerender(view.ui({busy:true}));expect(samTool('samPoint').disabled).toBe(true);expect(samTool('samPoint').title).toBe('Please wait…');pointer(view.vp,'pointerdown');
+ view.rerender(view.ui({unavailable:'Missing SAM model'}));expect(samTool('samBox').title).toBe('Missing SAM model');pointer(view.vp,'pointerdown');expect(view.onPick).not.toHaveBeenCalled();
+ view.rerender(view.ui({maskMode:false}));expect(samTool('samPoint')).toBeNull();expect(samTool('samBox')).toBeNull();
+});
+const pngSignature=new Uint8Array([137,80,78,71,13,10,26,10]);
+function maskBitmap(points:number[]=[]){
+ const canvas=document.createElement('canvas');canvas.width=source.width;canvas.height=source.height;
+ for(const n of points)context(canvas).pixels.add(n);
+ return Object.assign(canvas,{close:vi.fn()});
+}
+test('import appends transparent coverage without destroying existing masks, and names survive snapshots',async()=>{
+ const {ref}=mount(),vp=document.querySelector('[data-editor-viewport]')!;paint(vp);
+ const before=ref.current!.capture(),revision=ref.current!.contentRevision(),bitmap=maskBitmap([100,101]);
+ vi.stubGlobal('createImageBitmap',vi.fn(async()=>bitmap));
+ try{
+  await act(async()=>{expect(await ref.current!.addMask(pngSignature,'<eyes>')).toBe(true);});
+  const saved=ref.current!.capture();expect(saved.masks).toHaveLength(2);expect(context(saved.masks[0].canvas).pixels).toEqual(context(before.masks[0].canvas).pixels);
+  expect([...context(saved.masks[1].canvas).pixels]).toEqual([100,101]);expect(ref.current!.contentRevision()).toBeGreaterThan(revision);
+  expect(screen.getByRole('button',{name:'<eyes>'})).toBeTruthy();expect(document.querySelector('.sie-rail eyes')).toBeNull();expect(bitmap.close).toHaveBeenCalled();
+  cleanup();render(<I18nProvider><StudioImageEditor ref={ref} source={source} layers={[]} onLayers={vi.fn()} maskMode onMask={vi.fn()} onInsert={vi.fn()} snapshot={saved}/></I18nProvider>);
+  expect(screen.getByRole('button',{name:'<eyes>'})).toBeTruthy();
+ }finally{vi.unstubAllGlobals();}
+});
+test('import maps black/gray/white RGB plus alpha to transparent white coverage',async()=>{
+ const {ref}=mount(),bitmap=maskBitmap();vi.stubGlobal('createImageBitmap',async()=>bitmap);
+ const raw=new Uint8ClampedArray(source.width*source.height*4);raw.set([0,0,0,255,128,128,128,255,255,255,255,255,255,255,255,0]);
+ const put=vi.fn();
+ vi.spyOn(HTMLCanvasElement.prototype,'getContext').mockImplementation(function(this:HTMLCanvasElement){return {...context(this),getImageData:()=>({data:raw}),putImageData:put} as unknown as CanvasRenderingContext2D;});
+ try{
+  await act(async()=>{expect(await ref.current!.addMask(pngSignature)).toBe(true);});
+  expect([...put.mock.calls[0][0].data.slice(0,16)]).toEqual([255,255,255,0,255,255,255,128,255,255,255,255,255,255,255,0]);
+ }finally{vi.unstubAllGlobals();}
+});
+test('empty and invalid mask imports preserve the stack and close decoded images',async()=>{
+ const {ref}=mount(),bitmap=maskBitmap();vi.stubGlobal('createImageBitmap',async()=>bitmap);
+ try{
+  await expect(ref.current!.addMask(pngSignature)).resolves.toBe(false);expect(ref.current!.capture().masks).toHaveLength(1);
+  await expect(ref.current!.addMask(new Uint8Array([0]))).rejects.toThrow('Invalid mask PNG');
+  bitmap.width=2;await expect(ref.current!.addMask(pngSignature)).rejects.toThrow('Mask dimensions must match source');
+  expect(ref.current!.capture().masks).toHaveLength(1);expect(bitmap.close).toHaveBeenCalledTimes(2);
+ }finally{vi.unstubAllGlobals();}
+});
+test.each(['source','draft','unmount'] as const)('pending mask import is discarded on %s change',async change=>{
+ const view=samFixture();let resolve!:(value:ReturnType<typeof maskBitmap>)=>void;
+ vi.stubGlobal('createImageBitmap',()=>new Promise(done=>{resolve=done;}));const bitmap=maskBitmap([20]);
+ try{
+  const pending=view.ref.current!.addMask(pngSignature);
+  if(change==='source')view.rerender(view.ui({src:'other.png'}));else if(change==='draft')view.rerender(view.ui({generation:2}));else view.unmount();
+  await act(async()=>{resolve(bitmap);expect(await pending).toBe(false);});
+  if(view.ref.current)expect(view.ref.current.capture().masks).toHaveLength(1);expect(bitmap.close).toHaveBeenCalled();
+ }finally{vi.unstubAllGlobals();}
+});
+test('refineMasks captures separate visible nonempty full-frame masks with tight bounds before awaiting',async()=>{
+ const {ref}=mount(),vp=document.querySelector('[data-editor-viewport]')!;
+ fireEvent.change(screen.getByRole('spinbutton',{name:'Brush diameter (px)'}),{target:{value:'8'}});fireEvent.click(screen.getByRole('button',{name:'Square'}));paint(vp,20,20);
+ fireEvent.click(screen.getByRole('button',{name:'Add mask'}));paint(vp,60,60);
+ fireEvent.click(screen.getByRole('button',{name:'Add mask'})); // empty excluded
+ const pending=ref.current!.refineMasks();
+ fireEvent.click(screen.getByRole('button',{name:'Hide Mask 2'}));fireEvent.click(screen.getByRole('button',{name:'Mask 1'}));fireEvent.click(screen.getByRole('button',{name:'Clear'}));
+ expect(await pending).toEqual([{name:'Mask 1',png:new Uint8Array([64]),bounds:{x:16,y:16,width:8,height:8}},{name:'Mask 2',png:new Uint8Array([64]),bounds:{x:56,y:56,width:8,height:8}}]);
+ expect(await ref.current!.refineMasks()).toEqual([]);
+});
+test('sourcePng exports unchanged visible image stack in the source frame without masks',async()=>{
+ const {ref}=mount(),bitmap=maskBitmap([10,11]);vi.stubGlobal('createImageBitmap',async()=>bitmap);const fetcher=vi.fn(async()=>({ok:true,blob:async()=>new Blob()}));vi.stubGlobal('fetch',fetcher);
+ try{
+  paint(document.querySelector('[data-editor-viewport]')!);await expect(ref.current!.imagePng()).resolves.toBeNull();expect(fetcher).not.toHaveBeenCalled();
+  await expect(ref.current!.sourcePng()).resolves.toEqual(new Uint8Array([2]));expect(fetcher).toHaveBeenCalledWith(source.src);expect(bitmap.close).toHaveBeenCalled();
+ }finally{vi.unstubAllGlobals();}
+});
 test('painting counts actual mock coverage, exports synchronously and erases to empty',async()=>{
  const {ref,onMask}=mount();const vp=document.querySelector('[data-editor-viewport]')!;
  fireEvent.change(screen.getByRole('spinbutton',{name:'Brush diameter (px)'}),{target:{value:'8'}});

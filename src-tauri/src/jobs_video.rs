@@ -28,7 +28,8 @@ const FIELDS: [&str; 17] = [
     "sampler",
     "scheduler",
 ];
-const OPTIONAL: [&str; 10] = [
+const OPTIONAL: [&str; 11] = [
+    "enhancedPreview",
     "latentUpscale",
     "videoPost",
     "outputPrefix",
@@ -68,7 +69,8 @@ const H3_INPUT_SCALING: [&str; 7] = [
     "Long side with divisible crop",
 ];
 /// Every class the three graphs can emit; prepare() checks each against object_info.
-pub(crate) const VIDEO_NODES: [&str; 38] = [
+pub(crate) const VIDEO_NODES: [&str; 39] = [
+    "ModelPreviewOverrideKJ",
     "DaSiWaH3TiledUpscale",
     "DualCLIPLoader",
     "LoraLoaderModelOnly",
@@ -835,6 +837,9 @@ pub(crate) fn validate(i: &Value) -> Result<&str, String> {
     if crate::jobs::is_gguf(i["ltx"]["textProjection"].as_str().unwrap_or_default()) {
         return Err("MODEL_FORMAT_UNSUPPORTED: GGUF text projection is unsupported".into());
     }
+    if i.get("enhancedPreview").is_some() && !valid_preview(i) {
+        return Err("Invalid enhancedPreview: incompatible decoder/model for video family".into());
+    }
     validate_latent_upscale(i, family)?;
     for lora in i["loras"]
         .as_array()
@@ -855,15 +860,108 @@ pub(crate) fn validate(i: &Value) -> Result<&str, String> {
     Ok(family)
 }
 
+/// Exact known decoder basenames only: unknown architectures must not become preview choices.
+pub(crate) fn preview_model_compatible(family: &str, decoder: &str, model: &str) -> bool {
+    if !comfy_model_name(model) {
+        return false;
+    }
+    let file = model.rsplit(['/', '\\']).next().unwrap_or_default();
+    matches!(
+        (family, decoder, file),
+        ("minimax-h3" | "minimax-h3-hyperflow", "tiny", "taeh3.safetensors")
+            | ("ltx-2", "vae", "taeltx2_3.safetensors")
+            | ("wan", "tiny", "taew2_1.safetensors" | "lighttaew2_1.safetensors")
+    )
+}
+
+fn valid_preview(i: &Value) -> bool {
+    let p = &i["enhancedPreview"];
+    p.as_object().is_some_and(|o| o.len() == 2)
+        && preview_model_compatible(
+            i["family"].as_str().unwrap_or_default(),
+            p["decoder"].as_str().unwrap_or_default(),
+            p["model"].as_str().unwrap_or_default(),
+        )
+}
+
+/// Recheck the exact negotiated family/decoder/file before native admission, never downgrade.
+pub(crate) fn validate_preview_capability(intent: &Value, allow: &Value) -> Result<(), String> {
+    let Some(preview) = intent.get("enhancedPreview") else {
+        return Ok(());
+    };
+    let family = intent["family"].as_str().unwrap_or_default();
+    let has_node = |node: &str| {
+        allow["nodes"]
+            .as_array()
+            .is_some_and(|n| n.iter().any(|n| n == node))
+    };
+    if !valid_preview(intent)
+        || allow["videoPreviews"].get(family) != Some(preview)
+        || !has_node("ModelPreviewOverrideKJ")
+        || (preview["decoder"] == "vae"
+            && (!has_node("VAELoader")
+                || !allow["vaes"]
+                    .as_array()
+                    .is_some_and(|v| v.contains(&preview["model"]))))
+    {
+        return Err("enhancedPreview: exact compatible decoder capability is unavailable; refresh backend prerequisites".into());
+    }
+    Ok(())
+}
+
 pub(crate) fn compile(i: &Value) -> Result<Value, String> {
     if crate::jobs_video_post::is_enhance(i) {
         return crate::jobs_video_post::compile_enhance(i);
     }
-    match validate(i)? {
-        "ltx-2" => Ok(ltx(i)),
-        "wan" => wan(i),
-        _ => Ok(h3(i)),
+    let mut graph = match validate(i)? {
+        "ltx-2" => ltx(i),
+        "wan" => wan(i)?,
+        _ => h3(i),
+    };
+    if let Some(preview) = i.get("enhancedPreview") {
+        // Patch each final sampling model, including Director output, split Wan and H3 upscale.
+        let targets: Vec<(String, Value)> = graph
+            .as_object()
+            .unwrap()
+            .iter()
+            .filter(|(_, n)| {
+                matches!(
+                    n["class_type"].as_str(),
+                    Some(
+                        "BasicScheduler"
+                            | "BasicGuider"
+                            | "CFGGuider"
+                            | "KSamplerAdvanced"
+                            | "HyperFlowSigmas"
+                            | "DaSiWaH3TiledUpscale"
+                    )
+                )
+            })
+            .map(|(id, n)| (id.clone(), n["inputs"]["model"].clone()))
+            .collect();
+        if preview["decoder"] == "vae" {
+            graph["VPV"] = json!({"class_type":"VAELoader","inputs":{"vae_name":preview["model"]}});
+        }
+        let mut patched: Vec<(Value, String)> = Vec::new();
+        for (target, model) in targets {
+            let id = if let Some((_, id)) = patched.iter().find(|(source, _)| source == &model) {
+                id.clone()
+            } else {
+                let id = format!("VP{}", patched.len() + 1);
+                let mut inputs = json!({"model":model,"max_resolution":512,"jpeg_quality":80,"suppress_default_preview":false,"preview_frames":120,"preview_fps":8,"tiny_vae":"none"});
+                if preview["decoder"] == "tiny" {
+                    inputs["tiny_vae"] = preview["model"].clone();
+                } else {
+                    inputs["vae"] = json!(["VPV", 0]);
+                }
+                graph[&id] = json!({"class_type":"ModelPreviewOverrideKJ","inputs":inputs});
+                patched.push((model, id.clone()));
+                id
+            };
+            graph[&target]["inputs"]["model"] = json!([id, 0]);
+        }
     }
+    Ok(graph)
 }
 
 /// LoRAs, then the Options patches, then the family's feed-forward chunking; returns the final model link.
@@ -1539,6 +1637,9 @@ pub(crate) fn requirements(i: &Value) -> Vec<(&'static str, Vec<&str>)> {
                 .collect(),
         ),
     ];
+    if i["enhancedPreview"]["decoder"] == "vae" {
+        required.push(("vaes", strs(&[&i["enhancedPreview"]["model"]])));
+    }
     required.extend(crate::jobs_video_post::requirements(&i["videoPost"]));
     required
 }

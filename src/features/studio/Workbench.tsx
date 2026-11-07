@@ -6,7 +6,7 @@ import { convertFileSrc, invoke, isTauri } from '@tauri-apps/api/core';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { useI18n } from '../../i18n/I18nProvider';
 import { isGguf, clipLoaderName, nativeImageReferenceEncoders, type DiagnosticImageIntentV1, type RecipeAllowlist } from '../../lib/execution';
-import { stopWorkbench, stopWorkbenchJob, runWorkbenchJob, readCurrentWorkbench, pollWorkbench, uploadMask, uploadInput, readH3Session, readRefMods, isImageIntent, type JobStatus, type JobIntent, type H3ImportedVideo } from '../../lib/jobs';
+import { autoRefine, loadDiagnosticJobOutput, waitForWorkbenchJob, stopWorkbench, stopWorkbenchJob, runWorkbenchJob, readCurrentWorkbench, pollWorkbench, uploadMask, uploadInput, readH3Session, readRefMods, isImageIntent, type JobStatus, type JobIntent, type H3ImportedVideo } from '../../lib/jobs';
 import { chunkCount, defaultVideoOutput, h3LatentChanged, h3LatentDefaults, h3Scalings, isH3Video, isVideoEnhanceIntent, isVideoIntent, latentUpscaleSize, videoFrames, type H3LatentAdvanced, type H3Scaling, type VideoFamily, type VideoIntentV1, type VideoOutput } from '../../lib/videoIntent';
 import { defaultAbc, defaultMusicGeneration, isMusicIntent, isMusicPipeline, musicBounds, musicMaxDuration, type AbcSettings, type MusicGenerationSettings, type MusicIntentV1, type MusicPlanning } from '../../lib/musicIntent';
 import { MusicPrompts, type MusicField } from './MusicPrompts';
@@ -44,6 +44,8 @@ import { outputNamingTemplate, outputPrefix } from '../../lib/outputNaming';
 import { OptionsPanel, defaultOptions, isOptionsPref, parseSigmas, runOptions } from './OptionsPanel';
 import builtinFamilies from '../../families/builtin.json' with { type: 'json' };
 import { aspects, resolutions, scalingModes, canvasSize, scaleInput, validCanvas, type Size, type ScalingMode } from '../../lib/resolution';
+import { Sam3Controls, samTargets } from './Sam3Controls';
+import { isSam3Intent, type Sam3MaskIntentV1 } from '../../lib/sam3';
 import { StudioImageEditor, copyImageLayer, type EditorHandle, type EditorSnapshot } from './StudioImageEditor';
 import { ImageViewer } from './ImageViewer';
 import { StarMediaButton } from '../media/StarMediaButton';
@@ -57,11 +59,12 @@ import { dialectOf, labelCharacters, nativeTarget } from '../../lib/forge';
 import { PresetPanel } from '../presets/PresetPanel';
 import { WildcardPanel } from '../wildcards/WildcardPanel';
 import { defaultWildcard, isWildcardRules, wildcardNode, parseWildcardLibrary, flattenCategories, mergeVariableLibrary, parsePins, parseVariableLibrary, prunePins, scanVariables, variablePick, type WildcardLibrary } from '../../lib/wildcard';
-import { containedImageHit, flattenLayer, visibleImages, type ImageLayer } from './imageEditor';
+import { containedImageHit, flattenImages, flattenLayer, visibleImages, type ImageLayer } from './imageEditor';
 import './workbench.css';
 import {BeginnerModels} from '../beginner/BeginnerModels';
 import type {BeginnerPage} from '../beginner/Experience';
 import { NativeVideo, nativeVideo } from './NativeVideo';
+import { TemporalPreview } from './TemporalPreview';
 /** Data-only family plugin (also read natively for header detection): loader, runnable pipelines, encoder/VAE file patterns, starting settings. */
 interface Family extends ComponentFamily { id:string; name:string; multiple?:number; temporalLatent?:boolean; imagePrompting?:'revision'|'qwen-image-2.1'|'krea-2'|'moss-image'; loader:string; pipelines:string[]; clipType?:string; /** Two-encoder families (Flux.1, SD3): slot 2 is picked by its filename pattern. */ clip?:{loader:'single'|'dual';encoders?:string[]}; textEncoders?:string[]; textProjections?:string[]; vaes?:string[]; audioVaes?:string[]; defaults?:{width:number;height:number;steps:number;cfg:number;sampler:string;scheduler:string}; sigmas?:number[]; loraFamily?:string; /** Video families: native fps/seconds, fixed fps (H3 is 24), Wan's high→low file-name pair. */ video?:{fps:number;seconds:number;fixedFps?:boolean;lowModel?:[string,string]}; /** Per-variant recipe points (HyperFlow Flash). */ ggufLoader?:string; videoSigmaNode?:string; fixedSampler?:string; stepChoices?:number[]; defaultsNote?:string }
 /** Remembered video controls; family rows read only their own keys. */
@@ -292,8 +295,16 @@ function WorkbenchContent({beginner=false,beginnerPage='generate',onBeginnerPage
  const [upscaleModelPref,setUpscaleModel]=usePref('studio.run.upscaleModel','',isString);
  const [inpaintDenoise,setInpaintDenoise]=usePref('studio.run.inpaintDenoise',0.8,isNumber);
  const [inpaintOnlyMasked,setInpaintOnlyMasked]=usePref('studio.run.inpaintOnlyMasked',false,isBoolean);
- const [maskGrow,setMaskGrow]=usePref('studio.run.maskGrow',8,isMaskGrow);
+ const [maskGrow,setMaskGrow]=usePref('studio.run.maskGrow',32,isMaskGrow);
  const [maskBlur,setMaskBlur]=usePref('studio.run.maskBlur',4,isMaskBlur);
+ const [samCheckpoint,setSamCheckpoint]=usePref('studio.run.samCheckpoint','',isString);
+ const [samText,setSamText]=usePref('studio.run.samTargets','',isString);
+ const [samEnabled,setSamEnabled]=usePref('studio.run.samEnabled',false,isBoolean);
+ const [samDenoise,setSamDenoise]=usePref('studio.run.samDenoise',0.25,(v):v is number=>isUnit(v)&&v>=0.05);
+ const [samThreshold,setSamThreshold]=usePref('studio.run.samThreshold',0.5,isUnit);
+ const [samBusy,setSamBusy]=useState(false);const [nativeRefining,setNativeRefining]=useState(false);const [samStatus,setSamStatus]=useState('');
+ const samValue={checkpoint:samCheckpoint,targets:samText,enabled:samEnabled,denoise:samDenoise,threshold:samThreshold};
+ const setSamValue=(v:typeof samValue)=>{setSamCheckpoint(v.checkpoint);setSamText(v.targets);setSamEnabled(v.enabled);setSamDenoise(v.denoise);setSamThreshold(v.threshold);};
  const [masked,setMasked]=useState(false);
  const editorRef=useRef<EditorHandle>(null);
  const sourceEpoch=useRef(0);const draftEpoch=useRef(0);
@@ -303,6 +314,10 @@ function WorkbenchContent({beginner=false,beginnerPage='generate',onBeginnerPage
  const [jobs,setJobs]=useState<JobStatus[]>([]);const [selectedJob,setSelectedJob]=useState('');const [selectedOutput,setSelectedOutput]=useState(0);
  const live=useRef(false);const lock=useRef(false);const epoch=useRef(0);
  const preparationGeneration=useRef(0);const localPreparations=useRef(0);const stopLock=useRef(false);const stopped=useRef(new Set<string>());const admissionEpoch=useRef(0);
+ const [stopChoice,setStopChoice]=useState<{jobId:string}|null>(null);
+ const stopDialog=useRef<HTMLDialogElement>(null),stopCancel=useRef<HTMLButtonElement>(null),stopTrigger=useRef<HTMLButtonElement>(null);
+ const itemStopLock=useRef(false);
+ useEffect(()=>{if(!stopChoice)return;const dialog=stopDialog.current!;dialog.showModal();stopCancel.current?.focus();return()=>{if(dialog.open)dialog.close();stopTrigger.current?.focus();};},[stopChoice]);
  const [stopping,setStopping]=useState(false);const [stopAvailable,setStopAvailable]=useState(false);const [stopStatus,setStopStatus]=useState('');
  const observation=useRef(0);const [recovered,setRecovered]=useState(!native);const [preparing,setPreparing]=useState(0);const [frontendAdmitting,setFrontendAdmitting]=useState(false);
  const MEDIA_IMAGE_RE=/\.(png|jpe?g|webp|bmp|avif|gif)$/i;
@@ -357,6 +372,9 @@ const loadChoices=()=>{if(native&&!choices&&endpoint.trim())void refreshChoices(
  return '';
  };
  const allModels=(models??[]).filter(m=>modelCategories.includes(m.category)).sort(byName);
+ const samModels=[...new Set([...(models??[]).filter(m=>m.category==='checkpoints'&&m.family==='sam3').map(m=>m.name),...(choices?.checkpoints??[]).filter(name=>/sam3[._-]?1/i.test(name))])].filter(name=>!choices||choices.checkpoints.includes(name)).sort();
+ const samUnavailable=!native?t('studio.sam.native'):!choices?t('studio.sam.checking'):!choices.nodes.includes('SAM3_Detect')?t('studio.sam.missingNode'):!samCheckpoint||!samModels.includes(samCheckpoint)?t('studio.sam.missingModel'):'';
+ const samSettings=()=>({checkpoint:samCheckpoint,targets:samTargets(samText),denoise:samDenoise,margin:maskGrow,threshold:samThreshold});
  // Dock search/sort are display-only: the pick logic keeps the name-sorted lists. Models have no date, so that option exists for media only.
  const sorts=dockTab==='media'?['date','name','size'] as const:['name','size'] as const;
  const sort=(sorts as readonly string[]).includes(sortPref)?sortPref:sorts[0];
@@ -439,8 +457,8 @@ const loadChoices=()=>{if(native&&!choices&&endpoint.trim())void refreshChoices(
  const latentEnabled=latent&&latentPref.enabled;
  const latentNodes=videoFamily==='minimax-h3'?['DaSiWaH3TiledUpscale']:['LatentUpscaleModelLoader','LTXVLatentUpsampler'];
  useEffect(()=>{setLatentDownload(null);},[videoFamily,isVideo,planVisible]);
- // The owned backend may still be booting at mount, or models were added since the last probe: re-read when the latent options are shown.
- useEffect(()=>{if(latent&&dockTab==='post'&&native&&endpoint.trim())void refreshChoices(false);},[latent,dockTab,native,endpoint,refreshChoices]);
+ // The backend may still be booting, or optional models were added since the last probe: re-read when their controls open.
+ useEffect(()=>{if((latent&&dockTab==='post'||dockTab==='options')&&native&&endpoint.trim())void refreshChoices(false);},[latent,dockTab,native,endpoint,refreshChoices]);
  // Before the capability probe answers, `latentChoices` is empty: that is "backend pending", not a missing model.
  const latentProblems=!latentEnabled?[]:[...(!choices?[]:[...latentNodes.filter(n=>!choices.nodes.includes(n)),...(!latentChoices.includes(latentModel)?[t('studio.run.latent.missing',{name:latentModel||t('studio.run.latent.model')})]:[])]),...(!(videoFamily==='ltx-2'?latentPref.scale===2:latentPref.scale>=1&&latentPref.scale<=8&&Number.isInteger(latentPref.steps)&&latentPref.steps>=1&&latentPref.steps<=100&&latentPref.denoise>=0&&latentPref.denoise<=1)?[t('studio.run.latent.invalid')]:[])];
  const continuityAvailable=isH3Video(videoFamily)&&isVideo;
@@ -523,6 +541,7 @@ const loadChoices=()=>{if(native&&!choices&&endpoint.trim())void refreshChoices(
   ...(choices?[...(!isVideo&&wildcardEnabled&&!choices.nodes.includes(wildcardNode)?[wildcardNode]:[]),...(!choices.samplers.includes(sampler)?[sampler]:[]),...(!choices.schedulers.includes(scheduler)?[scheduler]:[]),
   ...(imageRefs.length>0&&revisionOk&&(!refVision||!choices.visionModels?.includes(refVision))?[refVision||t('studio.run.reference.vision')]:[]),
    ...(!isVideo&&post&&upscaleModelPref&&!choices.upscaleModels?.includes(upscaleModelPref)?[upscaleModelPref]:[]),
+   ...(!isVideo&&!isMusic&&!(pipeline==='i2i'&&family?.id==='minimax-h3')&&post&&!choices.nodes.includes('DEAS_ImagePostprocessGate')?[t('studio.run.post.baselineMissing')]:[]),
    ...(!isVideo&&post&&postTiled&&!family?.temporalLatent&&!choices.nodes.includes('DaSiWaTiledDiffusion')?['DaSiWaTiledDiffusion']:[]),
    ...(optionsPref.attention&&!options?.attention&&!options?.sage?[optionsPref.attention]:[]),
    ...(optionsPref.cache&&!options?.cache?[optionsPref.cache]:[]),...(optionsPref.compile&&!options?.compile?[optionsPref.compile]:[]),
@@ -640,7 +659,7 @@ const loadChoices=()=>{if(native&&!choices&&endpoint.trim())void refreshChoices(
  // Unknown jobs the user already stopped must not hold the next generation back.
  const current=jobs.find(j=>j.state==='queued'||j.state==='running'||(j.state==='unknown'&&!stopped.current.has(j.id)));
  const admissionBlocked=stopping||(!recovered&&!localPreparations.current)||(frontendAdmitting&&!localPreparations.current);
- const serialBlocked=!!current||busy||preparing>0||frontendAdmitting||!!planRun.current;
+ const serialBlocked=!!current||busy||nativeRefining||preparing>0||frontendAdmitting||!!planRun.current;
  const beginRun=()=>{localPreparations.current++;lock.current=true;setBusy(true);setError('');return {generation:preparationGeneration.current,admissionEpoch:admissionEpoch.current};};
  const activeRun=(ticket:{generation:number})=>live.current&&ticket.generation===preparationGeneration.current;
  // Press revisions must not delay reconciliation after the last Run reply settles.
@@ -649,7 +668,7 @@ const loadChoices=()=>{if(native&&!choices&&endpoint.trim())void refreshChoices(
   const target=up(only?only.size:outputSize);
   const refinePass=post&&!h3Image;
   const inputLayers=visibleImages(layers);
-  const refineSigmas=only?.upscaleOnly?[]:tail(refineDenoise); // Upscale alone: no diffusion tail, the pass is resize + model upscale.
+  const refineSigmas=only?.upscaleOnly?null:tail(refineDenoise); // Upscale alone: no diffusion tail, the pass is resize + model upscale.
   const wiredWildcard:typeof wildcard=wildcardEnabled?{...wildcard,...(Object.keys(wildcardVars.lib).length?{variables_json:JSON.stringify(wildcardVars.lib),variable_selections:JSON.stringify(prunePins(negative,wildcardVars.lib,prunePins(positive,wildcardVars.lib,parsePins(wildcard.variable_selections))))}:{})}:wildcard;
   const common={recipeId:'checkpoint-text-to-image-diagnostic',version:1,positivePrompt:positive,negativePrompt:negative,checkpoint,seed,cfg,sampler,scheduler,outputPrefix:naming,...(wildcardEnabled?{wildcard:wiredWildcard}:{}),...(activeLoras.length?{loras:activeLoras}:{}),...(split&&family?.clipType?{diffusion:{textEncoder,...(dualClip&&textEncoder2?{textEncoder2}:{}),clipType:family.clipType,vae,family:family.id}}:{}),...(family?{family:family.id}:{}),...(h3Image?{h3Edit:{shiftVideo:video.shiftVideo,shiftAudio:video.shiftAudio}}:{}),...(imageRefs.length&&referenceMethod?(referenceMethod==='revision'?{imageReference:{visionModel:refVision,images:imageRefs.map(r=>({image:comfyName(r.item)||r.item.path!,strength:r.strength}))}}:{nativeImageReference:{method:referenceMethod,images:imageRefs.map(r=>comfyName(r.item)||r.item.path!)}}):{}),...(options?{options}:{}),...(out.imageFormat!=='png'||out.imageCompression!==44?{imageFormat:out.imageFormat,imageCompression:out.imageCompression}:{})} as const;
   const resized=!!upscaleModel||target.width!==only?.size.width||target.height!==only?.size.height;
@@ -661,7 +680,7 @@ const loadChoices=()=>{if(native&&!choices&&endpoint.trim())void refreshChoices(
  /** `only` = Post-process: the refine/upscale pass alone on that image (an image-to-image job), without a first generation. */
  /** `step` = a continuity planner step (H3): its seconds and action replace the controls, and the finished job's clip is pinned to it. */
  async function run(only?:{image:string;size:Size;src:string;item:MediaItem;upscaleOnly?:boolean},step?:{index:number;all:boolean}){
-  if(!native||stopLock.current||admissionBlocked||scanning||((step||autoPlan||planRun.current||resolving)&&(!step||serialBlocked))||(moss&&only))return;
+  if(!native||stopLock.current||admissionBlocked||samBusy||nativeRefining||scanning||((step||autoPlan||planRun.current||resolving)&&(!step||serialBlocked))||(moss&&only))return;
   if(step&&!continuityOn)return;
   if(!checkpoint){setError(t('studio.run.noModels'));return;}
   if(backendPending||unavailable.length||musicNeedsStyle||historyProblems.length)return; // The overlay derives dependency warnings from the current selections.
@@ -682,6 +701,8 @@ const loadChoices=()=>{if(native&&!choices&&endpoint.trim())void refreshChoices(
   const refSnap=imageRefs.map(r=>({path:r.item.path!,strength:r.strength}));
   const methodSnapshot=referenceMethod,visionSnapshot=refVision;
   const intent={...structuredClone(buildImageIntent(naming,out,only)),seed:capturedSeed};
+  const automaticSam=!only&&!beginner&&samEnabled?structuredClone(samSettings()):null;
+  if(automaticSam&&(samUnavailable||!automaticSam.targets.length)){setError(samUnavailable||t('studio.sam.needsTargets'));return;}
   const from=only?.item??(pipeline==='i2i'?media:null);
   observation.current++;setObservationRetry(n=>n+1);const ticket=beginRun();
   let admitted=false;
@@ -719,8 +740,62 @@ const loadChoices=()=>{if(native&&!choices&&endpoint.trim())void refreshChoices(
    admitted=true;
    const job=await runWorkbenchJob(endpoint,Object.freeze(inputMask?{...withLayers,inputMask,...(maskBlur?{maskBlur}:{}),...(inpaintCrop?{inpaintCrop}:{})}:withLayers),ticket.admissionEpoch);
    if(activeRun(ticket)){setJobs(list=>[job,...list.filter(j=>j.id!==job.id)]);setBrowsed(null);setSelectedOutput(0);setSelectedJob(job.id);if(from)setSources(s=>({...s,[job.id]:from}));setRecentSeeds(list=>[intent.seed,...list.filter(s=>s!==intent.seed)].slice(0,10));}
+   if(automaticSam&&activeRun(ticket)){setSamBusy(true);const result=await autoRefine(endpoint,intent,automaticSam,ticket.admissionEpoch,job.id);if(activeRun(ticket)){if(result.job){setJobs(list=>[result.job!,...list.filter(j=>j.id!==result.job!.id)]);setSelectedJob(result.job.id);setSelectedOutput(0);}setSamStatus(t('studio.sam.done',{skipped:String(result.skipped)}));setOutputRevision(r=>r+1);}}
   }catch(e){if(activeRun(ticket))setError(e instanceof Error?e.message:String(e));}
-  finally{finishRun(ticket,admitted);}
+  finally{if(activeRun(ticket))setSamBusy(false);finishRun(ticket,admitted);}
+ }
+ async function maskWithSam(selection?:Pick<Sam3MaskIntentV1,'positivePoints'|'negativePoints'|'box'>){
+  if(samUnavailable||serialBlocked||admissionBlocked||!inpaint||!editorRef.current||!editableSource)return;
+  const editor=editorRef.current,sourceVersion=sourceEpoch.current,draftVersion=draftEpoch.current;
+  const size={...editableSource},settings=structuredClone(samSettings());
+  const targets=selection?['']:settings.targets;if(!targets.length)return;
+  const image=editor.sourcePng();const revision=editor.contentRevision();const results:{png:Uint8Array;name:string}[]=[];
+  observation.current++;setObservationRetry(n=>n+1);const ticket=beginRun();setSamBusy(true);setSamStatus('');let admitted=false;
+  const active=()=>activeRun(ticket)&&sourceVersion===sourceEpoch.current&&draftVersion===draftEpoch.current;
+  try{
+   const input=await uploadMask(endpoint,await image);
+   for(const prompt of targets){
+    if(!active()||editor.contentRevision()!==revision)return;
+    const intent:Sam3MaskIntentV1={recipeId:'sam3-mask',version:1,checkpoint:settings.checkpoint,inputImage:input,width:size.width,height:size.height,outputPrefix:'DEAS/SAM3/mask',threshold:settings.threshold,...(selection??{prompt})};
+    admitted=true;const job=await runWorkbenchJob(endpoint,intent,ticket.admissionEpoch);
+    if(!active())return;setJobs(list=>[job,...list.filter(j=>j.id!==job.id)]);
+    const done=await waitForWorkbenchJob(job,active);if(!active()||editor.contentRevision()!==revision)return;
+    const output=await loadDiagnosticJobOutput(done.id,0);if(!active()||editor.contentRevision()!==revision)return;
+    results.push({png:new Uint8Array(output.bytes),name:prompt||t('studio.sam.selection')});
+   }
+   if(!active()||editor.contentRevision()!==revision)return;
+   for(const result of results){if(!active())return;const added=await editorRef.current!.addMask(result.png,result.name);if(active())setSamStatus(t(added?'studio.sam.maskAdded':'studio.sam.noMatch'));}
+  }catch(e){if(activeRun(ticket))setError(e instanceof Error?e.message:String(e));}
+  finally{if(activeRun(ticket))setSamBusy(false);finishRun(ticket,admitted);}
+ }
+ async function refineObjects(item?:MediaItem){
+  if(!native||serialBlocked||admissionBlocked||isVideo||isMusic||!model||unavailable.length||historyProblems.length)return;
+  const editor=!item||item.src===media?.src?editorRef.current:null;
+  const picked=item??media;if(!editor&&(!picked?.path||picked.media!=='image'))return;
+  const snapshot=editor?.capture();const image=editor?.sourcePng();const masks=inpaint?editor?.refineMasks():undefined;
+  const size=snapshot?{width:snapshot.source.width,height:snapshot.source.height}:null;
+  const settings=structuredClone(samSettings());
+  const intent={...structuredClone(buildImageIntent('DEAS/AutoRefine',optionsPref.output??defaultVideoOutput))};
+  const refs=imageRefs.map(r=>({...r,item:{...r.item}})),method=referenceMethod,vision=refVision;
+  observation.current++;setObservationRetry(n=>n+1);const ticket=beginRun();setSamBusy(true);setSamStatus('');let admitted=false;
+  try{
+   const [selectedMasks,sourcePng]=await Promise.all([masks??[],image??null]);
+   // Imported SAM layers already represent these named groups: do not refine them twice.
+   const names=new Set(selectedMasks.map(m=>m.name.trim().toLowerCase()));settings.targets=settings.targets.filter(target=>!names.has(target.toLowerCase()));
+   if(settings.targets.length&&samUnavailable)throw new Error(samUnavailable);
+   if(!settings.targets.length&&!selectedMasks.length)throw new Error(t('studio.sam.needsTargets'));
+   let sourceSize=size;
+   if(!sourceSize){const probe=new Image();await new Promise<void>((resolve,reject)=>{probe.onload=()=>resolve();probe.onerror=()=>reject(new Error(t('studio.editor.insertFailed')));probe.src=picked!.src;});sourceSize={width:probe.naturalWidth,height:probe.naturalHeight};}
+   const png=sourcePng??await flattenImages([{id:'source',name:picked!.name,src:picked!.src,x:0,y:0,...sourceSize,visible:true}],sourceSize.width,sourceSize.height);
+   const sourceImage=await uploadMask(endpoint,png);
+   Object.assign(intent,{width:sourceSize.width,height:sourceSize.height,inputImage:sourceImage,denoise:settings.denoise});
+   for(const key of ['inputResize','inputLayers','inputMask','maskBlur','inpaintCrop','upscaleModel','refine'] as const)delete intent[key];
+   if(refs.length&&method){const uploaded=await Promise.all(refs.map(r=>uploadInput(endpoint,r.item.path!)));if(method==='revision')intent.imageReference={visionModel:vision,images:uploaded.map((image,i)=>({image,strength:refs[i].strength}))};else intent.nativeImageReference={method,images:uploaded};}
+   if(!activeRun(ticket))return;
+   admitted=true;const result=await autoRefine(endpoint,intent,settings,ticket.admissionEpoch,null,selectedMasks.map(m=>({name:m.name,png:Array.from(m.png)})));
+   if(activeRun(ticket)){if(result.job){setJobs(list=>[result.job!,...list.filter(j=>j.id!==result.job!.id)]);setBrowsed(null);setSelectedJob(result.job.id);setSelectedOutput(0);if(picked)setSources(s=>({...s,[result.job!.id]:picked}));}setSamStatus(t('studio.sam.done',{skipped:String(result.skipped)}));setOutputRevision(r=>r+1);}
+  }catch(e){if(activeRun(ticket))setError(e instanceof Error?e.message:String(e));}
+  finally{if(activeRun(ticket))setSamBusy(false);finishRun(ticket,admitted);}
  }
  /** Music intent from the independent music state only (no image `common` spread); `sourceAudio` is the uploaded name for covers. */
  function buildMusicIntent(naming:string,capturedSeed:number,sourceAudio?:string):MusicIntentV1{
@@ -832,16 +907,16 @@ const loadChoices=()=>{if(native&&!choices&&endpoint.trim())void refreshChoices(
  }
  const [observationRetry,setObservationRetry]=useState(0);
  useEffect(()=>{
-  if(!native||stopLock.current||(recovered&&!current&&!preparing&&!frontendAdmitting&&!stopping))return;
+  if(!native||stopLock.current||(recovered&&!current&&!preparing&&!frontendAdmitting&&!stopping&&!nativeRefining))return;
   let cancelled=false;const version=observation.current;
   const observe=async()=>{
    try{
     const next=await (recovered&&!stopping&&(!frontendAdmitting||!!current)?pollWorkbench():readCurrentWorkbench());
     if(cancelled||!live.current||version!==observation.current||stopLock.current||next.admissionEpoch<admissionEpoch.current)return;
-    admissionEpoch.current=next.admissionEpoch;setStopping(next.stopping);setStopAvailable(next.stopAvailable);setPreparing(next.preparing);setFrontendAdmitting(!!next.frontendAdmitting);setRecovered(true);
+    admissionEpoch.current=next.admissionEpoch;setNativeRefining(!!next.autoRefining);setStopping(next.stopping);setStopAvailable(next.stopAvailable);setPreparing(next.preparing);setFrontendAdmitting(!!next.frontendAdmitting);setRecovered(true);
     // Native order is oldest first; the queue displays newest first without truncating active peers.
     setJobs([...next.jobs].reverse());
-    if(!recovered)setSelectedJob(id=>id||next.jobs.at(-1)?.id||'');
+    if(!recovered)setSelectedJob(id=>id||next.jobs.filter(job=>!job.intent||!isSam3Intent(job.intent)).at(-1)?.id||'');
     for(const job of next.jobs){
      if(job.state==='succeeded'&&jobs.find(j=>j.id===job.id)?.state!=='succeeded')setOutputRevision(r=>r+1);
      if(job.id!==planRun.current?.jobId)continue;
@@ -856,7 +931,7 @@ const loadChoices=()=>{if(native&&!choices&&endpoint.trim())void refreshChoices(
   const timer=recovered||observationRetry?window.setTimeout(()=>void observe(),1000):undefined;
   if(timer===undefined)void observe();
   return()=>{cancelled=true;window.clearTimeout(timer);};
- },[jobs,native,working,stopping,preparing,frontendAdmitting,recovered,observationRetry]); // eslint-disable-line react-hooks/exhaustive-deps
+ },[jobs,native,working,stopping,preparing,frontendAdmitting,recovered,observationRetry,nativeRefining]); // eslint-disable-line react-hooks/exhaustive-deps
  // Run all: start the next planned step once the previous clip is pinned and nothing is in flight.
  useEffect(()=>{
   if(!autoPlan||stopLock.current||current||admissionBlocked||serialBlocked||resolving)return;
@@ -868,12 +943,12 @@ const loadChoices=()=>{if(native&&!choices&&endpoint.trim())void refreshChoices(
  async function stop(){
   if(stopLock.current)return;
   stopLock.current=true;setStopping(true);setAutoPlan(false);planRun.current=null;
-  preparationGeneration.current++;observation.current++;localPreparations.current=0;lock.current=false;setBusy(false);setResolving(false);setError('');setStopStatus('');
+  preparationGeneration.current++;observation.current++;localPreparations.current=0;lock.current=false;setBusy(false);setSamBusy(false);setResolving(false);setError('');setStopStatus('');
   try{
    if(!stopAvailable)throw new Error(t('studio.run.stop.unsupported'));
    const next=await stopWorkbench();
    if(!live.current)return;
-   admissionEpoch.current=next.admissionEpoch;setJobs([...next.jobs].reverse());setPreparing(next.preparing);setFrontendAdmitting(!!next.frontendAdmitting);setRecovered(true);
+   admissionEpoch.current=next.admissionEpoch;setNativeRefining(!!next.autoRefining);setJobs([...next.jobs].reverse());setPreparing(next.preparing);setFrontendAdmitting(!!next.frontendAdmitting);setRecovered(true);
    for(const job of next.jobs)stopped.current.add(job.id);
    // Unresolved jobs settle via polling or stay dismissed; details go to the native log only.
    if(next.outcome!=='partial')setStopStatus(t(`studio.run.stop.${next.outcome}`));
@@ -897,8 +972,15 @@ const loadChoices=()=>{if(native&&!choices&&endpoint.trim())void refreshChoices(
   window.addEventListener('click',close);window.addEventListener('keydown',key);window.addEventListener('resize',close);
   return()=>{window.removeEventListener('click',close);window.removeEventListener('keydown',key);window.removeEventListener('resize',close);};},[jobMenu]);
  async function stopJob(job:JobStatus){
-  try{const next=await stopWorkbenchJob(job);if(!live.current)return;stopped.current.add(job.id);setJobs(list=>list.map(j=>j.id===next.id?next:j));}
-  catch(e){if(live.current)setError(`${t('studio.run.stop.failed')} ${e instanceof Error?e.message:String(e)}`);}
+  const selected=jobs.find(j=>j.id===job.id);
+  if(itemStopLock.current||stopLock.current||!selected||!stoppable(selected))return;
+  const generation=preparationGeneration.current;
+  itemStopLock.current=true;setError('');setStopStatus('');
+  // Only this job owns the H3 sequence; peer preparations and admission keep their tickets.
+  if(planRun.current?.jobId===selected.id){planRun.current=null;setAutoPlan(false);}
+  try{const next=await stopWorkbenchJob(selected);if(!live.current||generation!==preparationGeneration.current)return;observation.current++;setObservationRetry(n=>n+1);setJobs(list=>list.map(j=>j.id===next.id?next:j));if(next.error)setError(`${t('studio.run.stop.failed')} ${next.error}`);}
+  catch(e){if(live.current&&generation===preparationGeneration.current)setError(`${t('studio.run.stop.failed')} ${e instanceof Error?e.message:String(e)}`);}
+  finally{itemStopLock.current=false;}
  }
  // Picking media on the strip takes over the preview until the next job is selected.
  const select=(item:MediaItem)=>{if(historyDraft)setHistorySourceSelected(true);setBrowsed(null);setSelectedJob('');if(media?.src===item.src)return;sourceEpoch.current++;setEditorSnapshot(undefined);setMedia(item);setLayers([]);setMasked(false);};
@@ -957,6 +1039,16 @@ const loadChoices=()=>{if(native&&!choices&&endpoint.trim())void refreshChoices(
  const paneToggle=(hidden:boolean,setHidden:(v:boolean)=>void,pane:'settings'|'dock'|'prompt',controls:string,left?:number)=>{const label=t(`studio.layout.${pane}${hidden?'Expand':'Collapse'}`);return <button type="button" className="wb-pane-toggle" data-pane-toggle={pane} data-dir={pane==='settings'?(hidden?'right':'left'):(hidden?'up':'down')} aria-expanded={!hidden} aria-controls={controls} aria-label={label} title={label} style={left===undefined?undefined:{left}} onClick={()=>{dragCleanup.current();setHidden(!hidden);}}><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>;};
  const columnHandle=(side:'settings'|'queue')=>{const left=side==='settings',size=left?sideSize:queueSize,min=left?220:128,max=left?sideMax:queueMax,set=left?setSettingsWidth:setQueueWidth,locked=left&&settingsHidden;return <div className="wb-column-handle" role="separator" tabIndex={0} aria-orientation="vertical" aria-label={t(`studio.layout.${side}`)} title={t(`studio.layout.${side}`)} aria-controls={`studio-${side}`} aria-valuemin={min} aria-valuemax={max} aria-valuenow={size} data-locked={locked||undefined} onKeyDown={e=>{if(!locked)resizeKey(e,size,min,max,set,false,!left);}} onPointerDown={e=>{if(!locked)dragPane(e,size,min,max,set,false,!left);}}/>;};
  const shown=jobs.find(j=>j.id===selectedJob)??null;
+ const [previewVisible,setPreviewVisible]=useState(false);
+ useLayoutEffect(()=>{
+  if(!shown?.temporalPreview){setPreviewVisible(false);return;}
+  const update=()=>setPreviewVisible(!document.hidden&&!shell.current?.closest('[hidden]'));
+  const observer=new MutationObserver(update);
+  for(let element:HTMLElement|null=shell.current;element;element=element.parentElement)observer.observe(element,{attributes:true,attributeFilter:['hidden']});
+  document.addEventListener('visibilitychange',update);update();
+  return()=>{observer.disconnect();document.removeEventListener('visibilitychange',update);};
+ },[!!shown?.temporalPreview]);
+ const temporalPreview=shown?.state==='running'&&previewVisible&&!browsed&&!planVisible&&(!beginner||beginnerPage==='generate')&&optionsPref.enhancedPreview!==false&&shown.intent&&isVideoIntent(shown.intent)?shown.temporalPreview:undefined;
  const paired=!!shown?.outputs.some(o=>o.role);
  const outputIndex=paired&&shown?.outputs[selectedOutput]?selectedOutput:0;
  const audioOutputIndex=shown?.outputs[selectedOutput]?selectedOutput:0;
@@ -1064,7 +1156,7 @@ const loadChoices=()=>{if(native&&!choices&&endpoint.trim())void refreshChoices(
     :{label:t('studio.run.video.useLast'),onClick:()=>{if(pipeline==='i2v'&&isH3Video(videoFamily)&&(lastOnly||!firstFrame||media?.src===item.src)){select(item);setLastOnlySrc(item.src);}setLastFrame(item);}},
    ...(pipeline==='i2v'?[{label:t('studio.run.video.useBoth'),onClick:()=>{select(item);setLastOnlySrc(null);setLastFrame(item);}}]:[])]
   :pipeline==='v2v'&&item.media==='video'?[{label:t('studio.run.video.useSource'),input:true,onClick:()=>select(item)}]:[];
- const mediaActions=(item:MediaItem):MediaAction[]=>[...inputActions(item),...(item.path&&item.media!=='audio'?[{label:t('studio.run.metadata.apply'),onClick:()=>void applyFileSettings(item,'all'),blocked:(!native||scanning||working||autoPlan||resolving||!!planRun.current)?t('studio.run.metadata.native'):undefined}]:[])];
+ const mediaActions=(item:MediaItem):MediaAction[]=>[...inputActions(item),...(item.media==='image'?[{label:t('studio.sam.refine'),onClick:()=>void refineObjects(item),blocked:(!native||serialBlocked||admissionBlocked||isVideo||isMusic||!model||(!item.path&&item.src!==media?.src))?t('studio.sam.refineHelp'):samTargets(samText).length?samUnavailable||undefined:item.src===media?.src&&masked?undefined:t('studio.sam.needsTargets')}]:[]),...(item.path&&item.media!=='audio'?[{label:t('studio.run.metadata.apply'),onClick:()=>void applyFileSettings(item,'all'),blocked:(!native||scanning||working||autoPlan||resolving||!!planRun.current)?t('studio.run.metadata.native'):undefined}]:[])];
  const stageMark=media?.path&&marks.get(media.path);
  // MiniMax H3 video: the hammer is the Director's Prompt Forge for this run (same mode/references the intent gets).
  const forgeContext=isH3Video(videoFamily)&&isVideo?h3ForgeContext({pipeline,media:lastOnly?null:media,lastFrame,refs,framePeople,sourceAudio,seconds:video.seconds,canvas:outputSize,inputRoot:roots.input,outputRoot:outputDir}):undefined;
@@ -1207,11 +1299,11 @@ const promptTools=forgeContext&&<>
  const base=(n:string)=>n.replace(/\\/g,'/').split('/').at(-1)!.toLowerCase();
  const resolveMetadataModel=(list:LocalModel[],name:string)=>{const exact=list.filter(m=>m.name===name);if(exact.length)return exact.length===1?exact[0]:undefined;const matches=list.filter(m=>base(m.name)===base(name)||!name.includes('.')&&shortName(m.name).toLowerCase()===base(name));return matches.length===1?matches[0]:undefined;};
  const stoppable=(j:JobStatus)=>stopAvailable&&(j.state==='queued'||j.state==='running');
- const reusable=(j:JobStatus)=>!!j.intent&&!isVideoEnhanceIntent(j.intent);
+ const reusable=(j:JobStatus)=>!!j.intent&&!isVideoEnhanceIntent(j.intent)&&!isSam3Intent(j.intent);
  // The clicked job's own immutable intent, through the same projection as Recent history.
  const reusePrompt=(j:JobStatus)=>{metadataRead.current++;if(j.intent&&(isImageIntent(j.intent)||isVideoIntent(j.intent))){setPositive(j.intent.positivePrompt);setNegative(j.intent.negativePrompt);}};
  const reuseJob=(j:JobStatus)=>{
-  if(!j.intent||isVideoEnhanceIntent(j.intent))return false;
+  if(!j.intent||isVideoEnhanceIntent(j.intent)||isSam3Intent(j.intent))return false;
   return restoreHistory(historyRestore({id:j.id,clientId:null,promptId:j.promptId,origin:'studio',appVersion:j.appVersion??'',admittedAt:0,observedAt:0,revision:0,state:j.state,intent:j.intent,outputs:[],outputRoot:j.outputRoot??null,backendOrigin:j.baseUrl,error:j.error},{endpoint,inputRoot:roots.input,allow:choices,models:models??[]}));
  };
  const applySettings=(s:GenerationSettings):string[]=>{
@@ -1331,6 +1423,7 @@ const promptTools=forgeContext&&<>
  const componentPick=(id:string,slot:ComponentSlot,value:string,list:readonly string[],set:(value:string)=>void)=><span key={slot} style={{display:'contents'}} data-run-component={slot}><ComponentPicker label={t(id)} value={value} automatic={recommended?.[slot][0]??''} files={list} all={componentOverrides[slot]} onAll={all=>setComponentOverrides({...componentOverrides,[slot]:all})} onChange={set}/></span>;
  const naming=outputPrefix(outputNamingTemplate(optionsPref.outputNaming),{type:isMusic?'audio':isVideo?'video':'image',seed,model:checkpoint});
  // The plan shows the cover source by its dock name only; the upload handle exists after Run.
+ const samControls=(inEditor=false)=><Sam3Controls value={samValue} onChange={setSamValue} models={samModels} margin={maskGrow} onMargin={setMaskGrow} unavailable={samUnavailable} refineUnavailable={samTargets(samText).length?samUnavailable:undefined} status={samStatus} busy={serialBlocked||admissionBlocked} inpaint={inEditor} onMask={()=>void maskWithSam()} onRefine={()=>void refineObjects()} canRefine={!!media&&(masked||!!samTargets(samText).length)}/>;
  const preview=planVisible&&naming!==null?(isMusic?buildMusicIntent(naming,seed,musicSource?.name??''):isVideo?(videoFamily&&model&&split?buildVideoIntent(videoFamily,naming,optionsPref.output??defaultVideoOutput,(item,force=false)=>(!force&&comfyName(item))||item.path||item.name):null):buildImageIntent(naming,optionsPref.output??defaultVideoOutput)):null;
  const previewDrop=useRef(async(_paths:string[])=>{});
  // The beginner starting-image row accepts image drops like picking one in the media panel.
@@ -1395,11 +1488,14 @@ const promptTools=forgeContext&&<>
   ...(unavailable.length?[t('studio.quick.unavailable',{names:unavailable.join(', ')})]:[]),
   ...(error?[backendErrorText(error,t)]:[]),...(shown?.error?[backendErrorText(shown.error,t)]:[]),
  ])];
+ const playingPreview=temporalPreview&&!viewer&&!continuityOpen&&!referencesOpen&&!visionDownload&&!latentDownload&&!stopChoice?temporalPreview:undefined;
+ const stopSelected=jobs.find(j=>j.id===stopChoice?.jobId);
+ const stopSelectedReason=!stopSelected?'studio.run.stop.noSelection':!stopAvailable?'studio.run.stop.unsupported':stopSelected.state==='unknown'?'studio.run.stop.unknown':!stoppable(stopSelected)?'studio.run.stop.inactive':'';
  const runControls=(<div className="wb-run-actions">
-     <button ref={runButton} type="button" className="aio-confirm-button wb-run" data-run disabled={(beginner&&!family?.defaults)||!native||scanning||admissionBlocked||autoPlan||resolving||!!planRun.current||!!sizeError||(inpaint&&!masked)||!checkpoint||backendPending||unavailable.length>0||musicNeedsStyle||historyProblems.length>0} title={beginner&&!family?.defaults?t('beginner.unknownFamily'):!native?t('studio.backendHelp'):backendPending?t('studio.run.backendPending'):historyProblems.length?t('studio.history.blocked',{items:historyProblems.join(' · ')}):busy||current?undefined:sizeError?t(sizeError,{multiple:String(grid)}):inpaint&&!masked?t('studio.run.edit.needsMask'):!checkpoint?t(why(pipeline)||'studio.run.noModels'):unavailable.length?t('studio.quick.unavailable',{names:unavailable.join(', ')}):musicNeedsStyle?t('studio.music.needsStyle'):undefined} onClick={()=>void run()}>{t('studio.run.run')}</button>{(working||current||autoPlan||resolving||preparing>0||frontendAdmitting||stopping||(!recovered&&!!error))&&<button type="button" className="wb-run-stop" data-run-stop disabled={stopping} aria-label={t('studio.run.stop.label')} title={t('studio.run.stop.hint')} onClick={()=>void stop()}>{t(stopping?'studio.run.stop.stopping':'studio.run.stop.label')}</button>}<span id="project-actions-slot" hidden={beginner}/></div>);
+     <button ref={runButton} type="button" className="aio-confirm-button wb-run" data-run disabled={(beginner&&!family?.defaults)||!native||scanning||admissionBlocked||samBusy||nativeRefining||autoPlan||resolving||!!planRun.current||!!sizeError||(inpaint&&!masked)||!checkpoint||backendPending||unavailable.length>0||musicNeedsStyle||historyProblems.length>0} title={beginner&&!family?.defaults?t('beginner.unknownFamily'):!native?t('studio.backendHelp'):backendPending?t('studio.run.backendPending'):historyProblems.length?t('studio.history.blocked',{items:historyProblems.join(' · ')}):busy||current?undefined:sizeError?t(sizeError,{multiple:String(grid)}):inpaint&&!masked?t('studio.run.edit.needsMask'):!checkpoint?t(why(pipeline)||'studio.run.noModels'):unavailable.length?t('studio.quick.unavailable',{names:unavailable.join(', ')}):musicNeedsStyle?t('studio.music.needsStyle'):undefined} onClick={()=>void run()}>{t('studio.run.run')}</button>{(working||current||nativeRefining||autoPlan||resolving||preparing>0||frontendAdmitting||stopping||(!recovered&&!!error))&&<button type="button" ref={stopTrigger} className="wb-run-stop" data-run-stop aria-haspopup="dialog" disabled={stopping} aria-label={t('studio.run.stop.label')} title={t('studio.run.stop.hint')} onClick={()=>setStopChoice({jobId:selectedJob})}>{t(stopping?'studio.run.stop.stopping':'studio.run.stop.label')}</button>}<span id="project-actions-slot" hidden={beginner}/></div>);
  const dockNavigation=<div className="wb-dock-tabs" role="tablist" aria-label={t('studio.run.dock')}>{dockTabs.filter(id=>!beginner||id==='media').map(id=><button key={id} role="tab" type="button" data-dock-tab={id} aria-selected={dockTab===id} onClick={()=>{focusDockTab.current=true;setDockTab(id);if(id==='options'||id==='post')loadChoices();}}>{t(id==='wildcards'?'wildcards.title':id==='presets'?'presets.title':`studio.run.dock.${id}`)}{id==='loras'&&activeLoras.length>0&&<small> {activeLoras.length}</small>}{id==='wildcards'&&wildcardEnabled&&<small aria-label={t('wildcards.active')}> ✓</small>}{id==='post'&&(isVideo?latentEnabled:post)&&<small aria-label={t('studio.run.post.enabled')}> ✓</small>}{id==='options'&&options&&<small> {Object.keys(options).length}</small>}</button>)}</div>;
  return <>
- <div className="studio-project-bar-host" hidden={beginner}><ProjectBar draft={projectDraft} busy={busy||!!current||autoPlan||resolving} onRestore={restoreProject}/></div>
+ <div className="studio-project-bar-host" hidden={beginner}><ProjectBar draft={projectDraft} busy={busy||!!current||nativeRefining||autoPlan||resolving} onRestore={restoreProject}/></div>
  {planVisible&&<RunPlan intent={preview} pipeline={pipeline} notices={planNotices} outputRoot={outputDir} inputNotes={inputNotes}/>}
  {beginnerModelsOpened.current&&<div className="beginner-workspace" hidden={!beginner||beginnerPage!=='models'}><BeginnerModels models={allModels} root={root} modelsDir={modelsDir} loading={scanning} onRefresh={()=>void load()} onUse={beginnerUse} reason={m=>beginnerTarget(m)?'':!familyOf(m)?.defaults?t('beginner.unknownFamily'):t(blocked(m,'t2i'))}/></div>}
  {beginnerCollectionOpened.current&&<section className="beginner-collection" hidden={!beginner||beginnerPage!=='collection'} aria-label={t('beginner.collection')}>
@@ -1467,7 +1563,7 @@ const promptTools=forgeContext&&<>
       {pipeline==='i2i'&&!inpaint&&<><label className="wb-field wb-wide"><span>{t('studio.run.resolution.scaling')}</span><select value={inputScaling} title={t(`studio.run.resolution.hint.${inputScaling}`)} onChange={e=>setInputScaling(e.target.value as ScalingMode)}>{scalingModes.map(s=><option key={s} value={s}>{t(`studio.run.resolution.scale.${s}`)}</option>)}</select></label><p className="wb-resolution-hint">{t(`studio.run.resolution.hint.${inputScaling}`)}</p>{!h3Image&&num('denoise',denoise,setDenoise,0,1,0.05,undefined,true)}{h3Image&&<>{num('video.shiftVideo',video.shiftVideo,n=>setVideo({...video,shiftVideo:clamp(n,0.01,100)}),0.01,100,0.5)}{num('video.shiftAudio',video.shiftAudio,n=>setVideo({...video,shiftAudio:clamp(n,0.01,100)}),0.01,100,0.5)}</>}</>}
       {inpaint&&<>
        <label className="wb-field wb-wide" title={t('studio.run.maskGrowHelp')}><span><input type="checkbox" style={{width:'auto'}} checked={inpaintOnlyMasked} onChange={e=>setInpaintOnlyMasked(e.target.checked)}/>{t('studio.run.inpaintOnlyMasked')}</span></label>
-       {inpaintOnlyMasked&&num('maskGrow',maskGrow,n=>{if(isMaskGrow(n))setMaskGrow(n);},0,512,1,undefined,true)}
+        {samControls(true)}
        {num('maskBlur',maskBlur,n=>{if(isMaskBlur(n))setMaskBlur(n);},0,31,1,undefined,true)}
        {h3Image&&<>{num('video.shiftVideo',video.shiftVideo,n=>setVideo({...video,shiftVideo:clamp(n,0.01,100)}),0.01,100,0.5)}{num('video.shiftAudio',video.shiftAudio,n=>setVideo({...video,shiftAudio:clamp(n,0.01,100)}),0.01,100,0.5)}</>}
       </>}
@@ -1506,7 +1602,7 @@ const promptTools=forgeContext&&<>
      {browsed&&<figure className="media-preview" data-browsed-preview>{browsed.media==='image'?<img className="wb-zoomable" src={browsed.src} alt={browsed.name} role="button" tabIndex={0} aria-label={t('studio.run.viewer.open')} title={t('studio.run.viewer.open')} onClick={e=>openImage(e,browsed)} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();setViewer({src:browsed.src,alt:browsed.name,item:browsed});}}}/>:browsed.media==='video'?linuxVideo?<NativeVideo source={{path:browsed.path??''}} label={browsed.name}/>:<video src={native?browsedBlob.url:browsed.src} controls/>:audioPlayer(browsed,native?browsedBlob.url:browsed.src)}<figcaption>{browsed.name}{browsedBlob.error&&<span className="error-message"> · {browsedBlob.error}</span>}</figcaption></figure>}
      <div className="wb-current-preview" hidden={!!browsed}>
      {editableSource&&media&&<div className="wb-editor-host" hidden={!!shown&&!editorLeft}>
-      <StudioImageEditor key={sourceEpoch.current} draftGeneration={scope+draftEpoch.current} snapshot={editorSnapshot} ref={editorRef} source={{src:media.src,name:media.name,width:editableSource.width,height:editableSource.height}} layers={layers} onLayers={setLayers} maskMode={inpaint} onMask={setMasked} onInsert={insertLayer} layout={sideBySide?'split':'full'}/>
+      <StudioImageEditor key={sourceEpoch.current} draftGeneration={scope+draftEpoch.current} snapshot={editorSnapshot} ref={editorRef} source={{src:media.src,name:media.name,width:editableSource.width,height:editableSource.height}} layers={layers} onLayers={setLayers} maskMode={inpaint} onMask={setMasked} onInsert={insertLayer} sam={{busy:samBusy||serialBlocked||admissionBlocked,unavailable:samUnavailable,onPick:selection=>void maskWithSam(selection)}} layout={sideBySide?'split':'full'}/>
       {sideBySide&&inputImage&&tools(media)}<button type="button" className="wb-editor-caption" data-editor-caption onClick={()=>setViewer({src:media.src,alt:media.name,item:media})}>{media.name} · {t('studio.run.edit.insertHint')}</button>
      </div>}
      {sideBySide&&!editorLeft&&originalItem&&<figure className="media-preview"><img className="wb-zoomable" data-original-preview src={original} alt={t('studio.run.edit.original')} role="button" tabIndex={0} aria-label={t('studio.run.viewer.open')} title={t('studio.run.viewer.open')} onClick={e=>openImage(e,originalItem)} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();setViewer({src:originalItem.src,alt:originalItem.name,item:originalItem});}}}/></figure>}
@@ -1515,7 +1611,7 @@ const promptTools=forgeContext&&<>
       {paired&&terminalOutput(shown)&&<div className="wb-output-choices" role="group" aria-label={t('studio.jobs.outputs')}>{shown.outputs.map((o,index)=><button type="button" key={index} data-output-role={o.role} aria-pressed={index===outputIndex} onClick={()=>{setSelectedOutput(index);setSlider(false);}}>{o.role?t(`studio.jobs.role.${o.role}`):o.filename}</button>)}</div>}
       {terminalOutput(shown)&&(shown.outputRoot?<figure className="media-preview"><div className="wb-media-content" data-media-content>{original&&slider?<CompareView key={`${original}|${shown.id}`} original={original} originalAlt={t(paired?'studio.jobs.role.original':'studio.run.edit.original')} edited={fileSrc(shown,pairedProcessed??shown.outputs[0])!} editedAlt={paired?t('studio.jobs.role.processed'):shown.outputs[0].filename} dividerLabel={t('studio.run.edit.divider')}/>
         :visibleOutputs.map(o=>outputItem(shown,o).media==='audio'?audioPlayer(outputItem(shown,o),fileSrc(shown,o)!,!browsed,true):isVideoOut(o)?linuxVideo?<NativeVideo key={o.filename} source={{path:outputItem(shown,o).path!}} label={o.filename} active={!browsed} autoPlay loop/>:<video key={o.filename} src={videoSrc(shown,o)} controls autoPlay loop onError={e=>setMediaFault(mediaError(e))}/>:<img key={o.filename} className="wb-zoomable" src={fileSrc(shown,o)!} alt={o.filename} title={t('studio.run.viewer.open')} draggable={!!outputItem(shown,o).path} onDragStart={e=>{const it=outputItem(shown,o);if(it.path)dragItem(e.dataTransfer,it);}} onClick={e=>openImage(e,outputItem(shown,o))}/>)}</div><figcaption><span className="wb-output-stars">{shown.outputs.map(o=><StarMediaButton key={o.filename} item={outputItem(shown,o)}/>)}</span>{original&&slider&&<>{t(paired?'studio.jobs.role.original':'studio.run.edit.original')} | {paired&&t('studio.jobs.role.processed')} · </>}{visibleOutputs.map(o=>o.role?`${t(`studio.jobs.role.${o.role}`)} · ${o.filename}`:o.filename).join(' · ')}{mediaFault&&<> · <span className="error-message">{mediaFault}</span></>}</figcaption></figure>:isVideoOut(shown.outputs[outputIndex])?<figure className="media-preview"><div className="wb-media-content" data-media-content>{visibleOutputs.filter(isVideoOut).map(o=>linuxVideo?<NativeVideo key={o.filename} source={{baseUrl:shown.baseUrl,filename:o.filename,subfolder:o.subfolder,type:o.type}} label={o.filename} active={!browsed} autoPlay loop/>:<video key={o.filename} src={videoSrc(shown,o)} controls autoPlay loop onError={e=>setMediaFault(mediaError(e))}/>)}</div><figcaption><span className="wb-output-stars">{shown.outputs.map(o=><StarMediaButton key={o.filename} item={outputItem(shown,o)}/>)}</span>{shown.outputs.map(o=>o.filename).join(' · ')}{mediaFault&&<> · <span className="error-message">{mediaFault}</span></>}</figcaption></figure>:<JobOutputPreview job={shown} outputRoot={shown.outputRoot} outputIndex={outputIndex} auto/>)}
-      {(shown.state==='queued'||shown.state==='running')&&(shown.preview?<figure className="media-preview" aria-busy="true"><img src={shown.preview} alt={t('studio.run.working')}/>{shown.progress&&<figcaption><progress value={shown.progress.value} max={shown.progress.max}/> {shown.progress.value}/{shown.progress.max}</figcaption>}</figure>
+      {(shown.state==='queued'||shown.state==='running')&&((shown.preview||playingPreview)?<figure className="media-preview" aria-busy="true">{playingPreview?<TemporalPreview key={shown.id} preview={playingPreview} active label={t('studio.run.working')} fallback={shown.preview}/>:shown.preview?<img src={shown.preview} alt={t('studio.run.working')}/>:null}{shown.progress&&<figcaption><progress value={shown.progress.value} max={shown.progress.max}/> {shown.progress.value}/{shown.progress.max}</figcaption>}</figure>
        :<p className="empty-note" aria-busy="true"><span className="aio-spinner" aria-hidden="true"/> {t('studio.run.working')}{shown.progress&&<> {shown.progress.value}/{shown.progress.max}</>}</p>)}</div>
      :media&&!editableSource?<figure className="media-preview">{media.media==='image'?<img className="wb-zoomable" src={media.src} alt={media.name} title={t('studio.run.viewer.open')} draggable={!!media.path} onDragStart={e=>{if(media.path)dragItem(e.dataTransfer,media);}} onClick={e=>openImage(e,media)} onLoad={e=>readMediaSize(e.currentTarget.naturalWidth,e.currentTarget.naturalHeight)}/>:media.media==='video'?linuxVideo?<NativeVideo source={{path:media.path??''}} label={media.name} active={!browsed} onSize={readMediaSize}/>:<video src={native?mediaBlob.url:media.src} controls onError={e=>setMediaFault(mediaError(e))} onLoadedMetadata={e=>readMediaSize(e.currentTarget.videoWidth,e.currentTarget.videoHeight)}/>:audioPlayer(media,native?mediaBlob.url:media.src,!browsed)}
  <figcaption>{media.name}{(mediaBlob.error||mediaFault)&&<> · <span className="error-message">{mediaBlob.error??mediaFault}</span></>}</figcaption></figure>
@@ -1587,6 +1683,7 @@ const promptTools=forgeContext&&<>
      {latentProblems.map(problem=><p role="status" key={problem}>{problem}</p>)}
      <button type="button" className="wb-dock-action" data-latent-upscale-offer onClick={()=>setLatentDownload(videoFamily!)}>{t('studio.run.latent.download')}</button>
     </fieldset>}
+    {!isVideo&&!isMusic&&!inpaint&&samControls()}
     {!isVideo&&<fieldset className="wb-group" data-post-group="refine"><legend>{t('studio.run.post.group.refine')}</legend><div className="wb-options">
      <div className="wb-option"><span><label className="wb-option-row"><input type="checkbox" checked={post} onChange={e=>setPost(e.target.checked)}/>{t('studio.run.post.enabled')}</label></span><small>{t('studio.run.post.hint',{width:String(up(outputSize).width),height:String(up(outputSize).height)})}</small></div>
      <div className="wb-option"><span><label className="wb-option-row"><input type="checkbox" checked={postTiled&&!family?.temporalLatent} disabled={!!family?.temporalLatent||(!!choices&&!choices.nodes?.includes('DaSiWaTiledDiffusion'))} onChange={e=>setPostTiled(e.target.checked)}/>{t('studio.run.post.tiled')}</label></span><small>{t(family?.temporalLatent?'studio.run.post.tiledFamily':choices&&!choices.nodes?.includes('DaSiWaTiledDiffusion')?'studio.run.post.tiledMissing':'studio.run.post.tiledHint',{width:String(snap(modelSize.width)),height:String(snap(modelSize.height)),overlap:String(snap(Math.max(64,Math.min(modelSize.width,modelSize.height)/8)))})}</small></div>
@@ -1603,7 +1700,7 @@ const promptTools=forgeContext&&<>
     {!isVideo&&onOpenVideoPost&&<fieldset className="wb-group" data-post-group="tve"><legend>{t('studio.tve.post.title')}</legend>{onOpenVideoPost&&<button type="button" className="wb-dock-action" data-open-video-post onClick={onOpenVideoPost}>{t('studio.tve.open')}</button>}</fieldset>}
    </section>}
 
-   {dockTab==='options'&&<section className="wb-dock-panel" aria-label={t('studio.run.dock.options')}><OptionsPanel value={optionsPref} onChange={setOptions} allow={choices} family={family?.id} imageInput={pipeline==='i2i'} onRead={loadChoices} canRead={native&&!!endpoint.trim()}/></section>}
+   {dockTab==='options'&&<section className="wb-dock-panel" aria-label={t('studio.run.dock.options')}><OptionsPanel value={optionsPref} onChange={setOptions} allow={choices} family={family?.id} video={isVideo} imageInput={pipeline==='i2i'} onRead={loadChoices} canRead={native&&!!endpoint.trim()}/></section>}
    {(dockTab==='models'||dockTab==='loras')&&<section className="wb-dock-panel" aria-label={t(`studio.run.dock.${dockTab}`)}>
     {!models&&<p className="media-help">{t(modelsDir?'studio.run.scanHelp':'studio.run.loadHelp')}</p>}
     {models&&dockTab==='models'&&(allModels.length===0?<p className="media-help">{t('studio.run.noModels')}</p>:<div className="media-browser">{folderTree(allModels)}<ul className="wb-tiles" data-run-checkpoint>{allModels.filter(match).sort(bySort).map(m=>tile(m,m===model,()=>pickModel(m),undefined,blocked(m,pipeline)))}</ul></div>)}
@@ -1611,6 +1708,18 @@ const promptTools=forgeContext&&<>
    </section>}
   </div>
  </div>
+ {stopChoice&&<dialog ref={stopDialog} data-run-stop-choice className="continuity-overlay" aria-label={t('studio.run.stop.choose')} onCancel={e=>{e.preventDefault();setStopChoice(null);}}>
+  <header className="continuity-overlay-header"><h2>{t('studio.run.stop.choose')}</h2></header>
+  <div className="continuity-overlay-body">
+   <p>{t('studio.run.stop.hint')}</p>{stopChoice.jobId&&<p>{stopChoice.jobId}</p>}
+   {stopSelectedReason&&<p id="studio-stop-selected-reason">{t(stopSelectedReason)}</p>}
+   <div className="wb-cont-actions">
+    <button type="button" className="action-button" data-run-stop-selected disabled={!!stopSelectedReason||stopping} title={stopSelectedReason?t(stopSelectedReason):undefined} aria-describedby={stopSelectedReason?'studio-stop-selected-reason':undefined} onClick={()=>{if(stopSelected&&!stopSelectedReason){setStopChoice(null);void stopJob(stopSelected);}}}>{t('studio.run.stop.selected')}</button>
+    <button type="button" className="action-button" data-run-stop-all disabled={stopping} onClick={()=>{setStopChoice(null);void stop();}}>{t('studio.run.stop.all')}</button>
+    <button ref={stopCancel} type="button" className="action-button" data-run-stop-cancel onClick={()=>setStopChoice(null)}>{t('studio.history.cancel')}</button>
+   </div>
+  </div>
+ </dialog>}
  {visionDownload&&<dialog ref={visionDialog} data-vision-download className="continuity-overlay" aria-label={t("studio.run.reference.dlAsk")} onCancel={e=>{e.preventDefault();closeVisionDownload();}}><header className="continuity-overlay-header"><h2>{t("studio.run.reference.dlAsk")}</h2><button type="button" onClick={closeVisionDownload}>{t("studio.close")}</button></header><div className="wb-dock-panel"><p>{t("studio.run.latent.consent")}</p><DownloadPanel embedded installTarget={root} modelsDir={modelsDir} initialEntryIds={visionIds} filenameFilter={["clip_vision_g.safetensors"]} onStatus={visionDownloadStatus}/></div></dialog>}
  {latentDownload&&<dialog ref={latentDialog} data-latent-upscale-download className="continuity-overlay" aria-label={t('studio.run.latent.download')} onCancel={e=>{e.preventDefault();closeLatentDownload();}}><header className="continuity-overlay-header"><h2>{t('studio.run.latent.download')}</h2><button type="button" onClick={closeLatentDownload}>{t('studio.close')}</button></header><div className="wb-dock-panel"><p>{t('studio.run.latent.consent')}</p><DownloadPanel embedded installTarget={root} modelsDir={modelsDir} initialEntryIds={latentIds} filenameFilter={latentDownload==='minimax-h3'?['minimax_h3_latent_upscaler_3d_conv_v1_bf16.safetensors','MiniMax H3 Latent Upscaler.safetensors','minimax h3 latent upscaler.safetensors','minimax_h3_latent_upscaler.safetensors']:['ltx-2.3-spatial-upscaler-x2-1.1.safetensors','LTX-2.3-Latent-Upscaler.safetensors']} onStatus={latentDownloadStatus}/></div></dialog>}
  {referencesOpen&&refsTab&&!planVisible&&<ReferencesOverlay endpoint={endpoint} root={root} refs={refs} onChange={setRefs} family={videoFamily as 'ltx-2'|'minimax-h3'|'minimax-h3-hyperflow'} seconds={video.seconds} label={refLabel} onAdd={addRefs} inputRoot={roots.input} outputRoot={outputDir} refmods={refmods} onRefmods={setRefmods} library={native&&endpoint.trim()?()=>readRefMods(endpoint):undefined} onInsert={tag=>setPositive(positive.trim()?`${positive.trimEnd()} ${tag}`:tag)} onClose={()=>{setReferencesOpen(false);referencesButton.current?.focus();}} picker={<MediaPanel toolbar={error?<p role="alert" className="error-message">{backendErrorText(error,t)}</p>:undefined} selected={null} onSelect={toggleRef} roots={roots} outputRevision={outputRevision} controls={{query,onQuery:setQuery,sort,onSort:setSort,view:dockView,onView:setDockView,type:dockType,onType:setDockType}} marks={marks} actions={mediaActions}/>}/> }
