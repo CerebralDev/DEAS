@@ -10,6 +10,12 @@
 .wb-metadata { min-width: 0; min-height: 0; overflow: auto; padding: .7rem; border: 1px solid var(--line); border-radius: 1rem; background: var(--panel); }
 /* Opened from the preview's Metadata button: floats over the right side of the stage. */
 .wb-stage > .wb-metadata { position: absolute; top: 32px; right: 8px; bottom: 8px; z-index: 3; width: min(22rem, calc(100% - 16px)); box-shadow: 0 8px 28px rgb(var(--shadow-rgb) / 0.69); }
+/* Native video cannot paint beneath a web overlay: reserve its metadata area instead. */
+.wb-stage[data-video-metadata] > .wb-metadata { width: min(22rem, 45%); }
+.wb-stage[data-video-metadata] > .wb-current-preview > .wb-shown,
+.wb-stage[data-video-metadata] > .wb-current-preview > .media-preview,
+.wb-stage[data-video-metadata] > [data-browsed-preview] { margin-right: calc(min(22rem, 45%) + 8px); }
+.wb-stage > .wb-media-tools:has(.wb-more[open]) { z-index: 4; }
 .wb-metadata h3 { margin: 0 0 .6rem; font-size: .9rem; }
 .wb-metadata dl { margin: 0; font-size: .75rem; line-height: 1.45; }
 .wb-metadata dl > div { margin-bottom: .5rem; overflow-wrap: anywhere; }

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Real Linux References modal/crop probe, using tiny model-header fixtures, not inference.
-Usage: python tools/verify_native_references.py DEBUG_BINARY_OR_DEV_LAUNCHER OUTPUT_DIR VIDEO
+Usage: python tools/verify_native_references.py DEBUG_BINARY_OR_DEV_LAUNCHER OUTPUT_DIR VIDEO [OWNER_FLAC_AUDIO]
 Requires the owned Vite dev frontend (tools/inpaint-fixture.html); source video stays read-only.
 """
 import json
@@ -16,7 +16,9 @@ from urllib.parse import urlencode
 
 if sys.platform != 'linux':
     sys.exit('Linux-only native References probe; not Windows acceptance.')
-binary, output, video = sys.argv[1:]
+binary, output, video, *audio_files = sys.argv[1:]
+if len(audio_files)>1:
+    sys.exit('Pass at most one optional audio-reference fixture.')
 output = Path(output).resolve()
 output.mkdir(parents=True, exist_ok=False)
 root = output / 'fixture-environment'
@@ -37,6 +39,10 @@ source.parent.mkdir(parents=True, exist_ok=True)
 shutil.copyfile(Path(video).resolve(), source)
 for name in ['b.mp4', 'c.mp4']:
     shutil.copyfile(source, source.with_name(name))
+audio_name = ''
+if audio_files:
+    audio_name = 'reference' + Path(audio_files[0]).suffix
+    shutil.copyfile(Path(audio_files[0]).resolve(), source.with_name(audio_name))
 (root / 'ComfyUI/output/raw').mkdir(parents=True)
 url = '/tools/inpaint-fixture.html?' + urlencode({'root': str(root), 'endpoint': 'http://127.0.0.1:1'})
 script = r'''
@@ -55,6 +61,27 @@ script = r'''
    const opener=await until(()=>document.querySelector('[data-open-references]'),'opener');opener.click();
    const dialog=await until(()=>document.querySelector('.references-overlay:modal'),'modal');
    const inputFolder=Array.from(dialog.querySelectorAll('.references-picker button')).find(b=>b.textContent==='Input');assert(inputFolder,'input folder');inputFolder.click();
+   if(AUDIO_NAME){
+    const audioTile=await until(()=>dialog.querySelector('.references-picker button[title="'+AUDIO_NAME+'"]'),'audio picker');audioTile.click();
+    const audioCard=await until(()=>dialog.querySelector('[data-ref="'+AUDIO_NAME+'"]'),'audio reference');
+    const edit=audioCard.querySelector('[data-edit-reference]');edit.click();
+    let editor=await until(()=>dialog.querySelector('.reference-editor-dialog:modal'),'audio editor');
+    const duration=()=>Number(editor.querySelector('.native-video-seek')?.max||0);
+    const position=()=>Number(editor.querySelector('.native-video-seek')?.value||0);
+    await until(()=>duration()>0,'FLAC duration');
+    assert(Math.abs(duration()-27)<0.01,'owner FLAC duration');
+    assert(editor.querySelector('[data-audio-only]')&&!editor.querySelector('audio,video'),'native audio-only player');
+    const fields=editor.querySelectorAll('input[type=number]');input(fields[0],'1');await sleep(100);input(fields[1],'3');await sleep(100);
+    editor.querySelector('.reference-media-actions button').click();
+    await until(()=>position()>1.1,'FLAC crop advances');
+    await until(()=>position()>2.95&&position()<3.1&&editor.querySelector('.native-video-controls button')?.getAttribute('aria-label')==='Play','FLAC crop stops');
+    const crop=position();editor.dispatchEvent(new Event('cancel',{cancelable:true}));await sleep(100);
+    edit.click();editor=await until(()=>dialog.querySelector('.reference-editor-dialog:modal'),'FLAC reopen');
+    const kept=editor.querySelectorAll('input[type=number]');assert(kept[0].value==='1'&&kept[1].value==='3','FLAC trims retained');
+    assert(!editor.querySelector('.error-message'),'FLAC reference has no load error');
+    await report({phase:'passed',audio:AUDIO_NAME,duration:27,crop});
+    await call('plugin:window|destroy',{label:'main'});return;
+   }
    const tile=await until(()=>dialog.querySelector('.references-picker button[title="clip.mp4"]'),'picker');tile.click();
    let card=await until(()=>dialog.querySelector('[data-ref="clip.mp4"]'),'reference');
    assert(!dialog.querySelector('[data-ref] video[controls], [data-ref] audio, [data-ref] [data-native-video]'),'overview has no players');
@@ -109,7 +136,7 @@ script = r'''
   await call('plugin:window|destroy',{label:'main'});
  })();
 })();
-'''.replace('FIXTURE_URL', json.dumps(url)).replace('EXTRA_SOURCE', json.dumps(str(source.with_name('c.mp4'))))
+'''.replace('FIXTURE_URL', json.dumps(url)).replace('EXTRA_SOURCE', json.dumps(str(source.with_name('c.mp4')))).replace('AUDIO_NAME', json.dumps(audio_name))
 (output / 'probe.js').write_text(script)
 env = dict(os.environ, DEAS_VIDEO_TEST_SCRIPT=str(output / 'probe.js'), DEAS_VIDEO_PROBE='1', XDG_CONFIG_HOME=str(output / 'config'), XDG_DATA_HOME=str(output / 'data'), XDG_CACHE_HOME=str(output / 'cache'))
 with (output / 'native.log').open('w') as log:
@@ -129,6 +156,7 @@ text = (output / 'native.log').read_text()
 reports = [json.loads(line.split('DEAS_VIDEO_PROBE ', 1)[1]) for line in text.splitlines() if 'DEAS_VIDEO_PROBE ' in line]
 frames = re.findall(r'DEAS_VIDEO_FRAME id=([^ ]+) hash=(\d+) range=(\d+) gl_error=(\d+) position=([^\n]+)', text)
 assert returncode == 0 and any(r.get('phase') == 'passed' for r in reports), text[-8000:]
-assert len({f[1] for f in frames}) >= 2 and all(f[3] == '0' for f in frames), frames
+if not audio_files:
+    assert len({f[1] for f in frames}) >= 2 and all(f[3] == '0' for f in frames), frames
 (output / 'results.json').write_text(json.dumps({'reports': reports, 'framebuffer_samples': frames}, indent=2))
 print(json.dumps({'passed': True, 'nativeReferencesModal': True, 'framebuffer_samples': len(frames), 'output': str(output)}))

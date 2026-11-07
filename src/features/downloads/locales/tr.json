@@ -74,6 +74,7 @@
   "downloads.folder.huggingface-models": "Hugging Face modelleri",
   "downloads.folder.ollama-tags": "Ollama modelleri",
   "downloads.folder.vae": "VAE",
+  "downloads.folder.vae_approx": "Önizleme VAE’leri (Tiny VAE)",
   "downloads.folder.text_encoders": "Metin kodlayıcılar",
   "downloads.folder.clip_vision": "CLIP vision",
   "downloads.folder.controlnet": "ControlNet",

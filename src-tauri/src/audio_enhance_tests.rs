@@ -1,5 +1,181 @@
 use super::*;
 
+const GENERATION_TAGS: &[(&str, &str)] = &[
+    (
+        "prompt",
+        "{\"7\":{\"inputs\":{\"text\":\"星空 over water\"}}}",
+    ),
+    ("workflow", "{\"nodes\":[]}"),
+    ("deas_output_naming", "true"),
+    ("parameters", "星空 over water\nSteps: 20, Seed: 4041897001"),
+    (
+        "comment",
+        "{\"deas\":{\"version\":1},\"civitai\":{\"seed\":4041897001}}",
+    ),
+];
+
+fn media_metadata(path: &Path) -> Value {
+    let output = Command::new("ffprobe")
+        .args([
+            "-v",
+            "error",
+            "-show_entries",
+            "format_tags:stream_tags",
+            "-of",
+            "json",
+        ])
+        .arg(path)
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    serde_json::from_slice(&output.stdout).unwrap()
+}
+
+fn assert_generation_metadata(source: &Path, target: &Path, video: bool) {
+    let before = media_metadata(source);
+    let after = media_metadata(target);
+    for (key, value) in GENERATION_TAGS {
+        for metadata in [&before, &after] {
+            let actual = metadata["format"]["tags"]
+                .as_object()
+                .unwrap()
+                .iter()
+                .find(|(name, _)| name.eq_ignore_ascii_case(key))
+                .unwrap();
+            assert_eq!(
+                actual.1.as_str(),
+                Some(*value),
+                "{}: {key}",
+                target.display()
+            );
+        }
+    }
+    if video {
+        for index in 0..3 {
+            assert_eq!(
+                after["streams"][index]["tags"]["language"],
+                before["streams"][index]["tags"]["language"]
+            );
+        }
+        assert_eq!(after["streams"][1]["tags"]["language"], "eng");
+        assert_eq!(after["streams"][2]["tags"]["language"], "jpn");
+    }
+}
+
+#[test]
+#[ignore = "requires real CPU FFmpeg/FFprobe; no model execution"]
+fn audio_real_ffmpeg_generation_metadata_clean_and_replacement_tracks() {
+    let dir = tempfile::tempdir().unwrap();
+    for extension in ["mp4", "mov", "mkv", "webm", "flac"] {
+        let video = extension != "flac";
+        let source = dir.path().join(format!("source.{extension}"));
+        let mut fixture = Command::new("ffmpeg");
+        fixture.args(["-v", "error", "-nostdin"]);
+        if video {
+            fixture.args(["-f", "lavfi", "-i", "color=black:s=32x32:r=10:d=0.8"]);
+        }
+        fixture.args([
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440:sample_rate=48000:duration=0.8",
+        ]);
+        if video {
+            fixture.args([
+                "-map",
+                "0:v",
+                "-map",
+                "1:a",
+                "-map",
+                "1:a",
+                "-c:v",
+                if extension == "webm" {
+                    "libvpx-vp9"
+                } else {
+                    "mpeg4"
+                },
+                "-metadata:s:v:0",
+                "language=und",
+                "-metadata:s:a:0",
+                "language=eng",
+                "-metadata:s:a:1",
+                "language=jpn",
+            ]);
+        }
+        fixture.args([
+            "-c:a",
+            if matches!(extension, "mp4" | "mov") {
+                "aac"
+            } else if extension == "webm" {
+                "libopus"
+            } else {
+                "flac"
+            },
+        ]);
+        for (key, value) in GENERATION_TAGS {
+            fixture.arg("-metadata").arg(format!("{key}={value}"));
+        }
+        if matches!(extension, "mp4" | "mov") {
+            fixture.args(["-movflags", "+use_metadata_tags"]);
+        }
+        assert!(fixture.arg(&source).status().unwrap().success());
+        let original = std::fs::read(&source).unwrap();
+        let clean = dir.path().join(format!("clean.{extension}"));
+        process(
+            Input::open(source.clone()).unwrap(),
+            &clean,
+            "mix",
+            &AtomicBool::new(false),
+        )
+        .unwrap();
+        assert_generation_metadata(&source, &clean, video);
+        if video {
+            assert_eq!(packet_hashes(&source), packet_hashes(&clean));
+        }
+        // Exercise the learned remux's multiple-input mapping without running optional models.
+        let wav = dir.path().join(format!("replacement-{extension}.wav"));
+        assert!(Command::new("ffmpeg")
+            .args(["-v", "error", "-i"])
+            .arg(&source)
+            .args(["-map", "0:a:0", "-c:a", "pcm_s16le"])
+            .arg(&wav)
+            .status()
+            .unwrap()
+            .success());
+        let target = dir.path().join(format!("replacement.{extension}"));
+        let input = Input::open(source.clone()).unwrap();
+        let mut remux = Command::new("ffmpeg");
+        remux
+            .args(["-v", "error", "-i"])
+            .arg(&source)
+            .arg("-i")
+            .arg(&wav);
+        if video {
+            remux
+                .arg("-i")
+                .arg(&wav)
+                .args(["-map", "0:v", "-map", "1:a", "-map", "2:a", "-c:v", "copy"]);
+        } else {
+            remux.args(["-map", "1:a"]);
+        }
+        input.metadata_arguments(&mut remux);
+        remux.args([
+            "-c:a",
+            audio_encoder(
+                &input.streams.iter().find(|s| s.0 == "audio").unwrap().1,
+                video,
+            )
+            .0,
+        ]);
+        assert!(remux.arg(&target).status().unwrap().success());
+        assert_generation_metadata(&source, &target, video);
+        if video {
+            assert_eq!(packet_hashes(&source), packet_hashes(&target));
+        }
+        assert_eq!(std::fs::read(&source).unwrap(), original);
+    }
+}
+
 fn request() -> Request {
     serde_json::from_value(json!({"sourceId":uuid::Uuid::new_v4().to_string(),
         "mode":"clean","profile":"mix","title":"Save enhanced audio","confirmed":true}))

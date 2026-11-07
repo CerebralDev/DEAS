@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.20 BETA (unreleased)
+
+- **Enhanced preview prerequisites are provisioned.** New setup and explicitly confirmed ComfyUI/node-pack updates install the pinned official KJNodes preview companion with the existing Torch constraints; app-only/Torch-only updates and opening older environments do not silently install it. Configured model roots now expose `vae_approx` and existing tiny weights under `vae` without moving/copying files. Options identifies a missing `ModelPreviewOverrideKJ` and the required update instead of blaming decoder compatibility generically. Existing saved OFF and missing/incompatible-model safeguards remain; no model weights are downloaded.
+
+- **Video metadata is valid and readable.** DEAS saves now sanitize the embedded execution graph before publication: node-level `is_changed` cache attributes are stripped and non-finite values are rejected instead of writing non-standard `NaN` that strict JSON parsers (including Civitai's) refuse. The Studio metadata pane parses legacy files with bare `NaN` and shows the full authored prompt plus extracted settings instead of dumping the raw graph; the graph stays available in collapsed diagnostics. Uploading H3 videos to Civitai still shows no prompt until upstream Civitai recognizes the H3 node types — verified against their published parser; this is not fixable from DEAS alone.
+
+- **Enhanced audio products keep their name and provenance.** Automatic audio enhancement now saves `…-audio-enhanced.mp4` next to the source-derived name instead of an opaque `deas-audio-UUID`, with readable collision counters; History shows the final filename. The FFmpeg remux maps global and stream generation tags (`prompt`, `workflow`, track language) from the source, including MP4/MOV `use_metadata_tags`, so Civitai-visible metadata survives the audio stage. Existing files are never renamed.
+
+- **Video preview stays visible with Metadata open.** The native Linux video surface no longer disappears behind the Metadata panel: the preview area shrinks to reserve space beside it and the player keeps its transport state (verified against real libmpv frames in the isolated fixture). Each More menu is now owned independently, so opening/closing one toolbar menu cannot dismiss or steal a sibling's; Escape closes and returns focus.
+
+- **FLAC/audio references play in the editor.** Local audio references use the existing native player on Linux (real duration, play/pause, crop), fixing "Source: unknown s / load error" for valid FLAC files; browser/Windows fallbacks are unchanged.
+
+- **"Use these settings" works for finished videos.** When a shown video is no longer in the session job list, More → Use settings restores from saved job History via exact output-path match plus native availability check, instead of failing on file-embedded metadata only. Stale answers never overwrite an edited draft.
+
 ## 0.2.19 BETA
 
 - **H3 opening-frame anchor seam fixed.** DEAS pins the canvas, and the core MiniMax H3 conditioning node fits frame anchors to it a second time on its own — stretching the first frame without preserving aspect. The Director scaling default `Auto` only shrinks references, so a picture whose ratio differs from the canvas deformed the frame-0 geometry anchor; image→video runs showed soft seams around the lips/face regions in the opening frames. H3 video runs now default to **Fill and crop** (matching the documented Studio default and the backend fallback); saved explicit choices and every scaling mode are unchanged. [Usage](STUDIO.md#resolution-and-reference-scaling).

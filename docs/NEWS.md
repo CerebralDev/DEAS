@@ -1,5 +1,13 @@
 # News
 
+## 0.2.20 BETA (unreleased)
+
+- **H3 Enhanced preview setup fixed.** The explicit ComfyUI/node-pack update now includes the missing pinned preview node pack. Tiny VAEs in configured `vae_approx` and existing `vae` folders become visible without moving files; Options explains when the backend update is required. Reopen this build, then approve the ComfyUI/node-pack update on an idle owned environment. No preview weights are downloaded automatically.
+
+- **Video metadata repaired end to end.** New saves embed strict-valid metadata; the pane shows the actual prompt and settings (old `NaN` files parse too). Audio-enhanced videos keep that metadata and get a readable `-audio-enhanced` name instead of a UUID file. Civitai still cannot show prompts for H3 node graphs until it supports those node types upstream.
+
+- **Video/audio UX fixes.** Opening Metadata next to a video no longer blanks the preview (side-by-side layout, playback preserved). FLAC references play with real duration and cropping in the editor. "Use these settings" works for finished videos from History, and each More menu behaves independently.
+
 ## 0.2.19 BETA
 
 - **Image refinement saves Original first.** Optional image refinement now waits for the encoded Original before starting its post-processing branch, so a later upscale/refine failure does not lose that completed image. Requires the compatible DEAS adapter and saver; start the owned backend explicitly with this build to install the adapter. This does not yet change video ordering.

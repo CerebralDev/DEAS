@@ -1,5 +1,7 @@
 """Owned-backend adapter: clean saver suffixes only for marked DEAS submissions."""
+import copy
 import functools
+import json
 import os
 from pathlib import Path
 import re
@@ -45,8 +47,21 @@ def publish(files):
 def wrap_save(save):
     @functools.wraps(save)
     def run(self, *args, **kwargs):
+        marked = (kwargs.get("extra_pnginfo") or {}).get("deas_output_naming")
+        if marked:
+            # Comfy adds NaN cache fingerprints during execution; these are not generation settings.
+            kwargs = dict(kwargs)
+            if isinstance(kwargs.get("prompt"), dict):
+                prompt = copy.deepcopy(kwargs["prompt"])
+                for node in prompt.values():
+                    if isinstance(node, dict):
+                        node.pop("is_changed", None)
+                kwargs["prompt"] = prompt
+            kwargs["extra_pnginfo"] = copy.deepcopy(kwargs["extra_pnginfo"])
+            # Refuse any remaining non-finite setting before a saver can publish non-standard JSON.
+            json.dumps({key: kwargs.get(key) for key in ("prompt", "extra_pnginfo")}, allow_nan=False)
         result = save(self, *args, **kwargs)
-        if not (kwargs.get("extra_pnginfo") or {}).get("deas_output_naming"):
+        if not marked:
             return result
         ui = result.get("ui", {})
         assets = [a for key in ("images", "gifs") for a in ui.get(key, []) if a["type"] == "output"]

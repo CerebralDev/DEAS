@@ -79,6 +79,15 @@ describe('run options', () => {
 });
 
 describe('enhanced preview preference', () => {
+  it('names the missing preview producer and points to the explicit backend update', () => {
+    const onChange=vi.fn();
+    render(<I18nProvider><OptionsPanel value={defaultOptions} onChange={onChange} allow={allow} family="minimax-h3" video imageInput={false} onRead={vi.fn()} canRead/></I18nProvider>);
+    const toggle=screen.getByRole('switch',{name:'Enhanced preview'}) as HTMLInputElement;
+    expect(toggle.disabled).toBe(true);
+    expect(toggle.title).toContain('ModelPreviewOverrideKJ');
+    expect(toggle.title).toContain('Backend');
+    expect(onChange).not.toHaveBeenCalled();
+  });
   it('accepts legacy, on and off values but rejects non-booleans', () => {
     expect(defaultOptions).not.toHaveProperty('enhancedPreview');
     for (const enhancedPreview of [undefined, true, false]) expect(isOptionsPref({ ...defaultOptions, enhancedPreview })).toBe(true);
@@ -88,7 +97,7 @@ describe('enhanced preview preference', () => {
 
   it('derives ON only from the selected video family capability and preserves saved OFF across refreshes', () => {
     const onChange = vi.fn();
-    const compatible = { ...allow, videoPreviews: { 'ltx-2': { decoder: 'tiny' as const, model: 'taeltx.safetensors' }, 'minimax-h3': { decoder: 'vae' as const, model: 'h3-preview.safetensors' } } };
+    const compatible = { ...allow, nodes:[...allow.nodes,'ModelPreviewOverrideKJ'], videoPreviews: { 'ltx-2': { decoder: 'tiny' as const, model: 'taeltx.safetensors' }, 'minimax-h3': { decoder: 'vae' as const, model: 'h3-preview.safetensors' } } };
     const props = { value: defaultOptions, onChange, allow: compatible, family: 'ltx-2', video: true, imageInput: false, onRead: vi.fn(), canRead: true };
     const { rerender } = render(<I18nProvider><OptionsPanel {...props}/></I18nProvider>);
     const toggle = () => screen.getByRole('switch', { name: 'Enhanced preview' }) as HTMLInputElement;

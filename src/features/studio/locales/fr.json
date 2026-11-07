@@ -553,6 +553,7 @@
   "studio.run.opt.enhancedPreview.hint": "Aperçu animé du débruitage avec un décodeur compatible ; activé par défaut. Aucun poids téléchargé. Désactiver rétablit immédiatement l’image fixe et omet cet aperçu des prochains lancements, sans arrêter les calculs déjà admis pour une tâche en cours.",
   "studio.run.opt.enhancedPreview.videoOnly": "Sélectionnez un pipeline vidéo. L’aperçu habituel reste disponible.",
   "studio.run.opt.enhancedPreview.unread": "Lisez les options du moteur pour vérifier le décodeur d’aperçu. L’aperçu habituel reste disponible.",
+  "studio.run.opt.enhancedPreview.producerMissing": "ModelPreviewOverrideKJ manque dans le backend. Utilisez Backend → Mise à niveau → ComfyUI et paquets de nœuds pour installer le composant d’aperçu épinglé, puis relisez les options. Aucun poids de modèle n’est téléchargé.",
   "studio.run.opt.enhancedPreview.missing": "Aucun décodeur et modèle d’aperçu compatibles signalés pour cette famille. L’aperçu habituel reste disponible.",
   "studio.run.opt.attention": "Backend d’attention",
   "studio.run.opt.attention.default": "Par défaut du backend",

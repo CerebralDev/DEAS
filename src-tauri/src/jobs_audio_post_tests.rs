@@ -128,10 +128,49 @@ fn original(root: &std::path::Path) -> Vec<u8> {
 }
 
 #[tokio::test]
+#[ignore = "requires real CPU FFmpeg/FFprobe; no model execution"]
+async fn automatic_audio_name_preserves_resolved_source_and_subfolder() {
+    let dir = tempfile::tempdir().unwrap();
+    let subfolder = "raw/music/2026-11-07";
+    let folder = dir.path().join(subfolder);
+    std::fs::create_dir_all(&folder).unwrap();
+    let before = original(&folder);
+    let stem = "20-38-22-4041897001-dasiwa-model-00001-audio";
+    let filename = format!("{stem}.flac");
+    std::fs::rename(folder.join("original.flac"), folder.join(&filename)).unwrap();
+    let (_, held, server) = held_fixture(dir.path()).await;
+    let mut job = held.lock().unwrap().job.as_ref().unwrap().clone();
+    job.outputs = vec![json!({"filename":filename,"subfolder":subfolder,"type":"output"})];
+    let mut outputs = job.outputs.clone();
+    process(&job, &AtomicBool::new(false), &mut outputs).unwrap();
+    assert_eq!(
+        outputs[0]["filename"],
+        format!("{stem}-audio-enhanced.flac")
+    );
+    assert_eq!(outputs[0]["subfolder"], subfolder);
+    assert!(folder
+        .join(outputs[0]["filename"].as_str().unwrap())
+        .exists());
+    assert_eq!(std::fs::read(folder.join(filename)).unwrap(), before);
+    assert_eq!(std::fs::read_dir(&folder).unwrap().count(), 2);
+    server.abort();
+}
+
+#[tokio::test]
 #[ignore = "requires real FFmpeg/FFprobe; run audio_post --ignored explicitly"]
 async fn automatic_audio_clean_holds_job_then_retains_pair_and_history_without_frontend() {
     let dir = tempfile::tempdir().unwrap();
     let before = original(dir.path());
+    std::fs::write(
+        dir.path().join("original-audio-enhanced.flac"),
+        b"keep existing",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.path().join("original-audio-enhanced-00002.flac"),
+        b"keep second",
+    )
+    .unwrap();
     let (jobs, held, server) = held_fixture(dir.path()).await;
     let id = held.current().unwrap()["id"].as_str().unwrap().to_owned();
     let stage = held.status(id.clone()).await.unwrap();
@@ -158,6 +197,27 @@ async fn automatic_audio_clean_holds_job_then_retains_pair_and_history_without_f
     let record = serde_json::to_value(jobs.3.view()).unwrap()["records"][0].clone();
     assert_eq!(record["state"], "succeeded");
     assert_eq!(record["outputs"][0]["role"], "processed");
+    assert_eq!(
+        done["outputs"][0]["filename"],
+        "original-audio-enhanced-00003.flac"
+    );
+    assert_eq!(
+        record["outputs"][0]["filename"],
+        done["outputs"][0]["filename"]
+    );
+    assert_eq!(
+        std::fs::read(dir.path().join("original-audio-enhanced.flac")).unwrap(),
+        b"keep existing"
+    );
+    assert_eq!(
+        std::fs::read(dir.path().join("original-audio-enhanced-00002.flac")).unwrap(),
+        b"keep second"
+    );
+    assert!(!std::fs::read_dir(dir.path()).unwrap().any(|entry| entry
+        .unwrap()
+        .file_name()
+        .to_string_lossy()
+        .starts_with(".deas-audio-")));
     assert_eq!(record["intent"]["audioEnhance"], intent()["audioEnhance"]);
     assert!(jobs
         .audio_source(&id, 1)

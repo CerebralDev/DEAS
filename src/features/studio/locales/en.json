@@ -553,6 +553,7 @@
   "studio.run.opt.enhancedPreview.hint": "Animated denoising preview when a compatible decoder is available; on by default. No weights are downloaded. Off immediately returns to the ordinary still and omits enhanced preview from future runs; it does not stop preview computation already admitted by a running job.",
   "studio.run.opt.enhancedPreview.videoOnly": "Select a video pipeline. The ordinary preview remains available.",
   "studio.run.opt.enhancedPreview.unread": "Read backend options to check for a compatible preview decoder. The ordinary preview remains available.",
+  "studio.run.opt.enhancedPreview.producerMissing": "The backend is missing ModelPreviewOverrideKJ. Use Backend → Upgrade → ComfyUI and node packs to install the pinned preview companion, then read Options again. This does not download model weights.",
   "studio.run.opt.enhancedPreview.missing": "No compatible preview decoder and model were reported for this family. The ordinary preview remains available.",
   "studio.run.opt.attention": "Attention backend",
   "studio.run.opt.attention.default": "Backend default",

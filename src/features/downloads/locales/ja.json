@@ -74,6 +74,7 @@
   "downloads.folder.huggingface-models": "Hugging Face モデル",
   "downloads.folder.ollama-tags": "Ollama モデル",
   "downloads.folder.vae": "VAE",
+  "downloads.folder.vae_approx": "プレビュー VAE（Tiny VAE）",
   "downloads.folder.text_encoders": "テキストエンコーダー",
   "downloads.folder.clip_vision": "CLIP Vision",
   "downloads.folder.controlnet": "ControlNet",

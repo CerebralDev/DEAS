@@ -58,14 +58,19 @@ for saver in (nodes.SaveImage(),metadata.DaSiWa_MetadataImageSaver()):
 # Video combine: the video, its audio marker and frame exports share one dash-only counter; the returned path follows.
 vprefix=prefix.replace('raw/image/','raw/video/',1)
 names=[]
+video_prompt={'D':{'class_type':'MiniMaxH3Director','inputs':{'prompt':'subject_definitions:\nA person says NaN.\n\nsummary:\nForest scene.\n\ndetailed_description:\nWalk through the forest.'},'is_changed':[float('nan')]}}
 for _ in range(2):
  saved=video.DaSiWa_EnhancedVideoCombine().combine(images=torch.rand((4,16,16,3)),frame_rate=8,codec='VP9',container='WebM',bit_depth='8',quality=30,pingpong=False,
   save_metadata=True,filename_prefix=vprefix,save_output=True,pass_frames=False,audio={'waveform':torch.zeros((1,2,8000)),'sample_rate':16000},
-  save_first_frame=True,extra_pnginfo={'deas_output_naming':True})
+  save_first_frame=True,prompt=video_prompt,extra_pnginfo={'deas_output_naming':True})
  main=saved['ui']['gifs'][0]['filename'];frame=saved['ui']['images'][0]['filename']
  assert main.endswith('-audio.webm') and '_' not in main and frame==main.removesuffix('.webm')+'-first-frame.png',(main,frame)
  assert Path(saved['result'][1])==out/'raw/video/2026-01-02'/main and Path(saved['result'][1]).is_file(),saved['result'][1]
  assert (out/'raw/video/2026-01-02'/frame).is_file() and main not in names
+ tags=json.loads(subprocess.check_output(['ffprobe','-v','error','-show_entries','format_tags','-of','json',str(Path(saved['result'][1]))]))['format']['tags']
+ embedded=json.loads(next(value for key,value in tags.items() if key.lower()=='prompt'),parse_constant=lambda value:(_ for _ in ()).throw(ValueError(value)))
+ assert embedded['D']['inputs']==video_prompt['D']['inputs'] and 'is_changed' not in embedded['D']
+ assert 'is_changed' in video_prompt['D'],'live graph was mutated'
  names.append(main)
 assert not list((out/'raw/video/2026-01-02').glob('*_*')),'underscore leftovers'
 # Unmarked standalone saver calls retain their original naming.

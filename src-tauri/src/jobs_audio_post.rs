@@ -181,7 +181,8 @@ fn process(job: &Job, cancel: &AtomicBool, outputs: &mut Vec<Value>) -> Result<(
         if !canonical.starts_with(&canonical_root) {
             return Err("AUDIO_SOURCE: Output escaped owned root".into());
         }
-        crate::video_post::open_source(&source)?;
+        let source_file = crate::video_post::open_source(&source)?;
+        let source_identity = crate::video_post::identity(&source_file)?;
         let source_extension = source
             .extension()
             .and_then(|s| s.to_str())
@@ -193,19 +194,17 @@ fn process(job: &Job, cancel: &AtomicBool, outputs: &mut Vec<Value>) -> Result<(
         } else {
             "flac"
         };
-        let filename = format!("deas-audio-{}.{}", uuid::Uuid::new_v4(), extension);
-        // Stage and publish through the resolved directory (see the Anchor below).
-        let target: PathBuf = canonical
-            .parent()
-            .ok_or("AUDIO_SOURCE: Missing parent")?
-            .join(&filename);
+        let stem = source
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .ok_or("AUDIO_SOURCE: Missing source stem")?;
         // Anchor the resolved directory: the owned media root may itself sit behind a
         // symlinked folder (a bookmarked output root), which the strict walk would refuse.
         let parent = crate::downloads::fs::Anchor::open(
             canonical.parent().ok_or("AUDIO_SOURCE: Missing parent")?,
         )?;
         let stage_name = format!(".deas-audio-stage-{}.{}", uuid::Uuid::new_v4(), extension);
-        let stage = target.with_file_name(&stage_name);
+        let stage: PathBuf = canonical.with_file_name(&stage_name);
         // The automatic stage never interrupts other work: a busy compute gate or busy
         // owned queue defers it; after bounded waits the baseline stays and the stage fails.
         let mut attempt = 0_u8;
@@ -234,24 +233,47 @@ fn process(job: &Job, cancel: &AtomicBool, outputs: &mut Vec<Value>) -> Result<(
         }
         let staged = crate::video_post::open_source(&stage)?;
         let published = (|| {
-            if cancel.load(Ordering::Relaxed) {
-                return Err("AUDIO_CANCELLED: Audio stage cancelled; original preserved".into());
+            for counter in 1..=99_999 {
+                if cancel.load(Ordering::Relaxed) {
+                    return Err("AUDIO_CANCELLED: Audio stage cancelled; original preserved".into());
+                }
+                job.plan
+                    .media_root
+                    .as_ref()
+                    .and_then(job_outputs::MediaRoot::current_path)
+                    .ok_or("AUDIO_SOURCE: Owned media root changed before publication")?;
+                parent.validate_directory(false)?;
+                if crate::video_post::identity(&source_file)? != source_identity
+                    || crate::video_post::identity(&crate::video_post::open_source(&source)?)?
+                        != source_identity
+                {
+                    return Err("AUDIO_CHANGED: Source changed before publication".into());
+                }
+                if !parent.owns_partial(&stage_name, &staged) {
+                    return Err("AUDIO_OUTPUT: Staged output changed".into());
+                }
+                let suffix = if counter == 1 {
+                    String::new()
+                } else {
+                    format!("-{counter:05}")
+                };
+                let filename = format!("{stem}-audio-enhanced{suffix}.{extension}");
+                match parent.publish(&stage_name, &filename) {
+                    Ok(()) => return Ok(filename),
+                    // Retry only a real name collision while we still own the encoded stage.
+                    Err(_)
+                        if parent.owns_partial(&stage_name, &staged)
+                            && std::fs::symlink_metadata(stage.with_file_name(&filename))
+                                .is_ok() => {}
+                    Err(error) => return Err(error),
+                }
             }
-            job.plan
-                .media_root
-                .as_ref()
-                .and_then(job_outputs::MediaRoot::current_path)
-                .ok_or("AUDIO_SOURCE: Owned media root changed before publication")?;
-            parent.validate_directory(false)?;
-            if !parent.owns_partial(&stage_name, &staged) {
-                return Err("AUDIO_OUTPUT: Staged output changed".into());
-            }
-            parent.publish(&stage_name, &filename)
+            Err("AUDIO_OUTPUT: No free enhanced filename".into())
         })();
         if parent.owns_partial(&stage_name, &staged) {
             parent.remove_partial(&stage_name);
         }
-        published?;
+        let filename = published?;
         let mut processed = output;
         processed["filename"] = json!(filename);
         processed["format"] = json!(match extension {

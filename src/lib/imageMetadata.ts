@@ -11,18 +11,45 @@ export async function readImageMetadata(path:string):Promise<ImageMetadata> {
 }
 const object=(v:unknown):v is Record<string,unknown>=>!!v&&typeof v==='object'&&!Array.isArray(v);
 const text=(v:unknown)=>typeof v==='string'?v:JSON.stringify(v,null,2);
+/** Legacy Python savers emitted bare NaN cache tokens. Never alter quoted prompt text or evaluate input. */
+export function parseMetadataJson(value:string):unknown {
+ if(value.length>2*1024*1024)throw new Error('Metadata too large');
+ try{return JSON.parse(value);}catch{
+  let quoted=false,escaped=false,out='';
+  for(let i=0;i<value.length;i++){
+   const c=value[i];
+   if(!quoted&&value.startsWith('NaN',i)&&/[\s[:,]/.test(value[i-1]??'')&&/[\s,\]}]/.test(value[i+3]??'')){
+    out+='null';i+=2;continue;
+   }
+   out+=c;
+   if(escaped){escaped=false;continue;}
+   if(quoted&&c==='\\'){escaped=true;continue;}
+   if(c==='"')quoted=!quoted;
+  }
+  return JSON.parse(out);
+ }
+}
 /** Recognize Swarm's JSON envelope and ComfyUI API graphs; preserve unfamiliar metadata as text. */
 export function imageMetadataRows(entries:ImageMetadata):ImageMetadata {
  const rows:ImageMetadata=[];
  const hasPrompt=entries.some(([key])=>key.toLowerCase()==='prompt');
  for(const [key,value] of entries){
   if(key.toLowerCase()==='workflow'&&hasPrompt)continue; // The API graph already contains the execution settings, not editor coordinates.
-  let parsed:unknown;try{parsed=JSON.parse(value);}catch{rows.push([key,value]);continue;}
+  let parsed:unknown;try{parsed=parseMetadataJson(value);}catch{rows.push([key,value]);continue;}
   if(object(parsed)&&object(parsed.sui_image_params)){
    for(const section of ['sui_image_params','sui_extra_data']){
     const data=parsed[section];if(object(data))for(const [name,v] of Object.entries(data))rows.push([name,text(v)]);
    }
   }else if(key.toLowerCase()==='prompt'&&object(parsed)){
+   const settings=comfy(parsed);
+   if(settings?.media==='video'){
+    const names:Record<string,string>={positive:'prompt',negative:'negative_prompt',checkpoint:'model',cfg:'cfgscale',frameRate:'fps'};
+    for(const [name,v] of Object.entries(settings)){
+     if(v===undefined||['media','skipped'].includes(name))continue;
+     rows.push([names[name]??name,name==='loras'&&Array.isArray(v)?v.map(l=>`${l.name} (${l.strength})`).join(', '):text(v)]);
+    }
+    continue;
+   }
    const fields:ImageMetadata=[];
    for(const [id,node] of Object.entries(parsed))if(object(node)&&typeof node.class_type==='string'&&object(node.inputs)){
     for(const [name,v] of Object.entries(node.inputs)){
@@ -157,7 +184,7 @@ export function generationSettings(entries:ImageMetadata):GenerationSettings|nul
  let parameters:GenerationSettings|null=null,graph:GenerationSettings|null=null;
  for(const [key,value] of entries){
   if(!['parameters','usercomment','imagedescription','prompt'].includes(key.toLowerCase()))continue;
-  let parsed:unknown;try{parsed=JSON.parse(value);}catch{parsed=undefined;}
+  let parsed:unknown;try{parsed=parseMetadataJson(value);}catch{parsed=undefined;}
   if(key.toLowerCase()==='prompt'){if(object(parsed))graph??=comfy(parsed);}
   else parameters??=object(parsed)&&object(parsed.sui_image_params)?swarm(parsed.sui_image_params):a1111(value);
  }

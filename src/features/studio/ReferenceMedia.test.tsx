@@ -130,6 +130,90 @@ test('trim edits stop the current crop without replacing metadata or saved bound
  expect(pause).toHaveBeenCalledOnce();expect(vi.getTimerCount()).toBe(0);expect(onChange).not.toHaveBeenCalled();
 });
 
+const flac=()=>reference({item:{name:'song.flac',path:'/starred/audio/song.flac',src:'asset://song.flac',media:'audio'},mediaMode:'audio'});
+function linuxAudio(){
+ vi.mocked(isTauri).mockReturnValue(true);
+ vi.spyOn(navigator,'userAgent','get').mockReturnValue('Linux DEAS');
+ let status={position:2,duration:27,width:0,height:0,paused:true,muted:false,volume:100,error:undefined as string|undefined};
+ vi.mocked(invoke).mockClear().mockImplementation(async(command,args)=>command==='native_video_update'&&(args as {action:{kind:string}}).action.kind==='status'?status:undefined);
+ const update=async(next:Partial<typeof status>)=>{status={...status,...next};await act(async()=>{vi.advanceTimersByTime(150);});};
+ return {update};
+}
+
+test('Linux FLAC uses unmuted native audio controls with duration and crop transport',async()=>{
+ const {update}=linuxAudio();const {container,onChange}=mount(flac());await act(async()=>{});
+ expect(container.querySelector('audio,video')).toBeNull();
+ expect(container.querySelector('[data-native-video][data-audio-only]')).toBeTruthy();
+ expect(container.querySelector<HTMLElement>('.native-video-surface')!.style.display).toBe('none');
+ expect(invoke).toHaveBeenCalledWith('native_video_open',expect.objectContaining({source:{path:'/starred/audio/song.flac'},muted:false}));
+ expect(onChange).toHaveBeenCalledWith({sourceDuration:27});onChange.mockClear();
+ fireEvent.click(screen.getByRole('button',{name:key('play')}));
+ expect(invoke).toHaveBeenCalledWith('native_video_update',expect.objectContaining({action:{kind:'crop',start:2,end:5}}));
+ await update({paused:false,position:3.25});
+ fireEvent.click(screen.getByRole('button',{name:key('setIn')}));expect(onChange).toHaveBeenLastCalledWith({trimStart:3.25});
+ fireEvent.click(screen.getByRole('button',{name:key('setOut')}));expect(onChange).toHaveBeenLastCalledWith({trimEnd:3.25});
+ fireEvent.click(screen.getByRole('button',{name:key('pause')}));
+ expect(invoke).toHaveBeenCalledWith('native_video_update',expect.objectContaining({action:{kind:'pause',paused:true}}));
+ await update({paused:true});fireEvent.click(screen.getByRole('button',{name:key('play')}));
+ expect(vi.mocked(invoke).mock.calls.filter(([,a])=>(a as {action?:{kind:string}})?.action?.kind==='crop')).toHaveLength(2);
+});
+
+test('native FLAC blank bounds and invalid status never rewrite saved trims',async()=>{
+ const {update}=linuxAudio();const r={...flac(),trimStart:undefined,trimEnd:undefined};
+ const {onChange,rerender}=mount(r);await act(async()=>{});
+ for(const name of ['studio.run.video.trimStartOf','studio.run.video.trimEndOf'])expect((screen.getByRole('spinbutton',{name}) as HTMLInputElement).value).toBe('');
+ fireEvent.click(screen.getByRole('button',{name:key('play')}));
+ expect(invoke).toHaveBeenCalledWith('native_video_update',expect.objectContaining({action:{kind:'crop',start:0,end:27}}));
+ for(const duration of [0,NaN,Infinity]){await update({duration});expect((screen.getByRole('button',{name:key('play')}) as HTMLButtonElement).disabled).toBe(true);}
+ expect(onChange.mock.calls.every(([x])=>Object.keys(x).join()==='sourceDuration'&&x.sourceDuration===27)).toBe(true);
+ await update({duration:27});rerender(<ReferenceMedia reference={{...r,trimStart:30,trimEnd:35}} onChange={onChange}/>);
+ expect((screen.getByRole('button',{name:key('play')}) as HTMLButtonElement).disabled).toBe(true);
+ expect((screen.getByRole('spinbutton',{name:'studio.run.video.trimEndOf'}) as HTMLInputElement).value).toBe('35');
+});
+
+test('native errors show the concrete cause, log once and preserve saved metadata and trims',async()=>{
+ const {update}=linuxAudio();const {onChange}=mount({...flac(),sourceDuration:27});await act(async()=>{});onChange.mockClear();
+ fireEvent.click(screen.getByRole('button',{name:key('play')}));
+ await update({paused:false,error:'libmpv: cannot decode audio'});await update({});
+ expect(screen.getAllByRole('alert').some(el=>el.textContent===`${key('loadError')} libmpv: cannot decode audio`)).toBe(true);
+ expect(vi.mocked(invoke).mock.calls.filter(([cmd])=>cmd==='native_logs_reference_media_error')).toHaveLength(1);
+ expect(invoke).toHaveBeenCalledWith('native_video_update',expect.objectContaining({action:{kind:'pause',paused:true}}));
+ expect((screen.getByRole('button',{name:key('play')}) as HTMLButtonElement).disabled).toBe(true);
+ expect(onChange).not.toHaveBeenCalled();
+ expect((screen.getByRole('spinbutton',{name:'studio.run.video.trimEndOf'}) as HTMLInputElement).value).toBe('5');
+});
+
+test('native crop stops on trim edits and source replacement/unmount close only their owner',async()=>{
+ linuxAudio();const r=flac();const {rerender,onChange,unmount}=mount(r);await act(async()=>{});
+ const owner=()=>(vi.mocked(invoke).mock.calls.filter(([cmd])=>cmd==='native_video_open').at(-1)![1] as {id:string}).id;
+ const old=owner();fireEvent.click(screen.getByRole('button',{name:key('play')}));
+ rerender(<ReferenceMedia reference={{...r,trimEnd:8}} onChange={onChange}/>);
+ expect(invoke).toHaveBeenCalledWith('native_video_update',{id:old,action:{kind:'pause',paused:true}});
+ const next={...r,item:{...r.item,path:'/input/song.flac'}};
+ rerender(<ReferenceMedia reference={next} onChange={onChange}/>);await act(async()=>{});
+ expect(invoke).toHaveBeenCalledWith('native_video_update',{id:old,action:{kind:'close'}});
+ expect(owner()).not.toBe(old);const current=owner();unmount();
+ expect(invoke).toHaveBeenCalledWith('native_video_update',{id:current,action:{kind:'close'}});expect(vi.getTimerCount()).toBe(0);
+});
+
+test('native audio transport stays visible only inside its containing modal',async()=>{
+ linuxAudio();vi.spyOn(HTMLElement.prototype,'getBoundingClientRect').mockReturnValue({left:10,top:10,right:210,bottom:50,width:200,height:40,x:10,y:10,toJSON:()=>({})});
+ Object.defineProperty(document,'elementFromPoint',{configurable:true,value:()=>document.querySelector('.native-video-controls')});
+ const ui=render(<div role="dialog" aria-modal="true"><ReferenceMedia reference={flac()} onChange={vi.fn()}/></div>);await act(async()=>{});
+ const bounds=(visible:boolean)=>expect(invoke).toHaveBeenCalledWith('native_video_update',expect.objectContaining({action:expect.objectContaining({kind:'bounds',visible,audioOnly:true})}));
+ bounds(true);vi.mocked(invoke).mockClear();const covering=document.createElement('dialog');covering.open=true;
+ try{await act(async()=>{document.body.append(covering);});bounds(false);vi.mocked(invoke).mockClear();await act(async()=>covering.remove());bounds(true);}finally{covering.remove();ui.unmount();}
+});
+
+test.each(['browser','Windows','pathless Linux'])('FLAC keeps the media-element fallback in %s',async(mode)=>{
+ vi.mocked(invoke).mockClear();vi.mocked(isTauri).mockReturnValue(mode!=='browser');
+ vi.spyOn(navigator,'userAgent','get').mockReturnValue(mode==='Windows'?'Windows':'Linux');
+ const r=flac();if(mode==='pathless Linux')delete r.item.path;
+ const {container,metadata,onChange}=mount(r);metadata(27);await act(async()=>{});
+ expect(container.querySelector('audio')).toBeTruthy();expect(container.querySelector('[data-native-video]')).toBeNull();
+ expect(onChange).toHaveBeenCalledWith({sourceDuration:27});expect(invoke).not.toHaveBeenCalled();
+});
+
 test('Linux video references reuse the native player and crop control with source metadata',async()=>{
  vi.mocked(isTauri).mockReturnValue(true);
  vi.spyOn(navigator,'userAgent','get').mockReturnValue('Linux DEAS');

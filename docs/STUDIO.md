@@ -330,6 +330,16 @@ Auto-Aspect is offered only in media-input pipelines; browsing an image or video
 
 ### Video generation
 
+#### Enhanced preview prerequisites
+
+**Options → Enhanced preview** uses a compatible Tiny VAE and `ModelPreviewOverrideKJ`. It defaults ON only when both are reported for the selected video family; explicitly saved OFF stays OFF. Ordinary still previews remain available when either prerequisite is missing. The preview parameters (up to 120 frames at 8 fps, maximum side 512) do not change final video frames, fps, audio or output format.
+
+If Options names a missing `ModelPreviewOverrideKJ`, reopen the current DEAS build and use **Backend → Upgrade → ComfyUI and node packs** on the idle owned environment, reviewing and approving the operation. This installs official KJNodes at the pinned revision with its requirements under the existing Torch constraints; no model weights are downloaded. The existing update lifecycle handles the owned backend. App-only and Torch-only updates do not add the missing companion. Opening an old environment alone remains read-only; DEAS never silently updates or restarts an unrelated backend.
+
+Store compatible preview weights under the configured models root's **`vae_approx`** folder. Existing tiny weights under **`vae`** are also exposed to the preview loader through generated backend configuration, without copies, moves or category changes. This applies to primary and additional model roots; backend configuration takes effect at its next approved start/update. H3 uses `taeh3.safetensors` (for example an existing `vae/MiniMaxH3/taeh3.safetensors`); LTX 2.3 uses its separate `taeltx2_3.safetensors` through the VAE loader. Wan 2.2 14B needs a compatible 16-channel decoder, not the 48-channel Wan5B variant. A filename or a file in another ComfyUI installation does not establish availability on the selected backend. Reopen Options to refresh reported capabilities after the update.
+
+The existing preview transport/player and compatibility checks remain in force; provisioning/schema tests do not establish real-model preview quality/performance or native Windows playback acceptance.
+
 #### H3 VAE seam troubleshooting
 
 The known MiniMax H3 spatial tile-blending defect was fixed upstream in ComfyUI PR #16436 (`comfy/ldm/minimax/vae.py`; earlier related tiled-decode fixes are #15477 and #15502). The inspected owned checkout `edc480ac44de8714b4008810bc68393a5c22f937` contains composited-neighbour blending. This is source evidence, not proof of which code an already running backend loaded. On a spatial seam report, check the owned environment revision and use the explicit Backend update/restart controls when appropriate; do not restart external services. A Continuity segment-boundary weld is a different, model/node-pack overlap issue, not this spatial VAE fix.

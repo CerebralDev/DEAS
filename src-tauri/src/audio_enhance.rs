@@ -278,7 +278,7 @@ impl Input {
         probe
             .args([
                 "-show_entries",
-                "stream=codec_type,codec_name,sample_rate,channels,start_time,bit_rate:format=duration",
+                "stream=codec_type,codec_name,sample_rate,channels,start_time,bit_rate:stream_tags:format=duration:format_tags",
                 "-of",
                 "json",
                 "-i",
@@ -384,6 +384,20 @@ impl Input {
             "mov" => ("mov", "mov"),
             "webm" => ("webm", "webm"),
             _ => ("matroska", "mkv"),
+        }
+    }
+    fn metadata_arguments(&self, command: &mut Command) {
+        // Learned tracks come from extra inputs; provenance and track labels belong to input 0.
+        command.args(["-map_metadata", "0"]);
+        let mut output = 0;
+        for (index, stream) in self.streams.iter().enumerate() {
+            if self.video || stream.0 == "audio" {
+                command.args([format!("-map_metadata:s:{output}"), format!("0:s:{index}")]);
+                output += 1;
+            }
+        }
+        if matches!(self.muxer().0, "mp4" | "mov") {
+            command.args(["-movflags", "+use_metadata_tags"]);
         }
     }
     fn extension(&self) -> &'static str {
@@ -613,6 +627,7 @@ fn process_mode(
                 }
             }
         }
+        input.metadata_arguments(&mut command);
         command.args([
             "-c",
             "copy",

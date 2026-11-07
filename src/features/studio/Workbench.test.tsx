@@ -1075,6 +1075,66 @@ test('a video gets the More menu: its own job refills the prompt, an uncorrelate
  expect(document.querySelector('#run-negative')).toHaveProperty('value','no blur');
  expect(runWorkbenchJob).not.toHaveBeenCalled();
 });
+test.each(['all','prompt','stale'] as const)('video More reuses validated saved history before broken file metadata (%s)',async mode=>{
+ const {imageFormat,imageCompression,...output}=defaultOptions.output!;void imageFormat;void imageCompression;
+ const intent={recipeId:'video-generation',version:1,family:'ltx-2',positivePrompt:'historical film',negativePrompt:'',model:ltxModels[0].name,textEncoder:ltxModels[1].name,vae:ltxModels[3].name,seed:42,width:768,height:512,frames:49,frameRate:24,steps:8,cfg:1,sampler:'euler',scheduler:'simple',outputPrefix:'raw/video/history',output,ltx:{textProjection:ltxModels[2].name,audioVae:ltxModels[4].name,passes:1}} as const;
+ const old={...recentHistoryRecord(intent),outputRoot:'/out',outputs:[{filename:'clip.mp4',subfolder:'starred/video/date',type:'output' as const}]};
+ const bare={...heldJob('history-file','succeeded'),outputRoot:'/out',outputs:old.outputs};
+ vi.mocked(readCurrentWorkbench).mockResolvedValue(collection([bare]));
+ vi.mocked(scanModels).mockResolvedValue([...ltxModels]);
+ vi.mocked(checkRecipePrerequisites).mockResolvedValue({...evidence,allowlist:{...evidence.allowlist,textEncoders:ltxModels.filter(m=>m.category==='text_encoders').map(m=>m.name),vaes:ltxModels.filter(m=>m.category==='vae').map(m=>m.name)}});
+ const previous=vi.mocked(invoke).getMockImplementation()!;
+ let resolve!:(value:unknown)=>void;
+ const snapshot={schemaVersion:1,records:[old],readOnly:false,error:null};
+ vi.mocked(invoke).mockImplementation(async(command,args)=>command==='native_jobs_history'?(mode==='stale'?new Promise(done=>{resolve=done;}):snapshot):command==='native_jobs_history_outputs'?['available']:previous(command,args));
+ try{
+  render(<I18nProvider><Workbench endpoint={evidence.baseUrl} roots={{models:'/m',output:'/out'}}/></I18nProvider>);
+  await waitFor(()=>expect(document.querySelector('[data-job-id="history-file"]')).not.toBeNull());
+  fireEvent.click(document.querySelector('[data-job-id="history-file"] .wb-queue-select')!);
+  await waitFor(()=>expect(document.querySelector<HTMLButtonElement>('[data-more-apply]')?.disabled).toBe(false));
+  fireEvent.click(document.querySelector(mode==='prompt'?'[data-more-reuse]':'[data-more-apply]')!);
+  if(mode==='stale'){
+   await waitFor(()=>expect(resolve).toBeTypeOf('function'));
+   fireEvent.change(screen.getByLabelText('Prompt'),{target:{value:'new draft'}});
+   await act(async()=>resolve(snapshot));
+   expect(screen.getByLabelText('Prompt')).toHaveProperty('value','new draft');
+  }else{
+   await waitFor(()=>expect(screen.getByLabelText('Prompt')).toHaveProperty('value','historical film'));
+   expect(document.querySelector('#run-negative')).toHaveProperty('value','');
+   if(mode==='all'){
+    expect(document.querySelector('[data-num="steps"]')).toHaveProperty('value','8');
+    expect(document.querySelector('[data-num="cfg"]')).toHaveProperty('value','1');
+   }
+  }
+  expect(readImageMetadata).not.toHaveBeenCalled();expect(runWorkbenchJob).not.toHaveBeenCalled();expect(uploadInput).not.toHaveBeenCalled();
+ }finally{vi.mocked(invoke).mockImplementation(previous);}
+});
+
+test('video metadata reserves preview space without reopening the player and More stays keyboard usable',async()=>{
+ const agent=vi.spyOn(navigator,'userAgent','get').mockReturnValue('Linux');
+ const previous=vi.mocked(invoke).getMockImplementation()!;
+ const status={position:2,duration:20,width:640,height:360,paused:true,muted:false,volume:100};
+ vi.mocked(invoke).mockImplementation(async(command,args)=>command.startsWith('native_video_')?status:previous(command,args));
+ const job={...heldJob('metadata-video','succeeded'),outputRoot:'/out',outputs:[{filename:'clip.mp4',subfolder:'raw',type:'output' as const}]};
+ vi.mocked(readCurrentWorkbench).mockResolvedValue(collection([job]));
+ try{
+  render(<I18nProvider><Workbench endpoint="http://original:7801/" roots={{output:'/out'}}/></I18nProvider>);
+  await waitFor(()=>expect(document.querySelector('[data-job-id="metadata-video"]')).not.toBeNull());
+  fireEvent.click(document.querySelector('[data-job-id="metadata-video"] .wb-queue-select')!);
+  await waitFor(()=>expect(invoke).toHaveBeenCalledWith('native_video_open',expect.anything()));
+  const player=document.querySelector('[data-native-video]');
+  fireEvent.click(document.querySelector('[data-metadata-toggle]')!);
+  expect(document.querySelector('.wb-stage')?.getAttribute('data-video-metadata')).toBe('true');
+  const more=document.querySelector<HTMLElement>('[data-more]')!;
+  fireEvent.click(more);expect(more.parentElement).toHaveProperty('open',true);
+  fireEvent.keyDown(more,{key:'Escape'});expect(more.parentElement).toHaveProperty('open',false);expect(document.activeElement).toBe(more);
+  fireEvent.click(document.querySelector('[data-metadata-toggle]')!);
+  expect(document.querySelector('.wb-stage')?.hasAttribute('data-video-metadata')).toBe(false);
+  expect(document.querySelector('[data-native-video]')).toBe(player);
+  expect(vi.mocked(invoke).mock.calls.filter(([command])=>command==='native_video_open')).toHaveLength(1);
+ }finally{cleanup();vi.mocked(invoke).mockImplementation(previous);agent.mockRestore();}
+});
+
 test.each([true,false])('native video playback uses captured root when available (owned=%s)',async owned=>{
  const agent=vi.spyOn(navigator,'userAgent','get').mockReturnValue('Linux');
  try{

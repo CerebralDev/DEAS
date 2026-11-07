@@ -46,6 +46,8 @@ const GGUF_REVISION: &str = "6ea2651e7df66d7585f6ffee804b20e92fb38b8a";
 /// inspected SHA and its sole pip requirement (`gguf`) already comes from ComfyUI-GGUF.
 const HYPERFLOW: &str = "https://github.com/Video-Rebirth/ComfyUI-HyperFlow-Flash.git";
 const HYPERFLOW_REVISION: &str = "20a22ab2b075f3c948eb5dba62637ff89fc0f363";
+const KJNODES: &str = "https://github.com/kijai/ComfyUI-KJNodes.git";
+const KJNODES_REVISION: &str = "d3cfe21625e5170126ce06fbfcfe1d88108688c3";
 #[path = "install_torch.rs"]
 pub(crate) mod torch_profile;
 // --help exits before imports. Initialize actual core/nodes without binding a
@@ -53,11 +55,13 @@ pub(crate) mod torch_profile;
 const COMFY_PROBE: &str = r#"import sys,json
 backend,selected=sys.argv[1:3]
 gguf=len(sys.argv)>3 and sys.argv[3]=='gguf'
+preview=len(sys.argv)>4 and sys.argv[4]=='preview'
 sys.argv=['main.py','--disable-auto-launch','--cpu']
 import main,nodes
 main.start_comfyui()
 required={'MiniMaxH3Director','MiniMaxH3DirectorGuide','DaSiWaH3ContinuityAppend','DaSiWaH3ContinuityPublish'} if selected=='nodes' else set()
 if gguf: required.update({'UnetLoaderGGUF','CLIPLoaderGGUF','DualCLIPLoaderGGUF','HyperFlowGGUFLoader','HyperFlowSigmas'})
+if preview: required.add('ModelPreviewOverrideKJ')
 missing=required-set(nodes.NODE_CLASS_MAPPINGS)
 assert not missing, 'Missing selected nodes: '+', '.join(sorted(missing))
 print(json.dumps({'coreImported':True,'selectedNodes':sorted(required),'generationReady':False}))
@@ -138,6 +142,8 @@ pub struct Plan {
     pub id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gguf_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preview_ref: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reopen_id: Option<String>,
     pub request: Request,
@@ -623,6 +629,7 @@ impl Engine {
             label_key: "installer.steps.nodes".into(),
             detail: format!("Fetch ComfyUI-GGUF at {GGUF_REVISION}; install required GGUF loader dependencies in managed venv (no models or LoRAs)"),
         });
+        steps.push(preview_step());
         if request
             .features
             .iter()
@@ -651,6 +658,7 @@ impl Engine {
         }
         let plan = Plan {
             gguf_ref: Some(GGUF_REVISION.into()),
+            preview_ref: Some(KJNODES_REVISION.into()),
             reopen_id: None,
             id: uuid::Uuid::new_v4().to_string(),
             request,
@@ -762,6 +770,7 @@ impl Engine {
             }
         } else {
             enable_gguf_upgrade(&mut plan);
+            enable_preview_upgrade(&mut plan);
             if let Some(recorded) = &plan.hardware {
                 plan.hardware = Some(refreshed_hardware(recorded, torch_profile::probe()?)?);
             }
@@ -1489,6 +1498,7 @@ fn validate_gguf_sources(node: &Path, reference: &str) -> Result<(), String> {
 
 pub(crate) fn validate_gguf_install(plan: &Plan, root: &Path) -> Result<(), String> {
     let result = (|| {
+        validate_preview_install(plan, root)?;
         let Some(reference) = plan.gguf_ref.as_deref() else {
             return Ok(());
         };
@@ -1538,6 +1548,74 @@ pub(crate) fn validate_gguf_install(plan: &Plan, root: &Path) -> Result<(), Stri
             &format!("ERROR installer.gguf verify: {error}"),
         );
     })
+}
+
+fn preview_step() -> Step {
+    Step {
+        id: "preview".into(),
+        label_key: "installer.steps.nodes".into(),
+        detail: format!("Fetch official ComfyUI-KJNodes at {KJNODES_REVISION} for Enhanced preview; install its requirements in the managed venv with existing Torch constraints (no weights, models or LoRAs)"),
+    }
+}
+
+fn enable_preview_upgrade(plan: &mut Plan) {
+    if plan.preview_ref.is_none() {
+        plan.preview_ref = Some(KJNODES_REVISION.into());
+        let index = plan
+            .steps
+            .iter()
+            .position(|s| s.id == "nodes" || s.id == "verify")
+            .unwrap_or(plan.steps.len());
+        plan.steps.insert(index, preview_step());
+    }
+}
+
+fn validate_preview_sources(node: &Path, reference: &str) -> Result<(), String> {
+    let source: serde_json::Value =
+        serde_json::from_str(include_str!("../kjnodes-source.json")).map_err(|e| e.to_string())?;
+    if source["revision"] != reference {
+        return Err("Unsupported immutable ComfyUI-KJNodes revision".into());
+    }
+    for (name, expected) in source["files"]
+        .as_object()
+        .ok_or("Invalid bundled KJNodes source manifest")?
+    {
+        let actual = Sha256::digest(crate::backend::read_owned(&node.join(name), 1024 * 1024)?);
+        if Some(format!("{actual:x}").as_str()) != expected.as_str() {
+            return Err(format!(
+                "ComfyUI-KJNodes source changed: {name}; re-provision required"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_preview_install(plan: &Plan, root: &Path) -> Result<(), String> {
+    let Some(reference) = plan.preview_ref.as_deref() else {
+        return Ok(());
+    };
+    if reference != KJNODES_REVISION {
+        return Err("Unsupported immutable ComfyUI-KJNodes revision".into());
+    }
+    let manifest: serde_json::Value = serde_json::from_slice(&crate::backend::read_owned(
+        &root.join("deas-install.json"),
+        1024 * 1024,
+    )?)
+    .map_err(|e| format!("Invalid ComfyUI-KJNodes install manifest: {e}"))?;
+    let node = node_target(&root.join("ComfyUI"), "ComfyUI-KJNodes")?;
+    let head = crate::backend::read_owned(&node.join(".git/HEAD"), 1024)?;
+    if manifest["previewRevision"] != reference
+        || std::str::from_utf8(&head)
+            .map_err(|e| e.to_string())?
+            .trim()
+            != reference
+    {
+        return Err(
+            "ComfyUI-KJNodes install does not match its pinned revision; re-provision required"
+                .into(),
+        );
+    }
+    validate_preview_sources(&node, reference)
 }
 
 // Only explicit Upgrade/Reinstall extends a legacy plan; opening/starting stays read-only.
@@ -1608,6 +1686,11 @@ fn foreign_nodes(plan: &Plan) -> Option<String> {
         })
         .map(|entry| entry.file_name().to_string_lossy().into_owned())
         .filter(|name| {
+            if name == "ComfyUI-KJNodes" {
+                return plan.preview_ref.is_none()
+                    || validate_preview_install(plan, Path::new(&plan.request.storage_path))
+                        .is_err();
+            }
             ![
                 "ComfyUI-GGUF",
                 "ComfyUI-DaSiWa-Nodes",
@@ -1630,9 +1713,12 @@ fn persist_updated_plan(plan: &Plan) -> Result<(), String> {
     if serde_json::to_value(&expected).map_err(|e| e.to_string())? == actual {
         return Ok(());
     }
-    // Allowed differences: the GGUF upgrade and a verified PyTorch update.
+    // Allowed differences: explicit companion upgrades and a verified PyTorch update.
     if plan.gguf_ref.is_some() {
         enable_gguf_upgrade(&mut expected);
+    }
+    if plan.preview_ref.is_some() {
+        enable_preview_upgrade(&mut expected);
     }
     expected.torch = plan.torch.clone();
     expected.hardware = plan.hardware.clone();
@@ -2031,6 +2117,44 @@ async fn packages(
         gguf_revision = Some(fetched);
         hyperflow_revision = Some(hyperflow_fetched);
     }
+    let mut preview_revision = None;
+    if let Some(reference) = plan.preview_ref.as_deref() {
+        if reference != KJNODES_REVISION {
+            return Err("Unsupported immutable ComfyUI-KJNodes revision".into());
+        }
+        step(inner, "preview");
+        let node = node_target(comfy, "ComfyUI-KJNodes")?;
+        std::fs::create_dir_all(comfy.join("custom_nodes")).map_err(|e| e.to_string())?;
+        let fetched = if upgrade {
+            checkout(git, KJNODES, reference, &node, root, inner, cancel).await?
+        } else {
+            head(git, &node, root, inner, cancel).await?
+        };
+        if fetched != reference {
+            return Err("ComfyUI-KJNodes revision does not match the pinned source".into());
+        }
+        validate_preview_sources(&node, reference)?;
+        run(
+            uv,
+            &[
+                "pip",
+                "install",
+                "--python",
+                py,
+                "--index",
+                &selected.index_url,
+                "-r",
+                "requirements.txt",
+            ],
+            &node,
+            root,
+            inner,
+            cancel,
+        )
+        .await
+        .map_err(|e| format!("Required ComfyUI-KJNodes dependencies failed: {e}"))?;
+        preview_revision = Some(fetched);
+    }
     let mut node_revision = None;
     if plan
         .request
@@ -2134,6 +2258,11 @@ async fn packages(
             } else {
                 "legacy"
             },
+            if preview_revision.is_some() {
+                "preview"
+            } else {
+                "legacy"
+            },
         ],
         comfy,
         root,
@@ -2143,7 +2272,7 @@ async fn packages(
     )
     .await?;
     cancelled(cancel)?;
-    let manifest = serde_json::json!({"planId":plan.id,"comfyRevision":revision,"nodepackRevision":node_revision,"ggufRevision":gguf_revision,"hyperflowRevision":hyperflow_revision,"backend":plan.request.backend,"hardware":plan.hardware,"torchProfile":selected,"python":py,"versions":versions.trim(),"generationReady":false});
+    let manifest = serde_json::json!({"planId":plan.id,"comfyRevision":revision,"nodepackRevision":node_revision,"ggufRevision":gguf_revision,"hyperflowRevision":hyperflow_revision,"previewRevision":preview_revision,"backend":plan.request.backend,"hardware":plan.hardware,"torchProfile":selected,"python":py,"versions":versions.trim(),"generationReady":false});
     std::fs::write(
         root.join("deas-install.json"),
         serde_json::to_vec_pretty(&manifest).map_err(|e| e.to_string())?,
@@ -2156,6 +2285,7 @@ async fn packages(
 mod tests {
     use super::*;
     include!("install_gguf_tests.rs");
+    include!("install_preview_tests.rs");
     include!("install_update_tests.rs");
 
     #[test]
@@ -2397,6 +2527,7 @@ mod tests {
         r.storage_path = root.to_str().unwrap().into();
         let persisted = Plan {
             gguf_ref: None,
+            preview_ref: None,
             reopen_id: None,
             id: uuid::Uuid::new_v4().to_string(),
             request: r.clone(),
@@ -3167,6 +3298,7 @@ mod tests {
             r.storage_path = tmp.path().to_str().unwrap().into();
             let plan = Plan {
                 gguf_ref: None,
+                preview_ref: None,
                 reopen_id: None,
                 id: uuid::Uuid::new_v4().to_string(),
                 request: r,

@@ -5,6 +5,7 @@ import type { RecipeAllowlist } from '../../lib/execution';
 import { defaultVideoOutput, isVideoEnhanceIntent, isVideoIntent, videoFrames } from '../../lib/videoIntent';
 import { aceDurationStep, aceMusicProfile, isAceMusicIntent, isAceSettings, isMusicIntent, type AceStepMusicIntent } from '../../lib/musicIntent';
 import { defaultOptions, type OptionsPref } from './OptionsPanel';
+import { relativeMediaPath } from '../../lib/media';
 import builtinFamilies from '../../families/builtin.json' with { type: 'json' };
 
 /** Historical data only: these identities never grant live job or filesystem authority. */
@@ -35,6 +36,20 @@ export async function checkHistoryOutputs(jobId:string):Promise<HistoryOutputAva
   return value;
  }catch(error){void invoke('native_logs_history_error',{operation:'outputs'}).catch(()=>{});throw error;}
 }
+/** Exact lexical candidate only; native availability binds it to the current approved root. */
+export async function readHistoryForMedia(path:string):Promise<HistoryRecord|null> {
+ const snapshot=await readHistory();
+ const matches=snapshot.records.flatMap(record=>{
+  if(record.origin!=='studio'||!record.outputRoot||isVideoEnhanceIntent(record.intent))return [];
+  const relative=relativeMediaPath(path,record.outputRoot);
+  return record.outputs.flatMap((output,index)=>relative&&relative===[output.subfolder,output.filename].filter(Boolean).join('/')?[{record,index}]:[]);
+ });
+ if(matches.length!==1)return null;
+ const {record,index}=matches[0];
+ const available=await checkHistoryOutputs(record.id);
+ return available[index]==='available'?record:null;
+}
+
 export interface RestoreContext {
  endpoint:string; inputRoot?:string; allow:RecipeAllowlist|null;
  models:readonly {name:string;family?:string}[];

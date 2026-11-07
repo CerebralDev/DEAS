@@ -553,6 +553,7 @@
   "studio.run.opt.enhancedPreview.hint": "有兼容解码器时显示去噪动画，默认开启。不会下载权重。关闭后立即恢复普通静态预览，后续运行不再包含增强预览；不会停止运行中任务已获准的预览计算。",
   "studio.run.opt.enhancedPreview.videoOnly": "请选择视频流程。普通预览仍然可用。",
   "studio.run.opt.enhancedPreview.unread": "读取后端选项以检查兼容的预览解码器。普通预览仍然可用。",
+  "studio.run.opt.enhancedPreview.producerMissing": "后端缺少 ModelPreviewOverrideKJ。请通过 Backend → 升级 → ComfyUI 和节点包安装固定版本的预览组件，然后重新读取选项。不会下载模型权重。",
   "studio.run.opt.enhancedPreview.missing": "未报告适用于此系列的兼容预览解码器和模型。普通预览仍然可用。",
   "studio.run.opt.attention": "注意力后端",
   "studio.run.opt.attention.default": "后端默认",

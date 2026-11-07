@@ -23,6 +23,21 @@ test.each(['clean','deep','stems'] as const)('audio metadata shows the submitted
  expect(screen.queryByText('Audio enhancement')).toBeNull();
 });
 
+test('video metadata shows full authored prompt while retaining malformed legacy graph only in collapsed diagnostics',async()=>{
+ localStorage.setItem('deas.locale.v1','en');
+ const prompt='subject_definitions:\nA person says "NaN".\n\nsummary:\nForest.\n\ndetailed_description:\nWalk slowly.';
+ const graph={D:{class_type:'MiniMaxH3Director',inputs:{prompt,width:544,height:672,frame_rate:24}},G:{class_type:'MiniMaxH3DirectorGuide',inputs:{guide:['D',0]}},B:{class_type:'BasicGuider',inputs:{conditioning:['G',0]}},'5':{class_type:'SamplerCustomAdvanced',inputs:{guider:['B',0]}},cache:{is_changed:['CACHE_NAN']}};
+ const raw=JSON.stringify(graph).replace('"CACHE_NAN"','NaN');
+ vi.mocked(readImageMetadata).mockResolvedValueOnce([['prompt',raw]]);
+ const {container}=render(<I18nProvider><GenerationMetadata job={null} media={{name:'clip.mp4',path:'/video/clip.mp4',src:'asset:///clip.mp4',media:'video'}}/></I18nProvider>);
+ await screen.findByText('Technical details — immutable API graph');
+ const rows=container.querySelector('dl')!;
+ expect(rows.textContent).toContain(prompt);expect(rows.textContent).not.toContain('class_type');
+ expect(rows.textContent).not.toContain('CFG');
+ expect(container.querySelector('details')?.open).toBe(false);
+ expect(container.querySelector('details pre')?.textContent).toBe(`prompt\n${raw}`);
+});
+
 test('renders native generation settings as text and switches with the selected job without stale metadata',()=>{
  localStorage.setItem('deas.locale.v1','en');
  const {container,rerender}=render(<I18nProvider><GenerationMetadata job={job}/></I18nProvider>);

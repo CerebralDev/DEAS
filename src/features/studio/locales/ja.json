@@ -553,6 +553,7 @@
   "studio.run.opt.enhancedPreview.hint": "対応デコーダーがある場合にノイズ除去中のアニメーションを表示します（既定でオン）。重みはダウンロードしません。オフにすると通常の静止画に戻り、次回の実行から拡張プレビューを省略します。実行中のジョブで既に許可されたプレビュー計算は停止しません。",
   "studio.run.opt.enhancedPreview.videoOnly": "動画パイプラインを選択してください。通常のプレビューは引き続き利用できます。",
   "studio.run.opt.enhancedPreview.unread": "バックエンドのオプションを読み込み、対応するプレビューデコーダーを確認してください。通常のプレビューは利用できます。",
+  "studio.run.opt.enhancedPreview.producerMissing": "バックエンドに ModelPreviewOverrideKJ がありません。Backend → アップグレード → ComfyUI とノードパックから固定版のプレビュー機能をインストールし、オプションを再取得してください。モデルの重みはダウンロードしません。",
   "studio.run.opt.enhancedPreview.missing": "このファミリーに対応するプレビューデコーダーとモデルが報告されていません。通常のプレビューは利用できます。",
   "studio.run.opt.attention": "アテンションバックエンド",
   "studio.run.opt.attention.default": "バックエンドの既定",

@@ -9,11 +9,11 @@ type Props={reference:VideoRef;onChange:(x:Partial<VideoRef>)=>void};
 /** A new source or stream gets a fresh player; saved trim values remain untouched. */
 export function ReferenceMedia(props:Props){
  const r=props.reference;
- return <ReferencePlayer key={`${r.item.src}:${r.item.media}:${r.mediaMode}`} {...props}/>;
+ return <ReferencePlayer key={`${r.item.path}:${r.item.src}:${r.item.media}:${r.mediaMode}`} {...props}/>;
 }
 function ReferencePlayer({reference:r,onChange}:Props){
  const {t}=useI18n();const media=useRef<HTMLMediaElement|null>(null),nativeControl=useRef<NativeVideoControl|null>(null);
- const native=nativeVideo()&&r.item.media==='video'&&!!r.item.path;
+ const native=nativeVideo()&&r.item.media!=='image'&&!!r.item.path;
  const [duration,setDuration]=useState<number|null>(null),[position,setPosition]=useState(0),[playing,setPlaying]=useState(false),[error,setError]=useState('');
  const crop=useRef(false),timer=useRef<ReturnType<typeof setTimeout>|undefined>(undefined),request=useRef(0);
  const start=r.trimStart??0,end=r.trimEnd??duration??0;
@@ -28,11 +28,11 @@ function ReferencePlayer({reference:r,onChange}:Props){
   el.pause();if(atEnd){el.currentTime=bounds.current.end;setPosition(el.currentTime);}
  };
  const logged=useRef(false);
- const reportError=(key:string)=>{
-  setError(t(`studio.run.video.preview.${key}`));
+ const reportError=(key:string,detail?:string)=>{
+  setError(`${t(`studio.run.video.preview.${key}`)}${detail?` ${detail}`:''}`);
   if(isTauri()&&!logged.current){logged.current=true;void invoke('native_logs_reference_media_error').catch(()=>{});}
  };
- const fail=(key:string)=>{stop();reportError(key);};
+ const fail=(key:string,detail?:string)=>{stop();reportError(key,detail);};
  const arm=()=>{
   clearTimer();const el=media.current;if(!el||!crop.current)return;
   const b=bounds.current;
@@ -75,7 +75,7 @@ function ReferencePlayer({reference:r,onChange}:Props){
  const seconds=(n:number)=>Number.isFinite(n)?n.toFixed(2):t('studio.run.video.preview.unknown');
  return <div className="reference-media">
   {image?<img className="reference-media-visual" src={r.item.src} alt={r.item.name} onError={()=>reportError('loadError')}/>:<>
-   {native?<NativeVideo source={{path:r.item.path!}} label={r.item.name} muted={r.mediaMode==='video'} audioOnly={r.mediaMode==='audio'} controlRef={nativeControl} onStatus={s=>{setDuration(!s.error&&s.duration>0?s.duration:null);if(s.duration>0&&r.sourceDuration!==s.duration)onChange({sourceDuration:s.duration});setPosition(s.position);if(s.paused){crop.current=false;setPlaying(false);}}}/>:audio?<audio ref={el=>{media.current=el;}} src={r.item.src} aria-label={r.item.name} {...events}/>:<video className="reference-media-visual" ref={el=>{media.current=el;}} src={r.item.src} aria-label={r.item.name} muted={r.mediaMode==='video'} {...events}/>}
+   {native?<NativeVideo source={{path:r.item.path!}} label={r.item.name} muted={!audio&&r.mediaMode==='video'} audioOnly={audio} controlRef={nativeControl} onStatus={s=>{const seconds=!s.error&&Number.isFinite(s.duration)&&s.duration>0?s.duration:null;setDuration(seconds);if(s.error){fail('loadError',s.error);return;}if(seconds!==null&&r.sourceDuration!==seconds)onChange({sourceDuration:seconds});setPosition(s.position);if(s.paused){crop.current=false;setPlaying(false);}}}/>:audio?<audio ref={el=>{media.current=el;}} src={r.item.src} aria-label={r.item.name} {...events}/>:<video className="reference-media-visual" ref={el=>{media.current=el;}} src={r.item.src} aria-label={r.item.name} muted={r.mediaMode==='video'} {...events}/>}
    {r.item.media==='video'&&<select aria-label={t('studio.run.video.refMode',{name:r.item.name})} value={r.mediaMode} onChange={e=>onChange({mediaMode:e.target.value as VideoRef['mediaMode']})}>
     {(['video','video_audio','audio'] as const).map(mode=><option key={mode} value={mode}>{t(`studio.run.video.mode.${mode}`)}</option>)}
    </select>}

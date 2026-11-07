@@ -4,11 +4,12 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
 pub const FILE: &str = "deas-settings.json";
-pub(crate) const MODEL_FOLDERS: [&str; 16] = [
+pub(crate) const MODEL_FOLDERS: [&str; 17] = [
     "checkpoints",
     "diffusion_models",
     "loras",
     "vae",
+    "vae_approx",
     "text_encoders",
     "clip",
     "clip_vision",
@@ -50,7 +51,9 @@ pub(crate) fn model_locations(root: &Path) -> Vec<(&'static str, PathBuf)> {
 
 fn model_yaml(yaml: &mut String, root: &Path) -> Result<(), String> {
     // shortcut: nested junction prefixes still need backend traversal; revisit if ComfyUI supports OS448-safe traversal.
-    let locations = model_locations(root);
+    let mut locations = model_locations(root);
+    // Tiny decoders may already live under vae; expose them without moving weights or changing scans.
+    locations.push(("vae_approx", root.join("vae")));
     for category in MODEL_FOLDERS {
         let paths: Vec<_> = locations
             .iter()
@@ -301,6 +304,8 @@ mod tests {
             (&primary, "Lora", "loras"),
             (&extra, "Stable-Diffusion", "checkpoints"),
             (&extra, "loras", "loras"),
+            (&primary, "vae_approx", "vae_approx"),
+            (&extra, "vae", "vae"),
         ]
         .into_iter()
         .enumerate()
@@ -325,7 +330,10 @@ mod tests {
                     .unwrap();
                 assert!(output.status.success(), "{output:?}");
             }
-            expected.push((category, name));
+            expected.push((category, name.clone()));
+            if category == "vae" {
+                expected.push(("vae_approx", name));
+            }
         }
         write(
             root,
@@ -345,7 +353,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         junction_configuration_fixture(tmp.path());
         let yaml = std::fs::read_to_string(tmp.path().join("deas-models.yaml")).unwrap();
-        for index in 0..4 {
+        for index in 0..6 {
             let target =
                 dunce::canonicalize(tmp.path().join(format!("actual # café \u{85} {index}")))
                     .unwrap();
@@ -417,6 +425,65 @@ if os.name=='nt':
             "{}",
             String::from_utf8_lossy(&output.stderr)
         );
+    }
+
+    #[test]
+    fn preview_vae_categories_register_all_roots_without_changing_weights_or_scan_categories() {
+        let tmp = TempDir::new().unwrap();
+        let primary = tmp.path().join("models");
+        let extra = tmp.path().join("extra models");
+        for root in [&primary, &extra] {
+            for category in ["vae", "vae_approx"] {
+                let directory = root.join(category).join("MiniMaxH3");
+                std::fs::create_dir_all(&directory).unwrap();
+                std::fs::write(directory.join("taeh3.safetensors"), b"original fixture").unwrap();
+            }
+        }
+        write(
+            tmp.path(),
+            Folders {
+                models: Some(primary.to_str().unwrap().into()),
+                extra_models: vec![extra.to_str().unwrap().into()],
+                ..Folders::default()
+            },
+        )
+        .unwrap();
+        backend_args(tmp.path()).unwrap();
+        let yaml = std::fs::read_to_string(tmp.path().join("deas-models.yaml")).unwrap();
+        for block in ["deas:", "deas-extra-1:"] {
+            let block = yaml
+                .split(block)
+                .nth(1)
+                .unwrap()
+                .split("\ndeas")
+                .next()
+                .unwrap();
+            assert!(block.contains("  vae: vae\n"), "{block}");
+            assert!(
+                block.contains("  vae_approx: |\n    vae_approx\n    vae\n"),
+                "{block}"
+            );
+        }
+        assert_eq!(model_folder_category("vae_approx"), Some("vae_approx"));
+        for root in [&primary, &extra] {
+            let models = crate::downloads::models::scan_roots(std::slice::from_ref(root)).unwrap();
+            assert_eq!(models.len(), 2);
+            for category in ["vae", "vae_approx"] {
+                assert_eq!(
+                    models
+                        .iter()
+                        .filter(|model| model.category == category)
+                        .count(),
+                    1
+                );
+                let directory = root.join(category).join("MiniMaxH3");
+                assert_eq!(std::fs::read_dir(&directory).unwrap().count(), 1);
+                assert_eq!(
+                    std::fs::read(directory.join("taeh3.safetensors")).unwrap(),
+                    b"original fixture"
+                );
+            }
+        }
     }
 
     #[test]

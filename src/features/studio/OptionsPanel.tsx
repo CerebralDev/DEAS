@@ -57,7 +57,7 @@ export function OptionsPanel({value:p,onChange,allow,family,video=false,imageInp
  const keep=(list:string[],v:string)=>v&&!list.includes(v)?[...list,v]:list;
  const attentions=[...(allow?.attention??[]).map(a=>`a:${a}`),...(allow?.sage??[]).map(s=>`s:${s}`)];
  const preview=video&&family?allow?.videoPreviews?.[family]:undefined;
- const previewReason=!video?'studio.run.opt.enhancedPreview.videoOnly':!allow?'studio.run.opt.enhancedPreview.unread':!preview?'studio.run.opt.enhancedPreview.missing':'';
+ const previewReason=!video?'studio.run.opt.enhancedPreview.videoOnly':!allow?'studio.run.opt.enhancedPreview.unread':!preview?(!has('ModelPreviewOverrideKJ')?'studio.run.opt.enhancedPreview.producerMissing':'studio.run.opt.enhancedPreview.missing'):'';
  const h3=family!=='minimax-h3'?'studio.run.opt.cache.h3Only':has('SpectrumApplyMiniMaxH3')?'studio.run.pipe.noRecipe':'studio.run.opt.missing.h3';
  // Help sits behind "?" to keep the grid dense; an invalid value stays visible below the control.
  const card=(id:string,control:React.ReactNode,note:React.ReactNode,error?:string,reset?:()=>void)=><div className="wb-option" data-option={id}>

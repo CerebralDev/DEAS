@@ -117,6 +117,34 @@ class PublicationTests(unittest.TestCase):
         self.assertEqual(set(self.root.iterdir()), set(self.sources))
 
 
+class MetadataTests(unittest.TestCase):
+    def test_marked_save_clones_graph_and_strips_only_execution_cache(self):
+        captured = []
+        def save(self, **kwargs):
+            captured.append(kwargs)
+            return {'ui': {}}
+        wrapped = adapter.wrap_save(save)
+        graph = {'D': {'class_type': 'MiniMaxH3Director', 'inputs': {'prompt': 'NaN and "NaN" stay literal'}, 'is_changed': [float('nan')]}}
+        info = {'deas_output_naming': True, 'workflow': {'nodes': [], 'links': []}}
+        wrapped(None, prompt=graph, extra_pnginfo=info)
+        saved = captured[0]
+        self.assertNotIn('is_changed', saved['prompt']['D'])
+        self.assertIn('is_changed', graph['D'])
+        self.assertEqual(saved['prompt']['D']['inputs'], graph['D']['inputs'])
+        self.assertIsNot(saved['prompt']['D']['inputs'], graph['D']['inputs'])
+        self.assertIsNot(saved['extra_pnginfo']['workflow'], info['workflow'])
+        wrapped(None, prompt=graph, extra_pnginfo={})
+        self.assertIs(captured[1]['prompt'], graph)
+
+    def test_nonfinite_real_settings_fail_before_publication(self):
+        called = []
+        wrapped = adapter.wrap_save(lambda *a, **kw: called.append(kw))
+        for value in (float('nan'), float('inf'), -float('inf')):
+            with self.assertRaises(ValueError):
+                wrapped(None, prompt={'5': {'inputs': {'cfg': value}}}, extra_pnginfo={'deas_output_naming': True})
+        self.assertEqual(called, [])
+
+
 class CapabilityTests(unittest.TestCase):
     def test_unsupported_savers_do_not_break_prompt_or_other_savers(self):
         request = {'extra_data': {'extra_pnginfo': {'deas_output_naming': True}}}

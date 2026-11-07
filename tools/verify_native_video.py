@@ -19,6 +19,7 @@ output.mkdir(parents=True, exist_ok=False)
 script = r'''
 (async()=>{
  const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+ if(FIXTURE_URL&&!location.pathname.includes('/tools/inpaint-fixture.html')){location.replace(FIXTURE_URL);return;}
  await sleep(2000);
  const timings=[];
  const call=async(cmd,args={})=>{const start=performance.now();const value=await window.__TAURI_INTERNALS__.invoke(cmd,args);if(cmd==='native_video_update')timings.push({kind:args.action.kind,ms:performance.now()-start});return value;};
@@ -27,15 +28,36 @@ script = r'''
  const until=async(fn,label)=>{for(let n=0;n<160;n++){const v=await fn();if(v)return v;await sleep(100);}throw Error('Timeout '+label);};
  try {
   await report({phase:'ready'});
-  document.querySelector('[data-studio-tab="generate"]').click();
+  document.querySelector('[data-studio-tab="generate"]')?.click();
   await sleep(400);
   document.querySelector('[data-dock-tab="media"]').click();
   await sleep(400);
-  await call('plugin:event|emit',{event:'tauri://drag-drop',payload:{paths:[FILES[0]],position:{x:300,y:700}}});
+  const picker=await until(()=>document.querySelector('#studio-dock .media-library'),'Media picker');
+  const drop=picker.getBoundingClientRect();
+  await call('plugin:event|emit',{event:'tauri://drag-drop',payload:{paths:[FILES[0]],position:{x:(drop.left+20)*devicePixelRatio,y:(drop.top+20)*devicePixelRatio}}});
   await until(()=>document.querySelector('[data-native-video]'),'Workbench preview');
-  const play=await until(()=>{const b=document.querySelector('.native-video-controls button');return b&&!b.disabled?b:null;},'Workbench ready');
+  const play=await until(()=>{const b=document.querySelector('.native-video-controls button');return b&&!b.disabled&&Number(document.querySelector('.native-video-seek')?.max)>0?b:null;},'Workbench decoded');
   play.click();await sleep(2200);
   await report({phase:'workbench',html:document.querySelector('[data-native-video]').outerHTML});
+  const player=document.querySelector('[data-native-video]');
+  const metadata=document.querySelector('[data-metadata-toggle]');
+  metadata.click();
+  const geometry=await until(()=>{
+   const surface=player.querySelector('.native-video-surface'),panel=document.querySelector('.wb-stage > .wb-metadata');
+   if(!surface||!panel)return null;
+   const video=surface.getBoundingClientRect(),meta=panel.getBoundingClientRect();
+   return video.width>0&&video.right<meta.left?{video:{left:video.left,right:video.right,top:video.top,bottom:video.bottom},metadata:{left:meta.left,right:meta.right}}:null;
+  },'non-overlapping native video metadata');
+  await sleep(1200);
+  assert(document.querySelector('[data-native-video]')===player,'Metadata remounted the native player');
+  await report({phase:'metadata',geometry,html:player.outerHTML});
+  const more=document.querySelector('[data-more]');
+  assert(more,'Missing video More control');more.click();
+  await until(()=>more.closest('details').open,'More open');
+  more.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));await sleep(100);
+  assert(!more.closest('details').open&&document.activeElement===more,'More Escape/focus');
+  metadata.click();await sleep(200);
+  assert(document.querySelector('[data-native-video]')===player,'Closing Metadata remounted the player');
   assert(!document.querySelector('video'),'Linux created a WebKit decoder');
   document.querySelector('[data-preview-close]').click();await sleep(300);
   for(const path of FILES) {
@@ -60,7 +82,7 @@ script = r'''
  }catch(e){await report({phase:'failed',error:String(e)});}
  await call('plugin:window|destroy',{label:'main'});
 })();
-'''.replace('FILES', json.dumps([str(Path(p).resolve()) for p in files]))
+'''.replace('FILES', json.dumps([str(Path(p).resolve()) for p in files])).replace('FIXTURE_URL', json.dumps(os.environ.get('DEAS_VIDEO_FIXTURE_URL', '')))
 (output / 'probe.js').write_text(script, encoding='utf-8')
 env = dict(os.environ, DEAS_VIDEO_TEST_SCRIPT=str(output / 'probe.js'), DEAS_VIDEO_PROBE='1', XDG_CONFIG_HOME=str(output / 'config'), XDG_DATA_HOME=str(output / 'data'), XDG_CACHE_HOME=str(output / 'cache'))
 with (output / 'native.log').open('w') as log:

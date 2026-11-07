@@ -1,0 +1,30 @@
+{
+  "revision": "d3cfe21625e5170126ce06fbfcfe1d88108688c3",
+  "files": {
+    "__init__.py": "14640298feed1aad22198c5bfbd645ece19be125a6114645aa73c55cc9264d6e",
+    "nodes/audioscheduler_nodes.py": "8fb0693437380cc438c1530ecfa1f1422d1cc99e56d007152a1fb93cee3413cc",
+    "nodes/batchcrop_nodes.py": "a7fca222bbb223e84820131fc3549cf7a87ed44b1e9875f7a0914d37aafabaf7",
+    "nodes/context_windows_visualizer.py": "79a7eec8cf1b7fd698ad0c1d6ff28c5ce57d01e916be44b4ff3922172e3bdf99",
+    "nodes/curve_nodes.py": "27024564bd835c648f54d9d927c8544833380ee49ce04cd2e16ff8fffe1d6da0",
+    "nodes/hdr_preview_node.py": "853d0dd37a750b3c48bc01fe5267aad9edfb868385962ff4de15f2eda0dd07ab",
+    "nodes/ideogram4_nodes.py": "bad2a7f8b29782431431afc8bd591b388454d3698a1b3dfd06d4865729db7020",
+    "nodes/image_nodes.py": "3a83fb99219f65da19ad16aee7e1473ee7ee7e401f43662a5dcbba73f1b54eec",
+    "nodes/image_transform_node.py": "2315f60597e5c5a3603078f534efefd17f970175c9df0307fb37044f631bfcde",
+    "nodes/lora_nodes.py": "bc7df0d5fd5210470b0f040d437ad3331ae88c8fbb1758e54f3d34543ff20497",
+    "nodes/ltxv_nodes.py": "11286583c56e653dbd57f5e8eda6902c84b759f16b359b3bf0c895b43e6b5364",
+    "nodes/mask_nodes.py": "aae14dc68daff37ba8bab51355567377c80d4bf4d9d3765f2983b2213047e89d",
+    "nodes/minimax_nodes.py": "c67d638cd1f060ff4dd53dc3843aab77b980ea783b24ca4271300cbe040cb91b",
+    "nodes/model_optimization_nodes.py": "f77bb07d3b086c18e55143a125e4f91debac6fcc9fe6e0d5856f65381ad728dd",
+    "nodes/nodes.py": "e9e109717c12b8f0c61c3401908fa9d1f07d23c94debb031fb85dfa2b4d9331f",
+    "nodes/nodes_looping.py": "5ab988945c365d18e19c7a8dd73a7affa6edd54bea6ba7978b002a2c5a5dec93",
+    "nodes/preview_override_node.py": "d07c8e5ff7d7abd3e31acefe2cf29f618b5da5341b3b434e72ec2ac0953230b0",
+    "nodes/sharpen_nodes.py": "40f07e9bd71dcea8ef8bdb21a04d9585bfb2412974025a6ee216e3dc58b47758",
+    "nodes/tiny_vae.py": "61bf4daa634ef6bb901ff8630071caed12e733d17e7c4ba50082dc0aa5506591",
+    "nodes/triton_vae.py": "1181c51c7ed44d40f4fde5e970b1b32dc60a3d26e43d0a4c814d49ec0132e3f0",
+    "requirements.txt": "e8cc1fb089c6e74bb5f326e949fd89ea7653de0d193d7a385c38af44e66656bd",
+    "utility/fluid.py": "a78f8575f4f201e0c15d0470f9e1248ff6e2c6e511ea1ddd8090bef7d4c423a4",
+    "utility/magictex.py": "14c8a344fa1c49701d258991456770fbbbb4ed732e4edbd77862a273a3c808a8",
+    "utility/numerical.py": "ce28bbef99a0f15cd4f47c5bf649814ae3f9243517235cd5e4aedd25d09b5802",
+    "utility/utility.py": "00f7132ca060a3d2c064455b9c29a1fee7c73c3fe276150a13fd919ea2e6ee8f"
+  }
+}

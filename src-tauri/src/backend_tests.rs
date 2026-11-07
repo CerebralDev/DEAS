@@ -39,6 +39,7 @@ pub(crate) fn fixture(script: &str) -> (tempfile::TempDir, Approved) {
     fs::write(root.join("ComfyUI/main.py"), script).unwrap();
     let plan = Plan {
         gguf_ref: None,
+        preview_ref: None,
         reopen_id: None,
         id: uuid::Uuid::new_v4().to_string(),
         request: Request {

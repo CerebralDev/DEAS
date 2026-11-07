@@ -123,7 +123,8 @@ async fn gguf_checkout_refuses_git_worktree_redirection_before_writes() {
 fn gguf_pinned_source_contents_are_verified_not_just_head_text() {
     let source = PathBuf::from(std::env::var_os("DEAS_GGUF_SOURCE").unwrap());
     let tmp = scratch();
-    let plan = Engine::default().plan(request(tmp.path())).unwrap();
+    let mut plan = Engine::default().plan(request(tmp.path())).unwrap();
+    plan.preview_ref = None;
     let node = tmp.path().join("ComfyUI/custom_nodes/ComfyUI-GGUF");
     std::fs::create_dir_all(node.join(".git")).unwrap();
     let manifest: serde_json::Value =
@@ -148,6 +149,7 @@ fn gguf_pinned_source_contents_are_verified_not_just_head_text() {
 fn gguf_invalid_plan_failure_reaches_shared_log() {
     let tmp = scratch();
     let mut plan = Engine::default().plan(request(tmp.path())).unwrap();
+    plan.preview_ref = None;
     plan.gguf_ref = Some("--not-a-commit".into());
     assert!(validate_gguf_install(&plan, tmp.path()).is_err());
     assert!(crate::logs::native_logs(0).iter().any(|entry| entry.source
@@ -177,6 +179,7 @@ fn gguf_baseline_is_planned_without_a_new_option_or_files() {
 fn gguf_legacy_plan_validation_is_read_only_and_needs_no_pack() {
     let tmp = scratch();
     let mut plan = Engine::default().plan(request(tmp.path())).unwrap();
+    plan.preview_ref = None;
     plan.gguf_ref = None;
     plan.steps.retain(|s| s.id != "gguf");
     let legacy = serde_json::to_value(&plan).unwrap();
@@ -190,7 +193,8 @@ fn gguf_legacy_plan_validation_is_read_only_and_needs_no_pack() {
 #[test]
 fn gguf_reopen_requires_pin_manifest_and_regular_source_files() {
     let tmp = scratch();
-    let plan = Engine::default().plan(request(tmp.path())).unwrap();
+    let mut plan = Engine::default().plan(request(tmp.path())).unwrap();
+    plan.preview_ref = None;
     assert!(validate_gguf_install(&plan, tmp.path()).is_err());
     let node = tmp.path().join("ComfyUI/custom_nodes/ComfyUI-GGUF");
     std::fs::create_dir_all(node.join(".git")).unwrap();

@@ -381,6 +381,37 @@ mod tests {
         );
     }
 
+    #[test]
+    fn video_preview_discovery_preserves_registered_nested_tiny_vae_identifiers() {
+        let base = reqwest::Url::parse("http://127.0.0.1:8188/").unwrap();
+        let mut info = nodes();
+        info["ModelPreviewOverrideKJ"] = preview_schema();
+        info["ModelPreviewOverrideKJ"]["input"]["optional"]["tiny_vae"] = json!(["COMBO", {"options":[
+            "none", "Wan/taew2_2.safetensors", "MiniMaxH3/taeh3-copy.safetensors",
+            "MiniMaxH3/taeh3.safetensors", "Wan/taew2_1.safetensors"
+        ]}]);
+        let previews = parse(&base, &info).unwrap()["allowlist"]["videoPreviews"].clone();
+        for family in ["minimax-h3", "minimax-h3-hyperflow"] {
+            assert_eq!(
+                previews[family],
+                json!({"decoder":"tiny","model":"MiniMaxH3/taeh3.safetensors"})
+            );
+        }
+        assert_eq!(
+            previews["wan"],
+            json!({"decoder":"tiny","model":"Wan/taew2_1.safetensors"})
+        );
+        info.as_object_mut()
+            .unwrap()
+            .remove("ModelPreviewOverrideKJ");
+        info["VAELoader"]["input"]["required"]["vae_name"] =
+            json!([["MiniMaxH3/taeh3.safetensors", "Wan/taew2_1.safetensors"]]);
+        assert_eq!(
+            parse(&base, &info).unwrap()["allowlist"]["videoPreviews"],
+            json!({})
+        );
+    }
+
     fn preview_schema() -> Value {
         json!({"input":{"required":{
             "model":["MODEL"],"max_resolution":["INT",{"min":0,"max":8192}],
@@ -948,6 +979,27 @@ mod tests {
             .as_array()
             .unwrap()
             .contains(&json!("DualCLIPLoaderGGUF")));
+    }
+
+    #[test]
+    #[ignore = "read-only actual KJ schema replay; set DEAS_KJ_PREVIEW_SCHEMA to exported object_info entry"]
+    fn video_preview_actual_kj_schema_replay() {
+        let path = std::env::var_os("DEAS_KJ_PREVIEW_SCHEMA").unwrap();
+        let actual: Value = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+        let mut info = nodes();
+        info["ModelPreviewOverrideKJ"] = actual;
+        info["VAELoader"] =
+            json!({"input":{"required":{"vae_name":[["LTX2/taeltx2_3.safetensors"]]}}});
+        let result = video_previews(&info);
+        assert_eq!(
+            result["minimax-h3"],
+            json!({"decoder":"tiny","model":"MiniMaxH3/taeh3.safetensors"})
+        );
+        assert_eq!(
+            result["ltx-2"],
+            json!({"decoder":"vae","model":"LTX2/taeltx2_3.safetensors"})
+        );
+        println!("Actual KJ preview discovery: {result}");
     }
 
     /// Real object_info shapes: core v3 combo (with spaces), KJNodes v1 combo (with `++`, `disabled`).

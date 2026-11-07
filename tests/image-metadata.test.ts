@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { generationSettings } from '../src/lib/imageMetadata.ts';
+import { generationSettings, imageMetadataRows, parseMetadataJson } from '../src/lib/imageMetadata.ts';
 import { compileRecipe, type DiagnosticImageIntentV1 } from '../src/lib/execution.ts';
 
 const intent:DiagnosticImageIntentV1={recipeId:'checkpoint-text-to-image-diagnostic',version:1,positivePrompt:' forest  ',negativePrompt:'',checkpoint:'base.safetensors',seed:42,width:512,height:768,steps:2,cfg:7,sampler:'euler',scheduler:'normal',outputPrefix:'raw/test'};
@@ -97,4 +97,40 @@ test('sampler aliases preserve the actual algorithm instead of substituting anot
  assert.equal(generationSettings([['parameters','cat\nSteps: 2, Sampler: DPM++ 2M SDE Heun']])?.sampler,'dpmpp_2m_sde_heun');
  const restart=generationSettings([['parameters','cat\nSteps: 2, Sampler: Restart']]);
  assert.equal(restart?.sampler,undefined);assert.deepEqual(restart?.skipped,['Sampler: Restart']);
+});
+
+const positive='subject_definitions:\nA character says "NaN".\\\n\nsummary:\nFull authored text, not just this summary.\n\ndetailed_description:\nWalk through a forest.';
+const graph={
+ '1':{class_type:'UNETLoader',inputs:{unet_name:'H3/model.safetensors'}},
+ L1:{class_type:'LoraLoaderModelOnly',inputs:{model:['1',0],lora_name:'H3/turbo.safetensors',strength_model:1}},
+ D:{class_type:'MiniMaxH3Director',inputs:{prompt:positive,ref2va_model:['L1',0],width:544,height:672,frame_rate:24,duration:4.458333333333333}},
+ G:{class_type:'MiniMaxH3DirectorGuide',inputs:{guide:['D',0]}},
+ B:{class_type:'BasicGuider',inputs:{model:['D',0],conditioning:['G',0]}},
+ N:{class_type:'RandomNoise',inputs:{noise_seed:4041897001}},
+ Q:{class_type:'KSamplerSelect',inputs:{sampler_name:'euler'}},
+ Z:{class_type:'BasicScheduler',inputs:{steps:6,scheduler:'simple'}},
+ '5':{class_type:'SamplerCustomAdvanced',inputs:{guider:['B',0],noise:['N',0],sampler:['Q',0],sigmas:['Z',0],latent_image:['G',1]}},
+};
+const legacy=JSON.stringify({...graph,cache:{class_type:'LoadImage',inputs:{},is_changed:['CACHE_NAN']}}).replace('"CACHE_NAN"','NaN');
+
+test('legacy NaN cache metadata yields full H3 prompt and actual sampling/model fields, never an invented CFG',()=>{
+ const entries:[string,string][]=[['prompt',legacy],['workflow','{"nodes":[],"links":[]}']];
+ const settings=generationSettings(entries);
+ assert.equal(settings?.positive,positive);assert.equal(settings?.cfg,undefined);
+ assert.equal(settings?.checkpoint,'H3/model.safetensors');assert.equal(settings?.steps,6);
+ assert.equal(settings?.sampler,'euler');assert.equal(settings?.seed,4041897001);
+ assert.deepEqual(settings?.loras,[{name:'H3/turbo.safetensors',strength:1}]);
+ assert.equal(settings?.frameRate,24);assert.equal(settings?.frames,undefined);
+ assert.deepEqual(settings?.skipped,['video.intent']);
+ const rows=imageMetadataRows(entries);
+ assert.deepEqual(rows.find(([key])=>key==='prompt'),['prompt',positive]);
+ assert.deepEqual(rows.find(([key])=>key==='model'),['model','H3/model.safetensors']);
+ assert.equal(rows.some(([key])=>key.includes('#')||key==='cfgscale'||key==='workflow'),false);
+});
+
+test('legacy token repair respects strings, escapes, boundaries and malformed/oversized input',()=>{
+ assert.deepEqual(parseMetadataJson('{"is_changed":[NaN],"text":"NaN \\\"NaN\\\" \\\\ NaN"}'),{is_changed:[null],text:'NaN "NaN" \\ NaN'});
+ for(const invalid of ['{"x":NaNevil}','{"x":undefined}','{"x":Infinity}','{"x":NaN}; globalThis.pwned=true','x'.repeat(2*1024*1024+1)])assert.throws(()=>parseMetadataJson(invalid));
+ const broken:[string,string][]=[['prompt','{"broken":NaN + 1}']];
+ assert.deepEqual(imageMetadataRows(broken),broken);assert.equal(generationSettings(broken),null);
 });

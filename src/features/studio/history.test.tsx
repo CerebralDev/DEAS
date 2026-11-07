@@ -1,6 +1,6 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 import { invoke, isTauri } from '@tauri-apps/api/core';
-import { historicalRows, historyInputSelectionContext, historyRestore, readHistory, type HistoryRecord, type RestoreContext } from './history';
+import { historicalRows, historyInputSelectionContext, historyRestore, readHistory, readHistoryForMedia, type HistoryRecord, type RestoreContext } from './history';
 import { defaultVideoOutput } from '../../lib/videoIntent';
 import type { JobIntent } from '../../lib/jobs';
 import builtinFamilies from '../../families/builtin.json' with { type: 'json' };
@@ -9,6 +9,23 @@ const image={recipeId:'checkpoint-text-to-image-diagnostic',version:1,positivePr
 const record=(intent:JobIntent=image):HistoryRecord=>({id:'history-1',clientId:'client',promptId:'prompt',origin:'studio',appVersion:'0.1.48',admittedAt:10,observedAt:20,revision:3,state:'failed',intent,outputs:[],outputRoot:null,backendOrigin:'http://127.0.0.1:7801',error:null});
 const context:RestoreContext={endpoint:'http://127.0.0.1:7801/',inputRoot:'/selected/input',models:[{name:'exact.safetensors',family:'sdxl'},{name:'style.safetensors',family:'sdxl'}],allow:{nodes:['VAEDecodeTiled','EasyCache'],checkpoints:['exact.safetensors'],samplers:['euler'],schedulers:['normal'],images:['first.png','second.png'],loras:['style.safetensors'],visionModels:['vision.safetensors'],attention:['sdpa'],compile:['inductor'],textEncoders:['clip.safetensors'],vaes:['vae.safetensors']}};
 beforeEach(()=>{vi.clearAllMocks();vi.mocked(invoke).mockResolvedValue(null);});
+
+test('exact historical output reuse requires unique root/path and native current availability',async()=>{
+ const output={filename:'film.mp4',subfolder:'starred/video/date',type:'output' as const};
+ const saved={...record(),outputRoot:'/output',outputs:[output]};
+ vi.mocked(invoke).mockImplementation(async command=>command==='native_jobs_history'?{schemaVersion:1,records:[saved],readOnly:false,error:null}:command==='native_jobs_history_outputs'?['available']:null);
+ expect(await readHistoryForMedia('/output/starred/video/date/film.mp4')).toEqual(saved);
+ expect(invoke).toHaveBeenCalledWith('native_jobs_history_outputs',{jobId:saved.id});
+ vi.mocked(invoke).mockClear();
+ expect(await readHistoryForMedia('/other/starred/video/date/film.mp4')).toBeNull();
+ expect(invoke).not.toHaveBeenCalledWith('native_jobs_history_outputs',expect.anything());
+ vi.mocked(invoke).mockImplementation(async command=>command==='native_jobs_history'?{schemaVersion:1,records:[saved,{...saved,id:'another-job'}],readOnly:false,error:null}:['available']);
+ expect(await readHistoryForMedia('/output/starred/video/date/film.mp4')).toBeNull();
+ for(const availability of ['missing','unvalidated']){
+  vi.mocked(invoke).mockImplementation(async command=>command==='native_jobs_history'?{schemaVersion:1,records:[saved],readOnly:false,error:null}:[availability]);
+  expect(await readHistoryForMedia('/output/starred/video/date/film.mp4')).toBeNull();
+ }
+});
 test.each(['ltx-2','minimax-h3'] as const)('history retains exact latent post choice and discloses missing model/node (%s)',family=>{
  const {imageFormat,imageCompression,...output}=defaultVideoOutput;void imageFormat;void imageCompression;
  const video:JobIntent={recipeId:'video-generation',version:1,positivePrompt:'film',negativePrompt:'',model:'model',textEncoder:'text',vae:'v',seed:7,width:768,height:512,frames:family==='ltx-2'?121:124,frameRate:24,steps:8,cfg:1,sampler:'euler',scheduler:'simple',outputPrefix:'raw/video/7',output,...(family==='ltx-2'?{family,ltx:{passes:1,audioVae:'audio',textProjection:'projection'},latentUpscale:{model:'missing.safetensors',scale:2}}:{family,h3:{mode:'T2VA',audioVae:'audio',shiftVideo:10,shiftAudio:3,references:[]},latentUpscale:{model:'missing.safetensors',scale:2,steps:1,denoise:0.2}})};

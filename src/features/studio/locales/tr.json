@@ -553,6 +553,7 @@
   "studio.run.opt.enhancedPreview.hint": "Uyumlu kod çözücü varsa gürültü giderme sırasında animasyon gösterir; varsayılan olarak açıktır. Ağırlık indirilmez. Kapatmak hemen normal durağan görüntüye döner ve sonraki çalıştırmalardan gelişmiş önizlemeyi çıkarır; çalışan işte önceden kabul edilen önizleme hesaplamasını durdurmaz.",
   "studio.run.opt.enhancedPreview.videoOnly": "Bir video işlem hattı seçin. Normal önizleme kullanılabilir kalır.",
   "studio.run.opt.enhancedPreview.unread": "Uyumlu önizleme kod çözücüsünü denetlemek için arka uç seçeneklerini okuyun. Normal önizleme kullanılabilir kalır.",
+  "studio.run.opt.enhancedPreview.producerMissing": "Backend üzerinde ModelPreviewOverrideKJ eksik. Sabitlenmiş önizleme bileşenini Backend → Yükselt → ComfyUI ve düğüm paketleri yoluyla kurun, ardından seçenekleri yeniden okuyun. Model ağırlıkları indirilmez.",
   "studio.run.opt.enhancedPreview.missing": "Bu aile için uyumlu önizleme kod çözücüsü ve model bildirilmedi. Normal önizleme kullanılabilir kalır.",
   "studio.run.opt.attention": "Attention arka ucu",
   "studio.run.opt.attention.default": "Backend varsayılanı",

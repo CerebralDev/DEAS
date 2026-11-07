@@ -553,6 +553,7 @@
   "studio.run.opt.enhancedPreview.hint": "Animierte Entrauschungsvorschau mit kompatiblem Decoder; standardmäßig an. Es werden keine Gewichte heruntergeladen. Aus zeigt sofort wieder das normale Standbild und lässt die erweiterte Vorschau bei künftigen Läufen weg; bereits zugelassene Vorschau-Berechnungen laufender Aufträge werden nicht gestoppt.",
   "studio.run.opt.enhancedPreview.videoOnly": "Eine Video-Pipeline auswählen. Die normale Vorschau bleibt verfügbar.",
   "studio.run.opt.enhancedPreview.unread": "Backend-Optionen lesen, um einen kompatiblen Vorschau-Decoder zu prüfen. Die normale Vorschau bleibt verfügbar.",
+  "studio.run.opt.enhancedPreview.producerMissing": "Dem Backend fehlt ModelPreviewOverrideKJ. Über Backend → Upgrade → ComfyUI und Node-Pakete den festgelegten Vorschau-Begleiter installieren, danach Options erneut einlesen. Dabei werden keine Modellgewichte heruntergeladen.",
   "studio.run.opt.enhancedPreview.missing": "Für diese Familie wurden kein kompatibler Vorschau-Decoder und kein Modell gemeldet. Die normale Vorschau bleibt verfügbar.",
   "studio.run.opt.attention": "Attention-Backend",
   "studio.run.opt.attention.default": "Backend-Standard",

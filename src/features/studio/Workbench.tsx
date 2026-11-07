@@ -36,7 +36,7 @@ import type { ImageDraft, ProjectSnapshot } from '../../lib/projects';
 import { JobOutputPreview } from './JobOutputPreview';
 import { GenerationMetadata } from './GenerationMetadata';
 import { RecentHistory } from './RecentHistory';
-import { historyInputSelectionContext, historyRestore, type HistoryRestore } from './history';
+import { historyInputSelectionContext, historyRestore, readHistoryForMedia, type HistoryRestore } from './history';
 import type { ForgeCanvasContext, ForgeSendCanvas } from '../../lib/forgeCanvas';
 import { generationDuration } from './generationDuration';
 import { generationSettings, readImageMetadata, type GenerationSettings } from '../../lib/imageMetadata';
@@ -1183,12 +1183,12 @@ const promptTools=forgeContext&&<>
   {item.media==='image'&&editModes.map(m=><button key={m} type="button" data-edit={m} aria-pressed={pipeline==='i2i'&&edit===m&&media?.src===item.src} disabled={noEditModel} title={noEditModel?t('studio.run.noModels'):undefined} onClick={()=>{if(pipeline!=='i2i')pickPipeline('i2i',true);select(item);setEdit(m);}}>{t(`studio.run.edit.${m}`)}</button>)}
  {/* More: Refine = the refine+upscale pass alone, Upscale = the upscale pass alone (no diffusion) — both use the Post-Processing settings on the shown image. Metadata actions mirror the dock's "use these settings" and add a prompt-only refill. */}
   {/* More stays on every image; Refine/Upscale are disabled with a reason outside the image-model pipelines. */}
-  {item.media==='image'&&(()=>{const only=postFor(item);const off=!native||scanning||admissionBlocked||autoPlan||resolving||!!planRun.current||historyProblems.length>0;const metaOff=off||!item.path;const postOff=isVideo||h3Image||moss||!only;return <details ref={moreRef} className="wb-more" open={moreOpen} onToggle={e=>{if(e.currentTarget.open!==moreOpen)setMoreOpen(e.currentTarget.open);}}><summary data-more aria-haspopup="menu" onClick={e=>{e.preventDefault();setMoreResult(null);setMoreOpen(!moreOpen);}}>{t('studio.run.more')}<span className="wb-more-caret" aria-hidden="true">▾</span></summary><div className="wb-more-menu">
+  {item.media==='image'&&(()=>{const only=postFor(item);const off=!native||scanning||admissionBlocked||autoPlan||resolving||!!planRun.current||historyProblems.length>0;const metaOff=off||!item.path;const postOff=isVideo||h3Image||moss||!only;return <details className="wb-more" open={moreFor===item.src}><summary data-more aria-haspopup="menu" onClick={e=>{e.preventDefault();setMoreResult(null);setMoreFor(moreFor===item.src?null:item.src);}}>{t('studio.run.more')}<span className="wb-more-caret" aria-hidden="true">▾</span></summary><div className="wb-more-menu">
    <button type="button" data-run-post disabled={off||postOff} title={t(postOff?'studio.run.post.imageOnly':'studio.run.post.refineHint')} onClick={()=>{if(only)selectMoreAction(true,()=>void run(only));}}>{t('studio.run.post.refine')}</button>
    <button type="button" data-run-upscale disabled={off||postOff} title={t(postOff?'studio.run.post.imageOnly':'studio.run.post.upscaleHint')} onClick={()=>{if(only)selectMoreAction(true,()=>void run({...only,upscaleOnly:true}));}}>{t('studio.run.post.upscale')}</button>
    <button type="button" data-more-apply disabled={metaOff} title={metaOff?t('studio.run.metadata.native'):t('studio.run.metadata.applyHint')} onClick={()=>selectMoreAction(true,()=>void applyFileSettings(item,'all'))}>{t('studio.run.metadata.apply')}</button>
    <button type="button" data-more-reuse disabled={metaOff} title={metaOff?t('studio.run.metadata.native'):t('studio.run.metadata.reuseHint')} onClick={()=>selectMoreAction(true,()=>void applyFileSettings(item,'prompt'))}>{t('studio.run.metadata.reuse')}</button></div></details>;})()}
-  {item.media==='video'&&(()=>{const off=!native||!item.path||scanning||admissionBlocked||autoPlan||resolving||!!planRun.current;const hint=!native?t('studio.run.metadata.native'):'';return <details ref={moreRef} className="wb-more" open={moreOpen} onToggle={e=>{if(e.currentTarget.open!==moreOpen)setMoreOpen(e.currentTarget.open);}}><summary data-more aria-haspopup="menu" onClick={e=>{e.preventDefault();setMoreResult(null);setMoreOpen(!moreOpen);}}>{t('studio.run.more')}<span className="wb-more-caret" aria-hidden="true">▾</span></summary><div className="wb-more-menu">
+  {item.media==='video'&&(()=>{const off=!native||!item.path||scanning||admissionBlocked||autoPlan||resolving||!!planRun.current;const hint=!native?t('studio.run.metadata.native'):'';return <details className="wb-more" open={moreFor===item.src}><summary data-more aria-haspopup="menu" onClick={e=>{e.preventDefault();setMoreResult(null);setMoreFor(moreFor===item.src?null:item.src);}}>{t('studio.run.more')}<span className="wb-more-caret" aria-hidden="true">▾</span></summary><div className="wb-more-menu">
    <button type="button" data-more-apply disabled={off} title={hint||t('studio.run.metadata.videoApplyHint')} onClick={()=>selectMoreAction(true,()=>void applyFileSettings(item,'all'))}>{t('studio.run.metadata.apply')}</button>
    <button type="button" data-more-reuse disabled={off} title={hint||t('studio.run.metadata.videoReuseHint')} onClick={()=>selectMoreAction(true,()=>void applyFileSettings(item,'prompt'))}>{t('studio.run.metadata.reuse')}</button></div></details>;})()}
   {original&&(paired||media?.src!==item.src)&&<button type="button" className="wb-edit-view" data-edit-compare aria-pressed={slider} onClick={()=>setSlider(!slider)}>{t('studio.run.edit.slider')}</button>}
@@ -1292,17 +1292,23 @@ const promptTools=forgeContext&&<>
   window.addEventListener('deas:reset-studio-layout',layout);window.addEventListener('deas:request-studio-defaults',defaults);
   return()=>{window.removeEventListener('deas:reset-studio-layout',layout);window.removeEventListener('deas:request-studio-defaults',defaults);};
  });
- // More is a controlled menu: a native <details> toggle ignores document clicks, so a second summary click must close it explicitly.
- const [moreOpen,setMoreOpen]=useState(false);const [moreResult,setMoreResult]=useState<ReactNode>(null);const moreRef=useRef<HTMLDetailsElement>(null);
- const selectMoreAction=(_selected:true,action:()=>void)=>{setMoreOpen(false);action();};
- useEffect(()=>{if(!moreOpen)return;const onDown=(e:Event)=>{if(!moreRef.current?.contains(e.target as Node))setMoreOpen(false);};document.addEventListener('mousedown',onDown);return()=>document.removeEventListener('mousedown',onDown);},[moreOpen]);
+ // Each toolbar owns its menu; split-view tools must not open or dismiss a sibling menu.
+ const [moreFor,setMoreFor]=useState<string|null>(null);const [moreResult,setMoreResult]=useState<ReactNode>(null);
+ const selectMoreAction=(_selected:true,action:()=>void)=>{setMoreFor(null);action();};
+ useEffect(()=>{
+  if(!moreFor)return;
+  const onDown=(e:Event)=>{if(!(e.target instanceof Element)||!e.target.closest('.wb-more[open]'))setMoreFor(null);};
+  const onKey=(e:KeyboardEvent)=>{if(e.key==='Escape'){e.preventDefault();const trigger=document.querySelector<HTMLElement>('.wb-more[open] summary');setMoreFor(null);trigger?.focus();}};
+  document.addEventListener('mousedown',onDown);document.addEventListener('keydown',onKey);
+  return()=>{document.removeEventListener('mousedown',onDown);document.removeEventListener('keydown',onKey);};
+ },[moreFor]);
  // Explicit "use these settings": only values the metadata carries; a model/LoRA is picked only if this folder holds it (by full name, else by basename). Returns what was skipped.
  const base=(n:string)=>n.replace(/\\/g,'/').split('/').at(-1)!.toLowerCase();
  const resolveMetadataModel=(list:LocalModel[],name:string)=>{const exact=list.filter(m=>m.name===name);if(exact.length)return exact.length===1?exact[0]:undefined;const matches=list.filter(m=>base(m.name)===base(name)||!name.includes('.')&&shortName(m.name).toLowerCase()===base(name));return matches.length===1?matches[0]:undefined;};
  const stoppable=(j:JobStatus)=>stopAvailable&&(j.state==='queued'||j.state==='running');
  const reusable=(j:JobStatus)=>!!j.intent&&!isVideoEnhanceIntent(j.intent)&&!isSam3Intent(j.intent);
  // The clicked job's own immutable intent, through the same projection as Recent history.
- const reusePrompt=(j:JobStatus)=>{metadataRead.current++;if(j.intent&&(isImageIntent(j.intent)||isVideoIntent(j.intent))){setPositive(j.intent.positivePrompt);setNegative(j.intent.negativePrompt);}};
+ const reusePrompt=(j:Pick<JobStatus,'intent'>)=>{metadataRead.current++;if(j.intent&&(isImageIntent(j.intent)||isVideoIntent(j.intent))){setPositive(j.intent.positivePrompt);setNegative(j.intent.negativePrompt);}};
  const reuseJob=(j:JobStatus)=>{
   if(!j.intent||isVideoEnhanceIntent(j.intent)||isSam3Intent(j.intent))return false;
   return restoreHistory(historyRestore({id:j.id,clientId:null,promptId:j.promptId,origin:'studio',appVersion:j.appVersion??'',admittedAt:0,observedAt:0,revision:0,state:j.state,intent:j.intent,outputs:[],outputRoot:j.outputRoot??null,backendOrigin:j.baseUrl,error:j.error},{endpoint,inputRoot:roots.input,allow:choices,models:models??[]}));
@@ -1355,6 +1361,14 @@ const promptTools=forgeContext&&<>
   if(job){if(mode==='prompt')reusePrompt(job);else if(!reuseJob(job))return;if(preview)setBrowsed(item);return;}
   const context=metadataContext.current();
   const current=()=>live.current&&revision===metadataRead.current&&context===metadataContext.current();
+  const saved=await readHistoryForMedia(item.path).catch(()=>null);
+  if(!current())return;
+  if(saved){
+   if(mode==='prompt')reusePrompt(saved);
+   else if(!restoreHistory(historyRestore(saved,{endpoint,inputRoot:roots.input,allow:choices,models:models??[]})))return;
+   if(preview)setBrowsed(item);
+   setMoreResult(t('studio.run.metadata.applied'));return;
+  }
   let entries;try{entries=await readImageMetadata(item.path);}catch{if(current()){if(preview)setBrowsed(item);setMoreResult(t('studio.run.metadata.failed'));}return;}
   if(!current())return;
   if(preview)setBrowsed(item);
@@ -1592,7 +1606,7 @@ const promptTools=forgeContext&&<>
    </aside>
    {columnHandle('settings')}{paneToggle(settingsHidden,setSettingsHidden,'settings','studio-settings',settingsHidden?9:sideSize+5)}
    <div className="wb-center">
-    <section className={`wb-stage${!browsed&&sideBySide?' wb-split':''}`} aria-label={t('studio.run.preview')} onDragOver={e=>{if(e.dataTransfer.types.includes(MEDIA_DRAG))e.preventDefault();}} onDrop={e=>{if(e.defaultPrevented)return;const item=draggedItem(e.dataTransfer);if(item&&item.media!=='audio'){e.preventDefault();void applyFileSettings(item,'all',true);}}}>
+    <section className={`wb-stage${!browsed&&sideBySide?' wb-split':''}`} data-video-metadata={metaOpen&&(browsed?.media==='video'||!browsed&&(shown?visibleOutputs.some(isVideoOut)||!!playingPreview:media?.media==='video'))||undefined} aria-label={t('studio.run.preview')} onDragOver={e=>{if(e.dataTransfer.types.includes(MEDIA_DRAG))e.preventDefault();}} onDrop={e=>{if(e.defaultPrevented)return;const item=draggedItem(e.dataTransfer);if(item&&item.media!=='audio'){e.preventDefault();void applyFileSettings(item,'all',true);}}}>
      {stageWarnings.length>0&&<div className="wb-stage-warning" role="alert">{stageWarnings.map(message=><p key={message}>{message}</p>)}{mossIssues.map(issue=><button type="button" key={issue.name} onClick={issue.reset}>{t('studio.run.opt.reset',{name:issue.name})}</button>)}</div>}
      {(browsed||media||shown)&&<button type="button" className="wb-stage-close" data-preview-close aria-label={t('studio.run.close')} title={t('studio.run.close')} onClick={closePreview}>✕</button>}
      {(browsed||media||shown)&&<button type="button" className="wb-stage-meta" data-metadata-toggle aria-pressed={metaOpen} onClick={()=>setMetaOpen(!metaOpen)}>{t('studio.run.metadata.button')}</button>}

@@ -14,20 +14,20 @@ function FileMetadata({media}:{media:MediaItem}) {
  const {t}=useI18n();const path=media.path;
  const openWorkflow=useContext(OpenComfyWorkflow);
  const [sending,setSending]=useState(false);const [sendError,setSendError]=useState(false);
- const [file,setFile]=useState<{path:string;rows:ImageMetadata;workflow:ComfyWorkflow|null;settings:GenerationSettings|null;error:boolean}|null>(null);
+ const [file,setFile]=useState<{path:string;rows:ImageMetadata;raw:ImageMetadata;workflow:ComfyWorkflow|null;settings:GenerationSettings|null;error:boolean}|null>(null);
  useEffect(()=>{
   if(!path||!isTauri())return;
   let alive=true;setFile(null);
-  readImageMetadata(path).then(entries=>{if(alive)setFile({path,rows:imageMetadataRows(entries),workflow:embeddedWorkflow(entries),settings:generationSettings(entries),error:false});},()=>{if(alive)setFile({path,rows:[],workflow:null,settings:null,error:true});});
+  readImageMetadata(path).then(entries=>{if(alive)setFile({path,rows:imageMetadataRows(entries),raw:entries,workflow:embeddedWorkflow(entries),settings:generationSettings(entries),error:false});},()=>{if(alive)setFile({path,rows:[],raw:[],workflow:null,settings:null,error:true});});
   return()=>{alive=false;};
  },[path,media.src]);
  if(!path||!isTauri())return <p className="media-help">{t('studio.run.metadata.native')}</p>;
  if(file?.path!==path)return <p className="media-help" role="status">{t('studio.run.metadata.loading')}</p>;
  if(file.error)return <p className="media-help" role="status">{t('studio.run.metadata.failed')}</p>;
  if(!file.rows.length&&!file.workflow)return <p className="media-help">{t('studio.run.metadata.none')}</p>;
- const labels:Record<string,string>={prompt:'studio.run.positive',negativeprompt:'studio.run.negative',negative_prompt:'studio.run.negative',model:'studio.run.checkpoint',seed:'studio.run.seed',steps:'studio.run.steps',cfgscale:'studio.run.cfg',width:'studio.run.width',height:'studio.run.height',sampler:'studio.recipe.sampler',scheduler:'studio.recipe.scheduler',vae:'studio.run.vae',loras:'studio.run.loras',date:'studio.run.metadata.date',generation_time:'studio.run.metadata.time'};
+ const labels:Record<string,string>={prompt:'studio.run.positive',negativeprompt:'studio.run.negative',negative_prompt:'studio.run.negative',model:'studio.run.checkpoint',seed:'studio.run.seed',steps:'studio.run.steps',cfgscale:'studio.run.cfg',width:'studio.run.width',height:'studio.run.height',sampler:'studio.recipe.sampler',scheduler:'studio.recipe.scheduler',vae:'studio.run.vae',loras:'studio.run.loras',date:'studio.run.metadata.date',generation_time:'studio.run.metadata.time',frames:'studio.run.video.frames',fps:'studio.run.video.fps'};
  return <>{file.workflow&&<><button type="button" className="wb-dock-action" disabled={!openWorkflow||sending} title={t('studio.run.metadata.workflowHelp')} onClick={async()=>{if(!openWorkflow||!file.workflow)return;setSending(true);setSendError(false);try{await openWorkflow(file.workflow,media.name);}catch{setSendError(true);}finally{setSending(false);}}}>{t(sending?'studio.run.metadata.workflowLoading':'studio.run.metadata.workflow')}</button>{!openWorkflow&&<p className="media-help">{t('studio.run.metadata.workflowBackend')}</p>}{sendError&&<p className="media-help" role="alert">{t('studio.run.metadata.workflowFailed')}</p>}</>}{/* "Use these settings" lives in the preview's More menu now; the dock only displays the file's metadata. */}
-  <dl>{file.rows.map(([name,value],index)=><div key={index}><dt>{Object.hasOwn(labels,name.toLowerCase())?t(labels[name.toLowerCase()]):name.replaceAll('_',' ')}</dt><dd>{value}</dd></div>)}</dl></>;
+  <dl>{file.rows.map(([name,value],index)=><div key={index}><dt>{Object.hasOwn(labels,name.toLowerCase())?t(labels[name.toLowerCase()]):name.replaceAll('_',' ')}</dt><dd>{value}</dd></div>)}</dl>{file.settings?.media==='video'&&<details><summary>{t('studio.recipe.details')}</summary><pre>{file.raw.filter(([key])=>['prompt','workflow'].includes(key.toLowerCase())).map(([key,value])=>`${key}\n${value}`).join('\n\n')}</pre></details>}</>;
 }
 
 /** Read the selected job's native snapshot or the selected image; controls change only through the explicit apply button. */
