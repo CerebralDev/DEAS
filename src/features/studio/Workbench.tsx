@@ -92,7 +92,7 @@ const isMaskBlur=(v:unknown):v is number=>isMaskGrow(v)&&v<=31;
 const clamp=(n:number,min:number,max:number)=>Math.min(max,Math.max(min,n));
 const isUnit=(v:unknown):v is number=>typeof v==='number'&&v>=0&&v<=1;
 /** Locale keys of the Director scaling modes (shared with the image input-scaling labels). */
-const h3ScalingKey:Record<H3Scaling,string>={Off:'off',Auto:'auto',Target:'target',Fit:'fit','Fill and crop':'crop','Fit and pad':'pad','Long side with divisible crop':'long'};
+const h3ScalingKey:Record<H3Scaling,string>={Off:'off',Auto:'h3auto',Target:'target',Fit:'fit','Fill and crop':'crop','Fit and pad':'pad','Long side with divisible crop':'long'};
 const videoPipelines:readonly string[]=['t2v','i2v','v2v','ref2v'];
 const randomSeed=()=>Math.floor(Math.random()*2**32);
 /** WebKitGTK media needs a blob URL; asset fetches also need connect-src permission in the app CSP. */
