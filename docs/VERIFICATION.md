@@ -1,5 +1,19 @@
 # DEAS verification — native baseline, optional capabilities and languages
 
+## Release 0.2.19 (published)
+
+- Published 2026-11-07 as GitHub release v0.2.19 from source commit 4de488095f5ce0a1d8f22ebd680a5b2ee2a9cf88 (tag `v0.2.19`, mirrored to gitea). GitHub Actions runners remain disabled; assets are local unsigned builds.
+- Gates on the release tree: `npm run typecheck` ok; `npm test` 1586/1587 — the single failure (`IPC fixture: Inpaint preserves draft and submits edited base`) passed in isolation (406/406) and in two earlier full runs: load flake under concurrent release builds, recorded per policy. `cargo fmt --check` ok after rustfmt-ing six sibling-touched files (included in the release commit); `cargo clippy --locked --release --lib --bins -- -D warnings` ok; `cargo test --locked -- --test-threads=1` 825 passed / 0 failed (59 ignored); `cargo xwin check` and `cargo xwin clippy --all-targets -- -D warnings` for x86_64-pc-windows-msvc ok.
+- Assets (downloaded back from the release and re-hashed, `sha256sum -c` all OK):
+
+```
+40fa8c1127f7cc6885d943b1535359dff3a4a95d27888af8b7069c360005c0c2  BUILD-MANIFEST.json
+a06a280b70b8e8990fcf7bb7ccbcf28d595014ad993faee6a69d561793398178  deas.exe
+c5288bbec3ad3578432e2590df57af9624f9619fa7a45f5a8be2633bbe92e846  deas-linux-amd64
+```
+
+- Linux binary: ldd clean (0 not found), direct glibc floor 2.39, toolchain rustc 1.97.0 / node v26.13.0. Windows `deas.exe` cross-compiled only — no Windows runtime acceptance yet; the first real Windows launch is the acceptance test. No NSIS/deb/AppImage assets in this fallback set.
+
 ## Tiny-VAE video preview — implementation in progress (0.2.19, shipped in 0.2.19)
 
 - Source discovery: ComfyUI `b5a432157de6b8884f81104cd02926adf4d597e4`, KJNodes `d3cfe21625e5170126ce06fbfcfe1d88108688c3`. Core TAE video previews slice the first temporal frame. `ModelPreviewOverrideKJ` offers the existing `kj_preview_override` temporal MP4/WebP transport; use `suppress_default_preview:false` to preserve ordinary stills and avoid its global suppression patch. H3 MythicAlchemy reference node 2737 uses `taeh3.safetensors`, 120 preview frames, 8 fps, maximum resolution 512 and JPEG quality 80. These do not change generated-video timing.
