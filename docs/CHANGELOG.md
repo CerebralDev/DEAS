@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.19 BETA (unreleased)
+
+- **H3 opening-frame anchor seam fixed.** DEAS pins the canvas, and the core MiniMax H3 conditioning node fits frame anchors to it a second time on its own — stretching the first frame without preserving aspect. The Director scaling default `Auto` only shrinks references, so a picture whose ratio differs from the canvas deformed the frame-0 geometry anchor; image→video runs showed soft seams around the lips/face regions in the opening frames. H3 video runs now default to **Fill and crop** (matching the documented Studio default and the backend fallback); saved explicit choices and every scaling mode are unchanged. [Usage](STUDIO.md#resolution-and-reference-scaling).
+
+- **Save Original before image refinement.** A capability-checked DEAS lazy gate now defers the complete optional image-refine branch, including independent upscale loaders, until the existing Original saver has finished. Both saver implementations, formats, metadata, result roles and plain no-refine graphs are preserved. Missing/incompatible gate or post-save socket blocks refinement only. The adapter is installed on the next explicitly started owned backend; no backend is restarted automatically. Real installed CPU executor failure/cache tests cover core and actual metadata saving; video ordering and real-model/native-platform acceptance remain separate.
+
+- **Choose what Stop cancels.** The main Stop button now asks for the selected queue item, all Workbench work, or Cancel. Selection is pinned when the dialog opens; unavailable items have an explanation. Single-item Stop preserves peer preparations and queued work and never falls back to a global interrupt. Cancel/Escape does not stop work and returns focus. Six languages and global search are included; real-backend progression and native Linux/Windows interaction remain acceptance gates.
+
+- **More → Upscale quick pass fixed.** The upscale-alone pass on a shown image sent an empty sigma list that the backend rejected (“Invalid sigmas”), so the button failed before running. It now sends no sigmas with denoise 0 — model upscale when a Post-Processing upscale model is chosen, otherwise plain resize; Refine is unchanged.
+
+- **Inpaint split-view refresh.** Switching between the full editor and side-by-side generation view explicitly repaints the mask overlay and existing image-paint canvases after layout. Painted pixels, canvas identity, mask visibility and opacity remain unchanged; this display refresh does not alter the draft or submitted generation settings.
+
+- **SAM 3.1 masking and Auto Refine.** Adds localized text/point/box mask and refinement controls with global-search entries. Ordered target groups are independent of generation prompts; same-target matches share a mask, separate groups use sequential masked-only cropped passes (32 px context, denoise 0.25 by default) with the base generation settings. Optional automatic post-generation and manual existing-image refinement preserve originals and separate picked masks. Checkpoint selection and SAM License consent/manual installation are explicit; no automatic weights download. Text/point/box masking and the serial face→hands refinement chain passed on real models on the owned Linux GPU; WebKitGTK/WebView2 runtime acceptance remains open. [Usage and limits](STUDIO.md#sam-31-masking-and-auto-refine).
+
 ## 0.2.18 BETA
 
 - **Audio enhancement ready and faithful.** Processing options load when the Post-Processing or TVE tab opens instead of staying greyed until the mode dropdown is clicked again. **Enhance audio and save…** accepts target folders reached through symlinks (bookmark paths) again. Enhanced video products keep the source's container (MKV/MP4/MOV/WebM) and audio codec (plus bitrate where the container reports one) instead of always re-encoding to MKV/FLAC, so TVE and video-combine output settings survive the audio stage; the video stream already stayed byte-identical.

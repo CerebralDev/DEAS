@@ -280,7 +280,7 @@ function WorkbenchContent({beginner=false,beginnerPage='generate',onBeginnerPage
   <button type="button" className="wb-prompt-expand wb-prompt-clear" data-prompt-clear={kind} aria-label={t('studio.run.prompt.clear',{name})} title={t('studio.run.prompt.clear',{name})} disabled={!value} onClick={()=>set('')}>✕</button></>;};
  const [sourceStrength,setSourceStrength]=usePref('studio.run.video.sourceStrength',1,isUnit);
  const [sourceAudio,setSourceAudio]=usePref('studio.run.video.sourceAudio',false,isBoolean);
- const [h3Scaling,setH3Scaling]=usePref<H3Scaling>('studio.run.video.h3Scaling','Auto',oneOf(...h3Scalings));
+ const [h3Scaling,setH3Scaling]=usePref<H3Scaling>('studio.run.video.h3Scaling','Fill and crop',oneOf(...h3Scalings));
  // MiniMax H3 continuity plan (overlay): steps run one by one, each pinning the clip the previous one produced.
  const [plan,setPlan]=usePref('studio.run.continuity',defaultPlan(),isContinuityPlan);
  const [referencesOpen,setReferencesOpen]=useState(false);const referencesButton=useRef<HTMLButtonElement>(null);
@@ -823,13 +823,14 @@ const loadChoices=()=>{if(native&&!choices&&endpoint.trim())void refreshChoices(
  function buildVideoIntent(vf:VideoFamily,naming:string,out:VideoOutput,nameOf:(item:MediaItem,force?:boolean)=>string,cont:ReturnType<typeof nextStep>=null):VideoIntentV1{
   const seconds=cont?plan.steps[cont.index].seconds:video.seconds;
   const count=videoFrames(vf,seconds,fps);
+  const enhancedPreview=family?choices?.videoPreviews?.[family.id]:undefined;
   const chunks=optionsPref.chunkHeadroom?chunkCount(count,outputSize.width,outputSize.height,optionsPref.chunkHeadroom):undefined;
   const {imageFormat,imageCompression,...output}=out;void imageFormat;void imageCompression;
   const base={recipeId:'video-generation',version:1,positivePrompt:positive,negativePrompt:negative,model:checkpoint,textEncoder,vae,seed,width:outputSize.width,height:outputSize.height,frames:count,frameRate:fps,steps,cfg,sampler,scheduler,outputPrefix:naming,output,
-   ...(activeLoras.length?{loras:activeLoras}:{}),...(options?{options}:{}),...(chunks?{chunks}:{}),...(videoPost?{videoPost}:{}),...(vf!=='wan'&&audioEnhance.intent?{audioEnhance:audioEnhance.intent}:{})} as const;
+   ...(activeLoras.length?{loras:activeLoras}:{}),...(options?{options}:{}),...(chunks?{chunks}:{}),...(enhancedPreview&&optionsPref.enhancedPreview!==false?{enhancedPreview}:{}),...(videoPost?{videoPost}:{}),...(vf!=='wan'&&audioEnhance.intent?{audioEnhance:audioEnhance.intent}:{})} as const;
    let intent:VideoIntentV1;
    // The Director's default canvas fit for DEAS stays implicit, so unchanged intents stay byte-identical.
-   const scaling={inputScaling:h3Scaling}; // Always sent: an absent field means Fill and crop on jobs saved before Auto became the default.
+   const scaling={inputScaling:h3Scaling}; // Always sent; default Fill and crop (matches the Rust fallback). Auto only preserves aspect when the canvas aspect already equals the frame aspect — core MiniMaxH3ImageToVideo plain-stretches the first_frame onto the canvas.
    const last=frameVideo&&lastFrameName?{lastFrame:lastFrameName}:{};
    // Dock files outside the ComfyUI input/output folders (and every video, which core LoadVideo reads from the input root) are copied there.
    if(vf==='ltx-2'){
@@ -1401,7 +1402,7 @@ const promptTools=forgeContext&&<>
    if(intent.family==='minimax-h3')setH3Latent(intent.latentUpscale?{...defaultLatent,...intent.latentUpscale,enabled:true}:{...h3Latent,enabled:false});
    if(intent.family==='ltx-2')setLtxLatent(intent.latentUpscale?{...defaultLatent,...intent.latentUpscale,enabled:true}:{...ltxLatent,enabled:false});
   }
-  setWildcardEnabled(false);setRefVision('');setVideo(defaultVideo);setH3Scaling('Auto');setSourceStrength(1);setSourceAudio(false);
+  setWildcardEnabled(false);setRefVision('');setVideo(defaultVideo);setH3Scaling('Fill and crop');setSourceStrength(1);setSourceAudio(false);
   if(isVideoIntent(intent)){
    setTextEncoder(intent.textEncoder);setTextEncoder2('');setVae(intent.vae);
    const shared={...defaultVideo,seconds:intent.frames/intent.frameRate,fps:intent.frameRate};

@@ -3811,8 +3811,8 @@ test('IPC fixture: MiniMax H3 runs Video → Video and Multi-reference → Video
  fireEvent.click(within(screen.getByRole('dialog',{name:'Edit a2.wav'})).getByRole('button',{name:'Close'}));
  fireEvent.change(screen.getByLabelText('Prompt'),{target:{value:'a singer'}});
  fireEvent.click(screen.getByRole('button',{name:'Insert <Audio 2> into the prompt'}));
- // Director input scaling: the default is Auto, and it is always sent (absent means Fill and crop on older jobs).
- expect((vi.mocked(runWorkbenchJob).mock.calls[1][1] as unknown as {h3:{inputScaling?:string}}).h3.inputScaling).toBe('Auto');
+ // Director input scaling: the default is Fill and crop, and it is always sent (absent also means Fill and crop on older jobs).
+ expect((vi.mocked(runWorkbenchJob).mock.calls[1][1] as unknown as {h3:{inputScaling?:string}}).h3.inputScaling).toBe('Fill and crop');
  fireEvent.change(document.querySelector('[data-h3-scaling]')!,{target:{value:'Fit and pad'}});
  // RefMods: read the backend library on demand, add one; it travels as a Director RefMod row.
  vi.mocked(readRefMods).mockResolvedValue([{name:'chars/hero',kinds:['image'],description:'the hero'}]);
