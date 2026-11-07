@@ -1010,7 +1010,7 @@ mod tests {
                 "allowlist":{
                     "nodes":["CheckpointLoaderSimple","CLIPTextEncode","EmptyLatentImage","KSampler","VAEDecode","SaveImage","LoraLoader","CLIPVisionLoader","CLIPVisionEncode","unCLIPConditioning"],
                     "checkpoints":["sd/model.safetensors"], "loras":["style/detail.safetensors"], "images":[], "samplers":["euler","dpmpp_2m"], "schedulers":["normal","karras"],
-                    "diffusionModels":[], "ggufDiffusionModels":[], "ggufTextEncoders":[], "ggufClipTypes":[], "ggufDualTextEncoders":[], "ggufDualClipTypes":[], "textEncoders":[], "dualTextEncoders":[], "dualClipTypes":[], "clipTypes":[], "vaes":[], "visionModels":["clip-vit.safetensors"], "attention":[], "sage":[], "compile":[], "upscaleModels":[], "latentUpscaleModels":[], "h3LatentUpscaleModels":[], "frameInterpolationModels":[], "rtxUpscaleModes":[], "audioEncoders":[]
+                    "diffusionModels":[], "ggufDiffusionModels":[], "ggufTextEncoders":[], "ggufClipTypes":[], "ggufDualTextEncoders":[], "ggufDualClipTypes":[], "textEncoders":[], "dualTextEncoders":[], "dualClipTypes":[], "clipTypes":[], "vaes":[], "visionModels":["clip-vit.safetensors"], "attention":[], "sage":[], "compile":[], "upscaleModels":[], "latentUpscaleModels":[], "h3LatentUpscaleModels":[], "frameInterpolationModels":[], "rtxUpscaleModes":[], "audioEncoders":[], "videoPreviews":{}
                 }, "missingNodes":[], "generationReady":false
             })
         );
