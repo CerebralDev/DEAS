@@ -196,12 +196,18 @@ fn h264_sps(nal: &[u8], budget: usize) -> Option<()> {
         _ => return None,
     }
     let references = bits.ue()?;
-    if references > 16 { return None; }
+    if references > 16 {
+        return None;
+    }
     bits.read(1)?;
     let w = bits.ue()?.checked_add(1)?.checked_mul(16)?;
     let h = bits.ue()?.checked_add(1)?.checked_mul(16)?;
     let progressive = bits.read(1)?;
-    dimensions(w, h.checked_mul(2 - progressive)?, budget / (references as usize + 16))?;
+    dimensions(
+        w,
+        h.checked_mul(2 - progressive)?,
+        budget / (references as usize + 16),
+    )?;
     Some(())
 }
 fn h264_nals(mut data: &[u8], budget: usize) -> Option<()> {

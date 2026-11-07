@@ -1,11 +1,12 @@
 # News
 
-## 0.2.19 BETA (unreleased)
+## 0.2.19 BETA
 
 - **Image refinement saves Original first.** Optional image refinement now waits for the encoded Original before starting its post-processing branch, so a later upscale/refine failure does not lose that completed image. Requires the compatible DEAS adapter and saver; start the owned backend explicitly with this build to install the adapter. This does not yet change video ordering.
 
 - **Stop one generation or the whole queue.** Stop now opens a choice instead of immediately stopping everything. Cancel or Escape leaves work running. The selected-item action keeps other jobs and preparations intact; real-backend/native-platform acceptance is still open.
 
+- **H3 opening-frame seams corrected.** Image → Video now defaults to *Fill and crop* reference scaling, so a picture with a different canvas ratio no longer distorts the first frames; the H3 scaling option formerly named *Auto* is now **Native (ShortEdge 2048)** because it only shrinks and never fits.
 - **SAM masking and Auto Refine are being integrated.** Select objects with text, points (Alt-click excludes) or a box; refine ordered targets such as `eyes; feet; hands` without changing the generation prompt. Automatic post-generation refinement is opt-in, with manual refinement for existing images and retained originals. SAM weights require separate license acceptance and manual installation. This unreleased integration is not yet real-model or native Linux/Windows accepted. [Guide](STUDIO.md#sam-31-masking-and-auto-refine).
 
 ## 0.2.18 BETA

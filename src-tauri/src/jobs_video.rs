@@ -868,9 +868,16 @@ pub(crate) fn preview_model_compatible(family: &str, decoder: &str, model: &str)
     let file = model.rsplit(['/', '\\']).next().unwrap_or_default();
     matches!(
         (family, decoder, file),
-        ("minimax-h3" | "minimax-h3-hyperflow", "tiny", "taeh3.safetensors")
-            | ("ltx-2", "vae", "taeltx2_3.safetensors")
-            | ("wan", "tiny", "taew2_1.safetensors" | "lighttaew2_1.safetensors")
+        (
+            "minimax-h3" | "minimax-h3-hyperflow",
+            "tiny",
+            "taeh3.safetensors"
+        ) | ("ltx-2", "vae", "taeltx2_3.safetensors")
+            | (
+                "wan",
+                "tiny",
+                "taew2_1.safetensors" | "lighttaew2_1.safetensors"
+            )
     )
 }
 

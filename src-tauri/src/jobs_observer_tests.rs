@@ -4,13 +4,21 @@
 #[tokio::test]
 async fn watch_temporal_preview_disabled_graph_never_accepts_kj_payloads() {
     use base64::Engine;
-    let mut server=fixture().await;let jobs=Jobs::default();
-    let (_,mut peer)=server.diagnostic(&jobs,92).await;
-    let job=jobs.lock().unwrap().job.as_ref().unwrap().clone();
-    peer.send(Message::Text(json!({"type":"execution_start","data":{"prompt_id":"own"}}).to_string().into())).await;
+    let mut server = fixture().await;
+    let jobs = Jobs::default();
+    let (_, mut peer) = server.diagnostic(&jobs, 92).await;
+    let job = jobs.lock().unwrap().job.as_ref().unwrap().clone();
+    peer.send(Message::Text(
+        json!({"type":"execution_start","data":{"prompt_id":"own"}})
+            .to_string()
+            .into(),
+    ))
+    .await;
     peer.send(Message::Text(json!({"type":"kj_preview_override","data":{"node_id":"old-node","w":32,"h":32,"fps":8,"mime":"image/webp","image":base64::engine::general_purpose::STANDARD.encode(include_bytes!("../test-data/preview/h3.webp"))}}).to_string().into())).await;
-    peer.ping().await;assert!(job.live.lock().unwrap().temporal.is_none());
-    job.stop_observer();peer.closed().await;
+    peer.ping().await;
+    assert!(job.live.lock().unwrap().temporal.is_none());
+    job.stop_observer();
+    peer.closed().await;
 }
 #[tokio::test]
 async fn watch_temporal_preview_is_directed_node_bound_latest_owned_and_stop_cleaned() {

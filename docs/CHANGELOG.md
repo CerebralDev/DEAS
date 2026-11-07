@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.19 BETA (unreleased)
+## 0.2.19 BETA
 
 - **H3 opening-frame anchor seam fixed.** DEAS pins the canvas, and the core MiniMax H3 conditioning node fits frame anchors to it a second time on its own — stretching the first frame without preserving aspect. The Director scaling default `Auto` only shrinks references, so a picture whose ratio differs from the canvas deformed the frame-0 geometry anchor; image→video runs showed soft seams around the lips/face regions in the opening frames. H3 video runs now default to **Fill and crop** (matching the documented Studio default and the backend fallback); saved explicit choices and every scaling mode are unchanged. [Usage](STUDIO.md#resolution-and-reference-scaling).
 

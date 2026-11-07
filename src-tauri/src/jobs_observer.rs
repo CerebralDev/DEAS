@@ -177,7 +177,9 @@ pub(super) async fn watch(base: &reqwest::Url, client_id: &str, live: Arc<Mutex<
         return;
     };
     // One proportional budget per observer; telemetry must not retain Live or delay cancellation.
-    let budget = if expected.is_empty() { 0 } else {
+    let budget = if expected.is_empty() {
+        0
+    } else {
         tokio::select! {
             biased;
             _ = cancelled(&mut cancel) => return,
@@ -383,12 +385,23 @@ mod tests {
 
     #[test]
     fn watch_malformed_preview_logging_is_bounded_and_shared() {
-        let mut reports=FailureLog {last:[None;5],suppressed:[0;5]};
-        let id=uuid::Uuid::new_v4().to_string();
-        reports.report(Failure::Decode,&id);reports.report(Failure::Decode,&id);
-        let entries: Vec<_>=crate::logs::native_logs(0).into_iter().filter(|e| e.text.contains(&id)).collect();
-        assert_eq!(entries.len(),1);assert!(entries[0].text.starts_with("WARN: preview-observer operation=decode"));
-        assert_eq!(entries[0].source,crate::logs::Source::Deas);assert_eq!(reports.suppressed[4],1);
+        let mut reports = FailureLog {
+            last: [None; 5],
+            suppressed: [0; 5],
+        };
+        let id = uuid::Uuid::new_v4().to_string();
+        reports.report(Failure::Decode, &id);
+        reports.report(Failure::Decode, &id);
+        let entries: Vec<_> = crate::logs::native_logs(0)
+            .into_iter()
+            .filter(|e| e.text.contains(&id))
+            .collect();
+        assert_eq!(entries.len(), 1);
+        assert!(entries[0]
+            .text
+            .starts_with("WARN: preview-observer operation=decode"));
+        assert_eq!(entries[0].source, crate::logs::Source::Deas);
+        assert_eq!(reports.suppressed[4], 1);
     }
     #[test]
     fn watch_failure_logging_is_shared_redacted_and_rate_limited() {

@@ -170,10 +170,15 @@ pub async fn native_video_open(
             if window.label() != "main" || uuid::Uuid::parse_str(&id).is_err() {
                 return Err("Invalid video owner".into());
             }
-            let lease = window.state::<crate::jobs::Jobs>().preview_video(job_id, revision)?;
+            let lease = window
+                .state::<crate::jobs::Jobs>()
+                .preview_video(job_id, revision)?;
             let bytes = std::fs::read(lease.path()).map_err(|_| "Cannot read preview")?;
             use base64::Engine;
-            Ok(serde_json::json!(format!("data:video/mp4;base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes))))
+            Ok(serde_json::json!(format!(
+                "data:video/mp4;base64,{}",
+                base64::engine::general_purpose::STANDARD.encode(bytes)
+            )))
         })();
         notice(&id, "open", result.is_err());
         return result;
