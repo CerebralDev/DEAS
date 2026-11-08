@@ -1,8 +1,10 @@
 # Changelog
 
-## 0.2.20 BETA
+## 0.2.21 BETA (unreleased)
 
 - **AMD Radeon (Linux) can now run DEAS's owned ComfyUI backend.** Setup notices an AMD Radeon RX 6000/7000/9000 (RDNA2–RDNA4) card the same way it notices an NVIDIA one and recommends the AMD backend; the owned environment then installs the ROCm PyTorch build pinned for that exact card family from AMD's wheel index — the same pins the reference ComfyUI installer has proven on AMD hardware — verifies the GPU with a real computation instead of just a listing, and starts ComfyUI against it. ComfyUI itself, models, GGUF inference (on CPU), learned-model video upscaling, RIFE frame interpolation and the other stages work as usual. Two things stay NVIDIA-only, because NVIDIA's RTX SDK physically is NVIDIA-only: the RTX Video refine pass (denoise/deblur/VSR) and RTX frame generation. On an AMD or CPU backend these are now refused at submit with a named reason ("requires an owned backend installed on an NVIDIA GPU") instead of dying mid-job after the queue — model upscaling and RIFE remain offered. Intel and Windows AMD stay closed, and this AMD path is declared, not yet verified support: development happened without an AMD card, so the first real RDNA card is the acceptance gate. Caveats and later fix points are itemized in the plan (§4.8). [Backend](BACKEND.md).
+
+## 0.2.20 BETA
 
 - **Local vision GGUF models can now see reference pictures (#28).** A GGUF placed in DEAS's own LLM model folder runs on DEAS's built-in runner, which until now could not read pictures at all: Prompt Forge wrote from the brief alone and said so. The built-in runner now finds the vision projector that belongs to a model — a `*.mmproj*.gguf` sitting next to the model file with a matching name (`<name>.mmproj-Q8_0.gguf`, `mmproj-<name>-f16.gguf`, or a lone `mmproj-*.gguf` in that folder) — loads it, and Prompt Forge sends reference pictures through the read and write rounds like with any server model. A model without a projector keeps the honest old behavior: the pictures are not sent and the write says why. A picker entry shaped like a folder path (`GGUF/…/model.gguf`) is DEAS's local copy; the entry named by your configured server is the server's copy, where the server's own vision handling applies.
 
