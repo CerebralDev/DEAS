@@ -76,6 +76,12 @@ pub struct Status {
 }
 fn status(mode: &str, stage: &str, downloaded: u64, total: u64) {
     if let Ok(mut s) = STATUS.lock() {
+        if s.mode != mode || s.stage != stage {
+            crate::logs::push(
+                crate::logs::Source::Deas,
+                &format!("INFO: audio-enhance operation=install mode={mode} stage={stage}"),
+            );
+        }
         *s = Status {
             running: stage != "completed" && stage != "failed" && stage != "cancelled",
             mode: mode.into(),
@@ -170,6 +176,13 @@ fn gpu_binding() -> Option<GpuBinding> {
 }
 pub(crate) fn gpu_ready() -> bool {
     gpu_binding().is_some()
+}
+/// The additive GPU repair can run: Stems is installed CPU-only and an owned environment exists.
+pub(crate) fn gpu_repairable() -> bool {
+    cfg!(not(windows))
+        && available("stems")
+        && !gpu_ready()
+        && crate::resources::owned_venv_python().is_some()
 }
 fn resolve_device(requested: Option<&str>) -> Result<(&'static str, Option<GpuBinding>), String> {
     match requested {
@@ -324,18 +337,22 @@ fn run(mut command: Command, cancel: &AtomicBool) -> Result<(), String> {
         .env("PYTHONNOUSERSITE", "1")
         .env("UV_CACHE_DIR", root().join("uv-cache"))
         .env("UV_PYTHON_INSTALL_DIR", root().join("python"));
-    let mut diagnostics =
-        tempfile::tempfile_in(root()).map_err(|_| "AUDIO_RUNTIME: Cannot create diagnostics")?;
+    let named = tempfile::NamedTempFile::new_in(root())
+        .map_err(|_| "AUDIO_RUNTIME: Cannot create diagnostics")?;
+    let sink = named.as_file();
+    // Separate open file description: reading must not move the child's shared write offset.
+    let mut diagnostics = named
+        .reopen()
+        .map_err(|_| "AUDIO_RUNTIME: Cannot capture diagnostics")?;
+    let mut pending = Vec::new();
     command
         .stdin(Stdio::null())
         .stdout(Stdio::from(
-            diagnostics
-                .try_clone()
+            sink.try_clone()
                 .map_err(|_| "AUDIO_RUNTIME: Cannot capture diagnostics")?,
         ))
         .stderr(Stdio::from(
-            diagnostics
-                .try_clone()
+            sink.try_clone()
                 .map_err(|_| "AUDIO_RUNTIME: Cannot capture diagnostics")?,
         ));
     #[cfg(unix)]
@@ -423,9 +440,11 @@ fn run(mut command: Command, cancel: &AtomicBool) -> Result<(), String> {
             use std::os::windows::io::AsRawHandle;
             match crate::win::exited(child.as_raw_handle()){Ok(true)=>break child.wait().map_err(|_|"AUDIO_RUNTIME: Cannot read CLI status".into()).and_then(|s|if s.success(){Ok(())}else{Err("AUDIO_RUNTIME: CLI failed; verify runtime dependencies, input and available memory".into())}),Err(_)=>break Err("AUDIO_RUNTIME: Cannot monitor CLI".into()),_=>()}
         }
+        stream_cli(&mut diagnostics, &mut pending, false);
         std::thread::sleep(Duration::from_millis(30));
     };
     drop(child);
+    stream_cli(&mut diagnostics, &mut pending, true);
     if let Err(error) = result {
         if error.starts_with("AUDIO_CANCELLED:") {
             return Err(error);
@@ -434,36 +453,7 @@ fn run(mut command: Command, cancel: &AtomicBool) -> Result<(), String> {
         let _ = diagnostics.seek(SeekFrom::Start(size.saturating_sub(4096)));
         let mut text = String::new();
         let _ = diagnostics.take(4096).read_to_string(&mut text);
-        let home = std::env::var("HOME").unwrap_or_default();
-        let mut safe = text
-            .lines()
-            .filter(|l| {
-                !["token", "password", "secret", "authorization"]
-                    .iter()
-                    .any(|s| l.to_ascii_lowercase().contains(s))
-            })
-            .collect::<Vec<_>>()
-            .join(" ");
-        safe = safe
-            .split_whitespace()
-            .map(|word| {
-                if word.contains("://") {
-                    "<download-url>"
-                } else {
-                    word
-                }
-            })
-            .collect::<Vec<_>>()
-            .join(" ");
-        safe = safe.replace(&root().to_string_lossy().to_string(), "<audio-runtime>");
-        if !home.is_empty() {
-            safe = safe.replace(&home, "<home>");
-        }
-        safe = safe
-            .chars()
-            .filter(|c| !c.is_control())
-            .take(2048)
-            .collect();
+        let safe = sanitize_cli(&text);
         crate::logs::push(
             crate::logs::Source::Deas,
             &format!(
@@ -474,6 +464,54 @@ fn run(mut command: Command, cancel: &AtomicBool) -> Result<(), String> {
         return Err(format!("{error}: {safe}"));
     }
     Ok(())
+}
+/// Drops secret-bearing lines, URLs, private paths and control characters from CLI output.
+fn sanitize_cli(text: &str) -> String {
+    let home = std::env::var("HOME").unwrap_or_default();
+    let mut safe = text
+        .lines()
+        .filter(|l| {
+            !["token", "password", "secret", "authorization"]
+                .iter()
+                .any(|s| l.to_ascii_lowercase().contains(s))
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
+    safe = safe
+        .split_whitespace()
+        .map(|word| {
+            if word.contains("://") {
+                "<download-url>"
+            } else {
+                word
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
+    safe = safe.replace(&root().to_string_lossy().to_string(), "<audio-runtime>");
+    if !home.is_empty() {
+        safe = safe.replace(&home, "<home>");
+    }
+    safe.chars()
+        .filter(|c| !c.is_control())
+        .take(2048)
+        .collect()
+}
+/// Forwards each completed CLI output line (split on `\n` and tqdm's `\r`) to central Logs.
+fn stream_cli(reader: &mut fs::File, pending: &mut Vec<u8>, flush: bool) {
+    let _ = reader.read_to_end(pending);
+    let push = |line: &[u8]| {
+        let safe = sanitize_cli(&String::from_utf8_lossy(line));
+        if !safe.is_empty() {
+            crate::logs::push(crate::logs::Source::Cli, &format!("audio-enhance: {safe}"));
+        }
+    };
+    while let Some(end) = pending.iter().position(|b| *b == b'\n' || *b == b'\r') {
+        push(&pending.drain(..=end).collect::<Vec<_>>());
+    }
+    if flush && !pending.is_empty() {
+        push(&std::mem::take(pending));
+    }
 }
 async fn install(mode: &str, preferred_uv: Option<PathBuf>) -> Result<(), String> {
     deep_asset()?;
@@ -493,6 +531,7 @@ async fn install(mode: &str, preferred_uv: Option<PathBuf>) -> Result<(), String
         // binding without touching its verified CPU artifacts.
         if mode == "stems" && !gpu_ready() {
             let dir = target.clone();
+            status("stems", "gpu-optional", 0, 0);
             tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
                 match provision_gpu(&dir, preferred_uv) {
                     Ok(bound) => {
@@ -765,8 +804,11 @@ fn provision_gpu_inner(dir: &Path, preferred_uv: Option<PathBuf>) -> Result<bool
         "install",
         "--require-hashes",
         "--no-deps",
-        "--target",
+        "--python",
     ])
+    // Resolve wheels for the interpreter that loads them, never a PATH/conda discovery.
+    .arg(&managed)
+    .arg("--target")
     .arg(dir.join("gpu-extras"))
     .arg("-r")
     .arg(dir.join("gpu-requirements.txt"));
@@ -1256,6 +1298,30 @@ fn separate(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cli_output_streams_live_lines_to_logs() {
+        let mut sink = tempfile::NamedTempFile::new().unwrap();
+        let mut reader = sink.reopen().unwrap();
+        let mut pending = Vec::new();
+        let logged = |needle: &str| {
+            crate::logs::after(0)
+                .iter()
+                .any(|e| e.source == crate::logs::Source::Cli && e.text == needle)
+        };
+        write!(sink, "zq7 resolved 12\rzq7 token=abc\nzq7 part").unwrap();
+        stream_cli(&mut reader, &mut pending, false);
+        assert!(logged("audio-enhance: zq7 resolved 12"));
+        assert!(!crate::logs::after(0)
+            .iter()
+            .any(|e| e.text.contains("zq7 token")));
+        assert!(!crate::logs::after(0)
+            .iter()
+            .any(|e| e.text.contains("zq7 part")));
+        write!(sink, "ial done").unwrap();
+        stream_cli(&mut reader, &mut pending, true);
+        assert!(logged("audio-enhance: zq7 partial done"));
+    }
 
     #[test]
     fn smule_overlap_is_complementary_and_preserves_stereo() {

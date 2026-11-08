@@ -418,6 +418,7 @@ const NATIVE_WRITERS: &[(&str, &str)] = &[
     ("Anima", "anima"),
     ("Krea2", "krea2"),
     ("MOSS", "moss"),
+    ("Qwen Image 2.1", "qwen_image"),
 ];
 /// Video dialects: their writers need shots, references and timing, which live in the Forge tab.
 const VIDEO_DIALECTS: &[&str] = &["MiniMax H3", "LTX 2.3", "Wan 2.2"];
@@ -897,9 +898,10 @@ pub async fn send(
     if req.pictures.iter().any(|p| !super::refs::sendable(p)) {
         return Err("Pictures must be PNG, JPEG or WebP.".into());
     }
-    if config.provider == Provider::Local {
+    // A `local:` GGUF runs through Prompt Forge's managed worker (scoped by native_chat_send).
+    if config.provider == Provider::Local && !chat::is_local(&req.model) {
         return Err(
-            "Chat needs an LLM server (Ollama or OpenAI-compatible) set in Backend → LLM backend."
+            "Chat needs a model: pick a local GGUF, or set an LLM server (Ollama or OpenAI-compatible) in Backend → LLM backend."
                 .into(),
         );
     }
@@ -1273,7 +1275,8 @@ pub async fn native_chat_send(
     let mut emit = |e: ChatEvent| {
         let _ = on_event.send(e);
     };
-    send(&root, &data, &config, request, &mut emit)
+    // The local GGUF stays loaded for this turn only and is gone before a requested picture renders.
+    chat::with_local_runner(&root, send(&root, &data, &config, request, &mut emit))
         .await
         .inspect_err(|e| {
             crate::logs::push(crate::logs::Source::Deas, &format!("ERROR: Chat: {e}"));
@@ -1680,6 +1683,8 @@ mod tests {
             ("wan", "Wan 2.2"),
             ("Anima", "Anima"),
             ("MOSS-Image", "MOSS"),
+            ("qwen-image-2.1", "Qwen Image 2.1"),
+            ("qwen-image-2.1-turbo", "Qwen Image 2.1"),
             ("Pony", "Illustrious"),
         ] {
             assert_eq!(prompt_route(&data, name), PromptRoute::Forge(expected));
@@ -1689,14 +1694,7 @@ mod tests {
             prompt_route(&data, "Basic Model"),
             PromptRoute::Simple("basic")
         );
-        for name in [
-            "unknown",
-            "qwen-image-2.1",
-            "guide-only",
-            "deas-chat",
-            "empty",
-            "",
-        ] {
+        for name in ["unknown", "guide-only", "deas-chat", "empty", ""] {
             assert_eq!(prompt_route(&data, name), PromptRoute::Missing, "{name}");
         }
         let defs = tool_definitions(&data, &no_studio());

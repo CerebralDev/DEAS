@@ -309,6 +309,18 @@ pub async fn stream_round(
     on_text: &mut (dyn FnMut(&str) + Send),
     stop: &std::sync::atomic::AtomicBool,
 ) -> Result<Reply, String> {
+    // The managed GGUF worker answers a round at once; Stop drops the round (and the worker with it).
+    if is_local(r.model) {
+        let reply = tokio::select! {
+            biased;
+            _ = cancelled(stop) => return Ok(Reply { content: String::new(), calls: vec![], truncated: false }),
+            reply = local_round(&r) => reply?,
+        };
+        if !reply.content.is_empty() {
+            on_text(&reply.content);
+        }
+        return Ok(reply);
+    }
     let (url, body, ollama) = request(&r, true)?;
     let mut parser = StreamParser::new(ollama);
     let receive = async {
@@ -707,6 +719,35 @@ pub(super) mod tests {
             .contains("not available"));
         assert!(!local_has_vision("local:model.gguf"));
         assert!(!local_has_vision("server:model"));
+    }
+
+    #[tokio::test]
+    async fn streamed_chat_rounds_route_local_models_to_the_worker_and_honor_stop() {
+        // LlmConfig::default() is the Local provider: a server round would fail with "No LLM server is set".
+        let config = &LlmConfig::default();
+        let messages = vec![json!({ "role": "user", "content": "hi" })];
+        let r = || Round {
+            config,
+            model: "local:model.gguf",
+            messages: &messages,
+            tools: None,
+            temperature: None,
+            top_p: None,
+            max_tokens: None,
+            timeout: Duration::from_secs(1),
+        };
+        let mut seen = String::new();
+        let running = std::sync::atomic::AtomicBool::new(false);
+        let error = stream_round(r(), &mut |t: &str| seen.push_str(t), &running)
+            .await
+            .unwrap_err();
+        assert!(error.contains("not available"), "{error}");
+        let stopped = std::sync::atomic::AtomicBool::new(true);
+        let reply = stream_round(r(), &mut |t: &str| seen.push_str(t), &stopped)
+            .await
+            .unwrap();
+        assert!(reply.content.is_empty() && reply.calls.is_empty());
+        assert!(seen.is_empty());
     }
 
     #[tokio::test]

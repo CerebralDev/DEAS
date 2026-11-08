@@ -79,6 +79,7 @@ export const searchIndex: readonly SearchEntry[] = [
   { view: studio, studioTab: 'generate', tab: 'setup.tab.studio', section: 'studio.run.queue', label: 'studio.run.queue', target: '#studio-queue' },
   { view: studio, studioTab: 'generate', tab: 'setup.tab.studio', section: 'studio.run.metadata', label: 'studio.run.metadata.apply', target: '[data-media-settings]', aliases: ['reuse', 'restore', 'media settings', 'metadata'], reason: 'studio.run.metadata.empty' },
   { view: studio, studioTab: 'generate', tab: 'setup.tab.studio', section: 'studio.run.queue', label: 'studio.run.metadata.reuse', target: '[data-job-reuse-prompt]', aliases: ['reuse prompt', 'queue prompt'], reason: 'studio.run.metadata.empty' },
+  { view: studio, studioTab: 'generate', dockTab: 'media', tab: 'setup.tab.studio', section: 'studio.run.dock.media', label: 'media.intake.label', target: '#studio-dock [data-media-intake]', aliases: ['paste', 'clipboard', 'copy into input', 'screenshot', 'import'] },
   // SAM masking and refinement
   { view: studio, studioTab: 'generate', dockTab: 'post', tab: 'setup.tab.studio', section: 'studio.sam.title', label: 'studio.sam.model', target: '[data-sam="model"]', aliases: ["SAM", "checkpoint", "segment anything"], reason: 'studio.sam.refineHelp' },
   { view: studio, studioTab: 'generate', dockTab: 'post', tab: 'setup.tab.studio', section: 'studio.sam.title', label: 'studio.sam.targets', target: '[data-sam="targets"]', aliases: ["SAM", "eyes", "feet", "hands", "objects"], reason: 'studio.sam.refineHelp' },

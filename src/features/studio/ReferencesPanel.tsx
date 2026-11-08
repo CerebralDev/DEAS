@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { useI18n } from '../../i18n/I18nProvider';
-import { describeMedia, dropCssPoint, draggedItem, itemFromEntry, MEDIA_DRAG, normalizedMediaPath, relativeMediaPath, type MediaItem } from '../../lib/media';
+import { describeMedia, dropCssPoint, draggedItem, itemFromEntry, MEDIA_DRAG, normalizedMediaPath, pastedPictures, pasteToInput, relativeMediaPath, type MediaItem } from '../../lib/media';
 import type { RefModEntry } from '../../lib/jobs';
 import { labelCharacters, readPeopleBoxes, type PeopleBox, type H3Reference } from '../../lib/forge';
 import type { H3Context } from '../forge/ForgeButton';
@@ -180,6 +180,18 @@ export function ReferencesPanel({endpoint='',root,refs,onChange,family,seconds,l
   }).then(stop=>{if(alive)unlisten=stop;else stop();},err=>{if(alive)setError(String(err));});
   return()=>{alive=false;unlisten?.();};
  },[]);
+ // Ctrl+V of a picture while focus is in this tab: saved into Input first (pastes have no path), then added like a drop.
+ useEffect(()=>{
+  if(!isTauri()||!inputRoot)return;
+  const paste=(event:ClipboardEvent)=>{
+   const el=box.current,target=event.target;
+   if(event.defaultPrevented||!el||el.closest('[hidden]')||!(target instanceof Node)||!el.contains(target))return;
+   const pictures=pastedPictures(event);if(!pictures.length)return;
+   event.preventDefault();setError('');
+   void pasteToInput(pictures).then(describeMedia).then(entries=>add.current(entries.map(itemFromEntry).flatMap(item=>item?[{item}]:[])),err=>setError(String(err)));
+  };
+  document.addEventListener('paste',paste);return()=>document.removeEventListener('paste',paste);
+ },[inputRoot]);
  const dragged=useRef(-1); // card being reordered by drag
  const [status,setStatus]=useState('');
  // RefMod library: read on demand (a backend round trip), then picked from a list.

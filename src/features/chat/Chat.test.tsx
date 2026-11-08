@@ -53,6 +53,19 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.resetAllMocks(); });
 
+it('lists local GGUFs like Prompt Forge and sends them with their local: prefix', async () => {
+  const base = vi.mocked(invoke).getMockImplementation()!;
+  vi.mocked(invoke).mockImplementation(async (command, args) => command === 'native_llm_read' ? { provider: 'local', baseUrl: '' }
+    : command === 'native_llm_models' ? { models: [{ provider: 'local', id: 'gemma.gguf', name: 'gemma.gguf' }], warnings: [] } : base(command, args));
+  render(<I18nProvider><Chat endpoint="http://127.0.0.1:8188" root="/env" onSend={vi.fn()}/></I18nProvider>);
+  const option = await screen.findByRole('option', { name: 'gemma.gguf' }) as HTMLOptionElement;
+  expect(option.disabled).toBe(false);
+  fireEvent.change(screen.getByRole('textbox', { name: 'Message' }), { target: { value: 'hi' } });
+  await waitFor(() => expect((screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+  await waitFor(() => expect(sends()[0]).toMatchObject({ model: 'local:gemma.gguf' }));
+});
+
 it('opens a saved conversation, streams a reply with a prompt card and sends that prompt to Generate', async () => {
   const onSend = vi.fn();
   localStorage.setItem('deas.pref.studio.run.positive', JSON.stringify('1girl, rain'));

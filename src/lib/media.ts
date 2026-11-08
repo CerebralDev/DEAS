@@ -39,6 +39,16 @@ export async function listMedia(path:string,depth=1):Promise<MediaListing> {
  return listing;
 }
 export const describeMedia=(paths:string[])=>invoke<MediaEntry[]>('native_media_describe',{paths});
+/** Pasted pictures (clipboard content has no path) saved as new files in the owned Input folder; returns their paths. */
+export async function pasteToInput(pictures:Blob[]):Promise<string[]> {
+ const d=new Date(),p=(n:number)=>String(n).padStart(2,'0');
+ const stamp=`${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+ const paths:string[]=[];
+ for(const picture of pictures)paths.push(await invoke<string>('native_media_paste',{bytes:Array.from(new Uint8Array(await picture.arrayBuffer())),stamp}));
+ return paths;
+}
+/** Picture files of a paste event; text fields keep their own paste. */
+export const pastedPictures=(event:ClipboardEvent)=>event.target instanceof Element&&event.target.closest('input, textarea, [contenteditable="true"]')?[]:[...(event.clipboardData?.files??[])].filter(f=>f.type.startsWith('image/'));
 export function itemFromEntry(entry:MediaEntry):MediaItem|null {
  if(entry.kind!=='file'||!entry.media)return null;
  return {name:entry.name,path:entry.path,media:entry.media,src:isTauri()?convertFileSrc(entry.path):entry.path};

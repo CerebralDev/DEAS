@@ -4,7 +4,7 @@ import { PromptTextarea } from '../studio/PromptTextarea';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { cancelChat, chatSettings, deleteChat, freeChatLlm, getChat, listChats, pinChat, recordRender, renameChat, saveChatSettings, sendChat, workingContext, type ChatEvent, type ChatHit, type ChatMessage, type ChatRenderOutcome, type ChatRenderRequest, type ChatSettings, type ChatStudio, type ChatSummary, type RenderResult, type WrittenPrompt } from '../../lib/chat';
 import { pollWorkbench, stopWorkbenchJob, type JobStatus } from '../../lib/jobs';
-import { forgeError, nativeModelId } from '../../lib/forge';
+import { forgeError, nativeWriteModel } from '../../lib/forge';
 import { isBoolean, isString, usePref } from '../../lib/preferences';
 import { ModelSelect, useForgeModels } from '../forge/ForgeButton';
 import { prepare } from '../forge/ReferenceImages';
@@ -110,7 +110,8 @@ function Bubble({ m, onSend, draws = {}, onRedraw }: { m: ChatMessage; onSend: (
  */
 export function Chat({ endpoint, root, active = true, onSend, studio, onRender }: { endpoint: string; root?: string; active?: boolean; onSend: (positive: string, negative: string) => void; /** What Generate can draw with; absent = chat cannot render. */ studio?: ChatStudio; /** Draws a prompt with Generate's settings. */ onRender?: (ask: ChatRenderRequest) => Promise<ChatRenderOutcome> }) {
   const { t } = useI18n();
-  const forge = useForgeModels(endpoint, root, active);
+  // Local GGUFs are listed like in Prompt Forge; a server stays the default when there is one.
+  const forge = useForgeModels(endpoint, root, active, false, true);
   const [chats, setChats] = useState<ChatSummary[]>([]);
   const [id, setId] = useState<string | undefined>();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -245,7 +246,7 @@ export function Chat({ endpoint, root, active = true, onSend, studio, onRender }
       else if (e.event === 'searched') setLive(l => l && { ...l, searched: e.results, searchDetail: e.detail });
     };
     try {
-      const done = await sendChat(root, { id: current.current, message: text, model: nativeModelId(forge.model), pictures: sentPictures, context: includeWork ? workingContext() || undefined : undefined, search: searchOn && search,
+      const done = await sendChat(root, { id: current.current, message: text, model: nativeWriteModel(forge.model), pictures: sentPictures, context: includeWork ? workingContext() || undefined : undefined, search: searchOn && search,
         ...(studio && onRender ? { studio: { ...studio, endpoint, writerModel: forge.model } } : {}) }, onEvent);
       if (valid()) setMessages(m => [...m, done]);
       // A render_picture answer is drawn now, by Generate; the turn stays busy (and Stop stops it) until it is done.

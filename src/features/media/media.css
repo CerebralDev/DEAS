@@ -26,6 +26,9 @@
 .media-path { display: flex; flex-wrap: wrap; align-items: center; gap: .15rem; min-width: 0; }
 .media-depth { display: flex; align-items: center; gap: .3rem; font-size: .7rem; color: var(--muted); }
 .media-depth select { width: auto; }
+.media-intake { flex: none; width: 11rem; min-height: 0; padding: .25rem .45rem; font-size: .7rem; cursor: text; caret-color: transparent; }
+.media-intake:focus { outline: 1px solid var(--accent); }
+.media-intake-status { flex: 0 1 14rem; min-width: 0; font-size: .7rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .media-drop-hint { flex: 1 1 16rem; min-width: 0; margin: 0; padding: 0; background: transparent; font-size: .72rem; line-height: 1.35; color: var(--muted); overflow-wrap: anywhere; }
 /* Wrapping grid of miniature tiles that fills the dock height; images are real thumbnails, other kinds a glyph. */
 .media-list { list-style: none; margin: 0; padding: 2px 0 4px; display: flex; flex-wrap: wrap; align-content: flex-start; gap: 6px; flex: 1; min-height: 0; overflow: hidden auto; }
@@ -64,3 +67,6 @@
 .media-list li[data-mark] { position: relative; }
 .media-list li[data-mark] > button { border-color: var(--accent, #c8762c); }
 .media-mark { position: absolute; top: 4px; right: 4px; padding: 0 5px; border-radius: .3rem; background: var(--accent, #c8762c); color: var(--field); font-size: .62rem; font-weight: 600; pointer-events: none; white-space: nowrap; }
+.media-video-still { position: relative; display: block; flex: none; line-height: 0; }
+.media-library[data-view="list"] .media-video-badge { display: none; }
+.media-video-badge { position: absolute; right: 4px; bottom: 4px; padding: 0 .3rem; border-radius: .25rem; background: rgb(var(--shadow-rgb) / 0.7); color: #fff; font-size: .62rem; line-height: 1.1rem; pointer-events: none; }

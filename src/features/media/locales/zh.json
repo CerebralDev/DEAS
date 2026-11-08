@@ -25,5 +25,9 @@
   "media.folders": "文件夹",
   "media.expandFolder": "展开 {name}",
   "media.collapseFolder": "折叠 {name}",
-  "media.loadingFolders": "正在加载文件夹…"
+  "media.loadingFolders": "正在加载文件夹…",
+  "media.intake.label": "在此粘贴或拖放",
+  "media.intake.hint": "点击此处并按 Ctrl+V，将剪贴板中的图片保存到 Input；或将媒体面板或文件管理器中的图片/视频拖放到此处，复制到 Input。原文件保持不变。",
+  "media.intake.done": "已复制到 Input：{name}",
+  "media.intake.ignored": "只能复制图片和视频。"
 }

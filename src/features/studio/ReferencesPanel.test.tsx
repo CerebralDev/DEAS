@@ -117,6 +117,24 @@ test('native OS file drops add references only when dropped over the tab',async(
  expect(invoke).toHaveBeenCalledWith('native_media_describe',{paths:['/os/v.wav']});
 });
 
+test('a picture pasted inside the tab is saved into Input and added; text-field and outside pastes are left alone',async()=>{
+ vi.mocked(isTauri).mockReturnValue(true);
+ vi.mocked(invoke).mockImplementation(async(command,args)=>command==='native_media_paste'?'/env/in/pasted-20261108-153000.png'
+ :command==='native_media_describe'?(args as {paths:string[]}).paths.map(path=>({name:path.split('/').at(-1),path,kind:'file',symlink:false,media:'image',size:1,modified:1})):null);
+ const {onAdd}=mount([]);
+ await waitFor(()=>expect(os.drop).not.toBeNull());
+ const picture=Object.assign(new File(['x'],'shot.png',{type:'image/png'}),{arrayBuffer:async()=>new Uint8Array([1,2]).buffer}); // jsdom Files lack arrayBuffer
+ const paste=(target:Element)=>{const e=new Event('paste',{bubbles:true,cancelable:true});Object.defineProperty(e,'clipboardData',{value:{files:[picture]}});target.dispatchEvent(e);return e;};
+ expect(paste(document.body).defaultPrevented).toBe(false);
+ const panel=document.querySelector('[data-references]')!;
+ const field=document.createElement('textarea');panel.append(field);
+ expect(paste(field).defaultPrevented).toBe(false);field.remove();
+ expect(invoke).not.toHaveBeenCalledWith('native_media_paste',expect.anything());
+ expect(paste(panel).defaultPrevented).toBe(true);
+ await waitFor(()=>expect(onAdd).toHaveBeenCalledWith([{item:expect.objectContaining({name:'pasted-20261108-153000.png',path:'/env/in/pasted-20261108-153000.png',media:'image'})}]));
+ expect(invoke).toHaveBeenCalledWith('native_media_paste',{bytes:[1,2],stamp:expect.stringMatching(/^\d{8}-\d{6}$/)});
+});
+
 const at=(name:string,media:MediaItem['media'],dir='/env/in')=>({name,media,src:`asset://${dir}/${name}`,path:`${dir}/${name}`});
 const refAt=(name:string,media:MediaItem['media'],x:Partial<VideoRef>={},dir='/env/in'):VideoRef=>({item:at(name,media,dir),second:0,strength:1,mediaMode:'video',...x});
 

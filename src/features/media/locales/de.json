@@ -25,5 +25,9 @@
   "media.folders": "Ordner",
   "media.expandFolder": "{name} aufklappen",
   "media.collapseFolder": "{name} zuklappen",
-  "media.loadingFolders": "Ordner werden geladen…"
+  "media.loadingFolders": "Ordner werden geladen…",
+  "media.intake.label": "Hier einfügen oder ablegen",
+  "media.intake.hint": "Hier klicken und Strg+V drücken, um ein Bild aus der Zwischenablage in Input zu speichern, oder ein Bild/Video aus Medien oder dem Dateimanager hier ablegen, um es dorthin zu kopieren. Das Original bleibt, wo es ist.",
+  "media.intake.done": "Nach Input kopiert: {name}",
+  "media.intake.ignored": "Nur Bilder und Videos können hineinkopiert werden."
 }

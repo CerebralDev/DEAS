@@ -356,8 +356,27 @@ test('mount does not install, export, upload or submit; optional CUDA is validat
   await act(async () => { render(<I18nProvider><AudioEnhance scope="tve"/></I18nProvider>); });
   expect(vi.mocked(invoke).mock.calls.map(([command]) => command).sort()).toEqual(['native_audio_enhance_capabilities', 'native_audio_enhance_install_status']); // Mount may only read: install status plus the read-only capability probe that enables the options immediately.
   vi.mocked(invoke).mockResolvedValue({ clean: true, deep: true, stems: true });
-  expect(await readAudioEnhanceCapabilities()).toEqual({ clean: true, deep: true, stems: true, cuda: false });
+  expect(await readAudioEnhanceCapabilities()).toEqual({ clean: true, deep: true, stems: true, cuda: false, gpuRepair: false });
   vi.mocked(invoke).mockResolvedValue({ clean: true, deep: true, stems: true, cuda: 'yes' });
   await expect(readAudioEnhanceCapabilities()).rejects.toThrow('Invalid');
+  vi.mocked(invoke).mockResolvedValue({ clean: true, deep: true, stems: true, gpuRepair: 'yes' });
+  await expect(readAudioEnhanceCapabilities()).rejects.toThrow('Invalid');
+});
+
+test('installed CPU-only Stems offers a consented GPU reinstall; GPU-bound or unrepairable Stems stays blocked', async () => {
+  let caps: Record<string, boolean> = { clean: true, deep: true, stems: true, cuda: false, gpuRepair: true };
+  vi.mocked(invoke).mockImplementation(async command => command === 'native_audio_enhance_capabilities' ? caps
+    : command === 'native_audio_enhance_install_status' ? { running: false, mode: '', stage: '', downloaded: 0, total: 0 }
+    : command === 'native_audio_enhance_install' ? (caps = { ...caps, cuda: true, gpuRepair: false }) : null);
+  await mount();
+  const stems = () => document.querySelector<HTMLButtonElement>('[data-audio-enhance-install="stems"]')!;
+  expect(stems().disabled).toBe(false);
+  expect(stems().textContent).toBe('Reinstall Stems — vocals + instrumental with GPU…');
+  fireEvent.click(stems());
+  expect(consentDialog()?.textContent).toContain('Add GPU support');
+  await acceptConsent();
+  expect(invoke).toHaveBeenCalledWith('native_audio_enhance_install', { mode: 'stems', confirmed: true });
+  expect(stems().disabled).toBe(true);
+  expect(stems().textContent).toMatch(/^Install \/ retry/);
 });
 

@@ -2100,7 +2100,10 @@ pub async fn native_forge_targets(root: String) -> Result<Value, String> {
         .models
         .iter()
         .map(|(key, m)| {
-            let order = order.get(key).map_or(&none, |o| &o.entry);
+            let order = order
+                .get(key)
+                .or_else(|| m.str("base").and_then(|b| order.get(b)))
+                .map_or(&none, |o| &o.entry);
             json!({
                 "key": key,
                 "label": m.str("label").unwrap_or(key),

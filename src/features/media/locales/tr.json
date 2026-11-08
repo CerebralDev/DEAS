@@ -25,5 +25,9 @@
   "media.folders": "Klasörler",
   "media.expandFolder": "{name} klasörünü genişlet",
   "media.collapseFolder": "{name} klasörünü daralt",
-  "media.loadingFolders": "Klasörler yükleniyor…"
+  "media.loadingFolders": "Klasörler yükleniyor…",
+  "media.intake.label": "Buraya yapıştır veya bırak",
+  "media.intake.hint": "Panodaki resmi Input klasörüne kaydetmek için buraya tıklayıp Ctrl+V tuşlarına basın veya Medya ya da dosya yöneticisinden bir resmi/videoyu kopyalamak için buraya bırakın. Orijinal yerinde kalır.",
+  "media.intake.done": "Input klasörüne kopyalandı: {name}",
+  "media.intake.ignored": "Yalnızca resimler ve videolar kopyalanabilir."
 }

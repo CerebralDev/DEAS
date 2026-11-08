@@ -79,7 +79,8 @@ pub mod media;
 pub mod media_metadata;
 mod media_reference;
 pub use media::{
-    native_media_describe, native_media_list, native_media_reveal, native_media_star,
+    native_media_copy_in, native_media_describe, native_media_list, native_media_paste,
+    native_media_reveal, native_media_star,
     native_media_star_notice, native_media_star_status, native_media_thumbnail,
     native_media_unstar,
 };

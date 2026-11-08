@@ -9,6 +9,7 @@ const MAGIC: [u8; 4] = [0x28, 0xB5, 0x2F, 0xFD];
 pub fn bundled(name: &str) -> Option<&'static [u8]> {
     match name {
         "forge-pack.json" => Some(include_bytes!("../../forge-data/forge-pack.json")),
+        "deas-models.json" => Some(include_bytes!("../../forge-data/deas-models.json")),
         "randomizer.json" => Some(include_bytes!("../../forge-data/randomizer.json")),
         "tags.sqlite" => Some(include_bytes!("../../forge-data/tags.sqlite")),
         "character_traits.sqlite" => {

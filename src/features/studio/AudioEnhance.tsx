@@ -67,7 +67,7 @@ function AudioEnhanceControls({ source, name, scope, disabled = false, automatic
       {automatic && <small>{t('studio.audioEnhance.automatic')}</small>}
       <small>{t('studio.audioEnhance.hint')}</small>
       <div className="wb-option" data-audio-enhance-engines role="group" aria-label={t('studio.audioEnhance.engines')}><span>{t('studio.audioEnhance.engines')}</span>
-      {(['deep', 'stems'] as const).map(value => <button key={value} type="button" className="wb-dock-action" data-audio-enhance-install={value} disabled={!!capabilities?.[value] || busy || !!installing || checking || !isTauri()} onClick={() => setConsent(value)}>{t('studio.audioEnhance.install', { mode: t(`studio.audioEnhance.${value}`) })}</button>)}
+      {(['deep', 'stems'] as const).map(value => { const repair = value === 'stems' && !!capabilities?.stems && !!capabilities.gpuRepair; return <button key={value} type="button" className="wb-dock-action" data-audio-enhance-install={value} disabled={!!capabilities?.[value] && !repair || busy || !!installing || checking || !isTauri()} onClick={() => setConsent(value)}>{t(repair ? 'studio.audioEnhance.repairGpu' : 'studio.audioEnhance.install', { mode: t(`studio.audioEnhance.${value}`) })}</button>; })}
       </div>
       {installing && <><small role="status" data-audio-enhance-install-status>{t('studio.audioEnhance.installing', { mode: t(`studio.audioEnhance.${installing}`) })}{settings.installStatus?.running && <> · {installStageText(t, settings.installStatus)}</>}</small><button type="button" className="wb-dock-action" data-audio-enhance-install-cancel onClick={() => void settings.cancelInstall()}>{t('studio.audioEnhance.installCancel')}</button></>}
       {settings.error && <small role="alert">{settings.error}</small>}
@@ -82,7 +82,7 @@ function AudioEnhanceControls({ source, name, scope, disabled = false, automatic
       {busy && <button type="button" className="wb-dock-action" data-audio-enhance-cancel onClick={() => { void cancelAudioEnhance().catch(failure => { if (live.current) setError(String(failure)); }); }}>{t('studio.audioEnhance.cancel')}</button>}
       {error && <small role="alert">{operationName && `${operationName}: `}{error}</small>}
       {saved && <small role="status" data-audio-enhance-saved>{t('studio.audioEnhance.saved', { path: saved, name: operationName })}</small>}
-      {consent && <ConfirmDialog message={t(consent === 'stems' ? 'studio.audioEnhance.stemsInstallConsent' : 'studio.audioEnhance.installConsent', { mode: t(`studio.audioEnhance.${consent}`) })} onDone={accepted => { const value = consent; setConsent(null); if (accepted) void settings.install(value); }}/>}
+      {consent && <ConfirmDialog message={t(consent === 'stems' ? capabilities?.stems ? 'studio.audioEnhance.repairGpuConsent' : 'studio.audioEnhance.stemsInstallConsent' : 'studio.audioEnhance.installConsent', { mode: t(`studio.audioEnhance.${consent}`) })} onDone={accepted => { const value = consent; setConsent(null); if (accepted) void settings.install(value); }}/>}
     </div>
   </fieldset>;
 }

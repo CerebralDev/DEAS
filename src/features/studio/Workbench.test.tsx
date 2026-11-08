@@ -78,6 +78,20 @@ test('SAM automatic refinement hands the exact submitted job to the native seria
  expect(settings).toEqual({checkpoint:sam,targets:['eyes','feet','hands'],denoise:0.35,margin:32,threshold:0.5});
  expect(fence).toBe(0);expect(sourceJob).toBe(job.id);expect(waitForWorkbenchJob).not.toHaveBeenCalled();
 });
+test('SAM automatic refinement keeps polling so its native passes show in the queue while the chain runs',async()=>{
+ const sam='SAM3/sam3.1_multiplex_fp16.safetensors';
+ for(const [key,value] of Object.entries({samCheckpoint:sam,samTargets:'hands',samEnabled:true}))localStorage.setItem('deas.pref.studio.run.'+key,JSON.stringify(value));
+ vi.mocked(checkRecipePrerequisites).mockResolvedValue({...evidence,allowlist:{...evidence.allowlist,nodes:[...evidence.allowlist.nodes,'SAM3_Detect'],checkpoints:[...evidence.allowlist.checkpoints,sam]}});
+ vi.mocked(scanModels).mockResolvedValue([{category:'checkpoints',name:'a.safetensors',path:'/m/a',family:'sdxl',size:1,info:null}]);
+ const job:JobStatus={id:'base-job',baseUrl:evidence.baseUrl,promptId:'prompt',state:'queued',outputs:[],error:null,generationReady:false};
+ vi.mocked(runWorkbenchJob).mockResolvedValue(job);vi.mocked(autoRefine).mockReturnValue(new Promise(()=>{}));
+ const done={...job,state:'succeeded' as const};
+ vi.mocked(pollWorkbench).mockResolvedValueOnce(collection([done])).mockResolvedValueOnce(collection([done])).mockResolvedValue({...collection([done,heldJob('refine-pass','running')]),autoRefining:true});
+ render(<I18nProvider><Workbench endpoint={evidence.baseUrl} roots={{models:'/m'}}/></I18nProvider>);
+ const run=screen.getByRole('button',{name:'Run'});await waitFor(()=>expect(run).toHaveProperty('disabled',false));fireEvent.click(run);
+ await waitFor(()=>expect(autoRefine).toHaveBeenCalledTimes(1));
+ await waitFor(()=>expect(document.querySelector('[data-job-id="refine-pass"]')).not.toBeNull(),{timeout:5000});
+});
 test('model metadata action enables an unknown supported file while GGUF stays usable',async()=>{
  const unknown={category:'diffusion_models',name:'unknown.safetensors',path:'/m/unknown.safetensors',size:1,info:null};
  const bad={...unknown,name:'bad.safetensors',path:'/m/bad.safetensors',family:'anima',metadataError:'invalid sidecar'};
@@ -384,7 +398,7 @@ test('enhanced preview follows only the selected running video and cleans up on 
  view.rerender(content(false,true));await waitFor(()=>expect(canvas()).toBeNull());
  view.rerender(content());await waitFor(()=>expect(canvas()?.width).toBe(320));
  fireEvent.click(screen.getByRole('button',{name:'Stop'}));expect(canvas()).toBeNull();
- fireEvent.click(document.querySelector('[data-run-stop-cancel]')!);
+ fireEvent.mouseDown(document.body);
  await waitFor(()=>expect(canvas()?.width).toBe(320));
  fireEvent.click(screen.getByRole('tab',{name:'Media'}));fireEvent.click(await screen.findByRole('button',{name:'ref.png'}));
  expect(canvas()).toBeNull();expect(document.querySelector('[data-browsed-preview]')).not.toBeNull();
@@ -682,6 +696,7 @@ test.each([true,false])('paired video role selection renders one player even wit
  render(<I18nProvider><Workbench endpoint={evidence.baseUrl}/></I18nProvider>);
  await waitFor(()=>expect(document.querySelector('[data-output-role="original"]')).toBeTruthy());
  expect(document.querySelectorAll('.wb-shown video')).toHaveLength(1);
+ if(owned){const slider=document.querySelector<HTMLButtonElement>('[data-edit-compare]')!;expect(slider.disabled).toBe(true);expect(slider.title).toBe('The slider compares pictures only; video compare is not available yet.');fireEvent.click(slider);expect(document.querySelector('.wb-compare')).toBeNull();}
  fireEvent.click(document.querySelector('[data-output-role="original"]')!);
  expect(document.querySelectorAll('.wb-shown video')).toHaveLength(1);
  expect(document.querySelector('.wb-shown video')?.getAttribute('src')).toContain('original.mp4');
@@ -2756,7 +2771,7 @@ test('IPC fixture: Post-process upscales the shown image alone, then the render;
  // Opt-in: every Run gets the refine pass at the upscaled grid size.
  choosePipe('Text → Image');expect(screen.getByRole('button',{name:'Refine'})).toBeTruthy(); // t2i checkpoints are image models too
  fireEvent.click(screen.getByRole('checkbox',{name:'Refine / Upscale after every run'}));
- expect(screen.getByRole('tab',{name:/Post-Processing/}).textContent).toContain('✓');
+ expect(screen.getByRole('tab',{name:'Post-Processing'}).querySelector('.wb-dock-badge')?.textContent).toBe('1');
  fireEvent.click(screen.getByRole('button',{name:'Run'}));
  await waitFor(()=>expect(runWorkbenchJob).toHaveBeenCalledTimes(3));
  const third=vi.mocked(runWorkbenchJob).mock.calls[2][1];
@@ -4238,7 +4253,7 @@ test('Stop drops delayed video preparation and the next press uses the new nativ
 });
 
 
-const stopAll=()=>{fireEvent.click(document.querySelector('[data-run-stop]')!);fireEvent.click(screen.getByRole('button',{name:'Stop all'}));};
+const stopAll=()=>{fireEvent.click(document.querySelector('[data-run-stop]')!);fireEvent.click(screen.getByRole('menuitem',{name:'Stop all'}));};
 const imageModels=[{category:'checkpoints',name:'a.safetensors',family:'sdxl',path:'/m/a',size:1,info:null}];
 test.each(['empty','settled','partial'] as const)('Stop %s preserves native products, stays quiet on partial and frees the queue',async outcome=>{
  vi.mocked(scanModels).mockResolvedValue(imageModels);
@@ -4295,9 +4310,10 @@ test.each(['selected','cancel','escape'] as const)('Stop choice %s preserves a p
  await waitFor(()=>expect(run.hasAttribute('disabled')).toBe(false),{timeout:2500});
  fireEvent.click(run);await waitFor(()=>expect(uploadInput).toHaveBeenCalledTimes(2));
  fireEvent.click(document.querySelector('[data-run-stop]')!);
- const dialog=screen.getByRole('dialog',{name:'Stop Workbench work'});
- if(action==='escape')fireEvent(dialog,new Event('cancel',{cancelable:true}));
- else fireEvent.click(within(dialog).getByRole('button',{name:action==='selected'?'Stop selected item':'Cancel'}));
+ const menu=screen.getByRole('menu',{name:'Stop Workbench work'});
+ if(action==='escape')fireEvent.keyDown(document,{key:'Escape'});
+ else if(action==='selected')fireEvent.click(within(menu).getByRole('menuitem',{name:'Stop selected item'}));
+ else fireEvent.mouseDown(document.body);
  if(action==='selected')await waitFor(()=>expect(stopWorkbenchJob).toHaveBeenCalledTimes(1));else expect(stopWorkbenchJob).not.toHaveBeenCalled();
  await act(async()=>release('deas-inputs/second.png'));
  await waitFor(()=>expect(runWorkbenchJob).toHaveBeenCalledTimes(2));
@@ -4305,14 +4321,14 @@ test.each(['selected','cancel','escape'] as const)('Stop choice %s preserves a p
  await waitFor(()=>expect(document.querySelector('[data-job-id="second"]')).not.toBeNull());
  }finally{cleanup();vi.mocked(invoke).mockImplementation(previous.invoke!);vi.mocked(uploadInput).mockReset().mockImplementation(previous.upload!);vi.mocked(runWorkbenchJob).mockReset().mockImplementation(previous.run!);}
 });
-test('Stop choice disables a captured item that finishes while the dialog is open',async()=>{
+test('Stop choice disables a captured item that finishes while the menu is open',async()=>{
  const selected=heldJob('selected','running'),peer=heldJob('peer','queued');
  vi.mocked(readCurrentWorkbench).mockResolvedValue(collection([peer,selected]));
  vi.mocked(pollWorkbench).mockResolvedValue(collection([peer,{...selected,state:'succeeded'}]));
  render(<I18nProvider><Workbench endpoint=""/></I18nProvider>);
  await waitFor(()=>expect(document.querySelector('[data-run-stop]')).not.toBeNull());
  fireEvent.click(document.querySelector('[data-run-stop]')!);
- const button=screen.getByRole('button',{name:'Stop selected item'});
+ const button=screen.getByRole('menuitem',{name:'Stop selected item'});
  await waitFor(()=>expect(button.hasAttribute('disabled')).toBe(true),{timeout:2500});
  expect(button.title).toBe('The selected item is no longer queued or running.');
  fireEvent.click(button);expect(stopWorkbenchJob).not.toHaveBeenCalled();expect(stopWorkbench).not.toHaveBeenCalled();
@@ -4325,25 +4341,24 @@ test.each(['queued','running'] as const)('Stop choice pins the %s selection and 
  render(<I18nProvider><Workbench endpoint=""/></I18nProvider>);
  await waitFor(()=>expect(document.querySelector('[data-job-id="selected"]')).not.toBeNull());
  fireEvent.click(document.querySelector('[data-run-stop]')!);
- const dialog=screen.getByRole('dialog',{name:'Stop Workbench work'});
- expect(document.activeElement).toBe(within(dialog).getByRole('button',{name:'Cancel'}));
+ const menu=screen.getByRole('menu',{name:'Stop Workbench work'});
+ expect(document.activeElement).toBe(within(menu).getByRole('menuitem',{name:'Stop selected item'}));
  expect(stopWorkbenchJob).not.toHaveBeenCalled();expect(stopWorkbench).not.toHaveBeenCalled();
- // A native modal prevents pointer changes, but asynchronous selection changes must not retarget it either.
+ // Selection changes while the menu is open must not retarget the captured item.
  fireEvent.click(document.querySelector('[data-job-id="peer"] .wb-queue-select')!);
- expect(within(dialog).getByText('selected')).toBeTruthy();
- fireEvent.click(within(dialog).getByRole('button',{name:'Stop selected item'}));
+ fireEvent.click(within(menu).getByRole('menuitem',{name:'Stop selected item'}));
  await waitFor(()=>expect(stopWorkbenchJob).toHaveBeenCalledWith(expect.objectContaining({id:'selected',state})));
  expect(stopWorkbench).not.toHaveBeenCalled();
  await waitFor(()=>expect(document.querySelector('[data-job-id="peer"] [data-state]')?.getAttribute('data-state')).toBe('running'),{timeout:2500});
 });
-test.each(['cancel','escape'] as const)('Stop choice %s leaves jobs and preparation untouched and restores focus',async action=>{
+test.each(['outside','escape'] as const)('Stop choice %s leaves jobs and preparation untouched and restores focus',async action=>{
  vi.mocked(readCurrentWorkbench).mockResolvedValue(collection([heldJob('held','running')],1));
  render(<I18nProvider><Workbench endpoint=""/></I18nProvider>);
  await waitFor(()=>expect(document.querySelector('[data-run-stop]')).not.toBeNull());
  const trigger=document.querySelector<HTMLButtonElement>('[data-run-stop]')!;trigger.focus();fireEvent.click(trigger);
- const dialog=screen.getByRole('dialog',{name:'Stop Workbench work'});
- if(action==='cancel')fireEvent.click(within(dialog).getByRole('button',{name:'Cancel'}));else fireEvent(dialog,new Event('cancel',{cancelable:true}));
- expect(screen.queryByRole('dialog',{name:'Stop Workbench work'})).toBeNull();expect(document.activeElement).toBe(trigger);
+ screen.getByRole('menu',{name:'Stop Workbench work'});
+ if(action==='outside'){fireEvent.mouseDown(document.body);trigger.focus();}else fireEvent.keyDown(document,{key:'Escape'});
+ expect(screen.queryByRole('menu',{name:'Stop Workbench work'})).toBeNull();expect(document.activeElement).toBe(trigger);
  expect(stopWorkbench).not.toHaveBeenCalled();expect(stopWorkbenchJob).not.toHaveBeenCalled();
  expect(document.querySelector('[data-job-id="held"] [data-state]')?.getAttribute('data-state')).toBe('running');
 });
@@ -4353,9 +4368,9 @@ test.each(['missing','succeeded','unknown','unsupported'] as const)('Stop choice
  render(<I18nProvider><Workbench endpoint=""/></I18nProvider>);
  await waitFor(()=>expect(document.querySelector('[data-run-stop]')).not.toBeNull());
  fireEvent.click(document.querySelector('[data-run-stop]')!);
- const dialog=screen.getByRole('dialog',{name:'Stop Workbench work'}),button=within(dialog).getByRole('button',{name:'Stop selected item'});
+ const menu=screen.getByRole('menu',{name:'Stop Workbench work'}),button=within(menu).getByRole('menuitem',{name:'Stop selected item'});
  expect(button.hasAttribute('disabled')).toBe(true);expect(button.getAttribute('title')).toBeTruthy();
- expect(within(dialog).getByText(button.getAttribute('title')!)).toBeTruthy();
+ expect(within(menu).getByText(button.getAttribute('title')!)).toBeTruthy();
  fireEvent.click(button);expect(stopWorkbenchJob).not.toHaveBeenCalled();expect(stopWorkbench).not.toHaveBeenCalled();
 });
 test.each(['rejected','unknown'] as const)('selected Stop keeps %s truthful without global fallback',async outcome=>{
@@ -4365,7 +4380,7 @@ test.each(['rejected','unknown'] as const)('selected Stop keeps %s truthful with
  else vi.mocked(stopWorkbenchJob).mockResolvedValue({...job,state:'unknown',error:'Scoped interrupt outcome unknown'});
  render(<I18nProvider><Workbench endpoint=""/></I18nProvider>);
  await waitFor(()=>expect(document.querySelector('[data-run-stop]')).not.toBeNull());
- fireEvent.click(document.querySelector('[data-run-stop]')!);fireEvent.click(screen.getByRole('button',{name:'Stop selected item'}));
+ fireEvent.click(document.querySelector('[data-run-stop]')!);fireEvent.click(screen.getByRole('menuitem',{name:'Stop selected item'}));
  await waitFor(()=>expect(document.querySelector('.wb-stage-warning[role="alert"]')?.textContent).toContain(outcome==='rejected'?'Scoped interrupt unsupported':'Scoped interrupt outcome unknown'));
  expect(stopWorkbench).not.toHaveBeenCalled();expect(document.querySelector('[data-job-id="retained"] [data-state]')?.getAttribute('data-state')).toBe(outcome==='rejected'?'running':'unknown');
 });
@@ -4389,7 +4404,7 @@ test('selected Stop owns only its H3 Run all sequence',async()=>{
  fireEvent.click(screen.getByRole('button',{name:'Run all'}));
  fireEvent.click(within(screen.getByRole('dialog',{name:'Continuity'})).getByRole('button',{name:'Close'}));
  await waitFor(()=>expect(document.querySelector('[data-job-id="continuity-selected-stop"]')).not.toBeNull());
- fireEvent.click(document.querySelector('[data-run-stop]')!);fireEvent.click(screen.getByRole('button',{name:'Stop selected item'}));
+ fireEvent.click(document.querySelector('[data-run-stop]')!);fireEvent.click(screen.getByRole('menuitem',{name:'Stop selected item'}));
  await waitFor(()=>expect(document.querySelector('[data-job-id="continuity-selected-stop"] [data-state]')?.getAttribute('data-state')).toBe('cancelled'));
  expect(stopWorkbench).not.toHaveBeenCalled();expect(runWorkbenchJob).toHaveBeenCalledTimes(1);
  expect(document.querySelector<HTMLButtonElement>('[data-run]')!.disabled).toBe(false);
@@ -4401,7 +4416,7 @@ test('late selected Stop cannot overwrite a newer Stop all result',async()=>{
  vi.mocked(stopWorkbench).mockResolvedValue({...collection([{...job,state:'succeeded',outputs:[{filename:'keep.png',subfolder:'',type:'output'}],outputRoot:'/old/output'}]),admissionEpoch:1,outcome:'settled',discarded:0,issues:[]});
  render(<I18nProvider><Workbench endpoint=""/></I18nProvider>);
  await waitFor(()=>expect(document.querySelector('[data-run-stop]')).not.toBeNull());
- fireEvent.click(document.querySelector('[data-run-stop]')!);fireEvent.click(screen.getByRole('button',{name:'Stop selected item'}));
+ fireEvent.click(document.querySelector('[data-run-stop]')!);fireEvent.click(screen.getByRole('menuitem',{name:'Stop selected item'}));
  await waitFor(()=>expect(stopWorkbenchJob).toHaveBeenCalledTimes(1));stopAll();
  await screen.findByText('Stop finished. Check the retained job states.');
  await act(async()=>finish({...job,state:'unknown',error:'Late unknown'}));
@@ -4446,7 +4461,7 @@ test('Stop fences a sent Run reply, coalesces presses and passes the captured na
  fireEvent.click(document.querySelector('[data-run]')!);await waitFor(()=>expect(runWorkbenchJob).toHaveBeenCalledTimes(1));
  expect(vi.mocked(runWorkbenchJob).mock.calls[0][2]).toBe(7);
  const stop=document.querySelector<HTMLButtonElement>('[data-run-stop]')!;
- fireEvent.click(stop);fireEvent.click(screen.getByRole('button',{name:'Stop all'}));fireEvent.click(stop);fireEvent.click(document.querySelector('[data-run]')!);
+ fireEvent.click(stop);fireEvent.click(screen.getByRole('menuitem',{name:'Stop all'}));fireEvent.click(stop);fireEvent.click(document.querySelector('[data-run]')!);
  expect(stopWorkbench).toHaveBeenCalledTimes(1);expect(runWorkbenchJob).toHaveBeenCalledTimes(1);
  await act(async()=>finishStop({...collection([heldJob('stopped','cancelled')]),admissionEpoch:8,outcome:'settled',discarded:0,issues:[]}));
  await act(async()=>finishRun(heldJob('stale-run','running')));
@@ -5272,6 +5287,45 @@ test('beginner format and quality reuse the shared aspect and resolution options
  // shared canvas intent survives the round-trip into advanced
  view.rerender(<I18nProvider><Workbench endpoint={evidence.baseUrl} roots={{models:'/m'}} beginner={false}/></I18nProvider>);
  expect(captureStudioSettings()['studio.run.aspect']).toBe('3:4');expect(captureStudioSettings()['studio.run.resolution']).toBe('1024p');
+});
+
+test('dock tabs badge how many settings are active or changed from default',async()=>{
+ localStorage.setItem('deas.pref.studio.run.options',JSON.stringify({attention:'',vae:'tiled',tile:512,cache:'EasyCache',threshold:0.05,compile:''}));
+ localStorage.setItem('deas.pref.studio.run.wildcardEnabled','true');
+ vi.mocked(scanModels).mockResolvedValue([{name:'a.safetensors',category:'checkpoints',path:'/m/a',size:1,info:null,family:'sdxl'}]);
+ vi.mocked(checkRecipePrerequisites).mockResolvedValue(evidence);
+ render(<I18nProvider><Workbench endpoint={evidence.baseUrl} roots={{models:'/m'}}/></I18nProvider>);
+ const badge=(id:string)=>document.querySelector(`[data-dock-tab="${id}"] .wb-dock-badge`);
+ await waitFor(()=>expect(badge('options')?.textContent).toBe('2'));
+ expect(badge('options')!.getAttribute('title')).toBe('2 active or changed from default');expect(screen.getByRole('tab',{name:'Options'})).toBeTruthy();
+ expect(badge('wildcards')?.textContent).toBe('1');
+ expect(badge('post')).toBeNull();
+ fireEvent.click(screen.getByRole('tab',{name:'Post-Processing'}));
+ fireEvent.click(screen.getByRole('checkbox',{name:'Refine / Upscale after every run'}));
+ expect(badge('post')?.textContent).toBe('1');
+});
+
+test('beginner edits Steps and CFG directly and keeps them across experience switches',async()=>{
+ vi.mocked(scanModels).mockResolvedValue([{name:'a.safetensors',category:'checkpoints',path:'/m/a',size:1,info:null,family:'sdxl'}]);
+ vi.mocked(checkRecipePrerequisites).mockResolvedValue(evidence);
+ vi.mocked(runWorkbenchJob).mockResolvedValue(heldJob('beginner-sampling','queued'));
+ const props={endpoint:evidence.baseUrl,roots:{models:'/m'}};
+ const view=render(<I18nProvider><Workbench {...props} beginner/></I18nProvider>);
+ await waitFor(()=>expect(captureStudioSettings()['studio.run.cfg']).toBe(3.5));
+ const composer=document.querySelector('.beginner-composer')!;
+ fireEvent.change(composer.querySelector('[data-num="steps"]')!,{target:{value:'33'}});
+ fireEvent.change(composer.querySelector('[data-num="cfg"]')!,{target:{value:'6'}});
+ fireEvent.change(document.querySelector('[data-run-positive]')!,{target:{value:'A house by a lake'}});
+ const run=screen.getByRole('button',{name:'Run'});await waitFor(()=>expect(run).toHaveProperty('disabled',false));
+ fireEvent.click(run);await waitFor(()=>expect(runWorkbenchJob).toHaveBeenCalledTimes(1));
+ expect(vi.mocked(runWorkbenchJob).mock.lastCall![1]).toMatchObject({steps:33,cfg:6});
+ view.rerender(<I18nProvider><Workbench {...props} beginner={false}/></I18nProvider>);
+ await waitFor(()=>expect(document.querySelector<HTMLInputElement>('[data-num="steps"]')!.value).toBe('33'));
+ expect(captureStudioSettings()).toMatchObject({'studio.run.steps':33,'studio.run.cfg':6});
+ fireEvent.change(document.querySelector('[data-num="cfg"]')!,{target:{value:'4.5'}});
+ view.rerender(<I18nProvider><Workbench {...props} beginner/></I18nProvider>);
+ await waitFor(()=>expect(document.querySelector<HTMLInputElement>('.beginner-composer [data-num="cfg"]')!.value).toBe('4.5'));
+ expect(captureStudioSettings()).toMatchObject({'studio.run.steps':33,'studio.run.cfg':4.5});
 });
 
 test('beginner resizes and collapses the prompt below preview without changing the Advanced media dock',async()=>{

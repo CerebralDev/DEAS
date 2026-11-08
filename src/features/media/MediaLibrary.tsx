@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { convertFileSrc, invoke, isTauri } from '@tauri-apps/api/core';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { useI18n } from '../../i18n/I18nProvider';
-import { describeMedia, dragItem, dropCssPoint, itemFromEntry, itemFromFile, listMedia, normalizedMediaPath as normalizedPath, type MediaEntry, type MediaItem, type MediaListing } from '../../lib/media';
+import { describeMedia, draggedItem, dragItem, dropCssPoint, MEDIA_DRAG, itemFromEntry, itemFromFile, listMedia, normalizedMediaPath as normalizedPath, pasteToInput, pastedPictures, type MediaEntry, type MediaItem, type MediaListing } from '../../lib/media';
 import { usePref } from '../../lib/preferences';
 import { StarMediaButton } from './StarMediaButton';
 import { relocatedMediaItem, type MediaRelocation } from '../../lib/media';
@@ -21,18 +21,34 @@ function Still({src}:{src:string}){
  useEffect(()=>{const img=new Image();img.onload=()=>{const c=ref.current,ctx=c?.getContext('2d');if(c&&ctx){c.width=img.naturalWidth;c.height=img.naturalHeight;ctx.drawImage(img,0,0);}};img.src=src;},[src]);
  return <canvas ref={ref} data-still aria-hidden="true"/>;
 }
-/** Image tile: asks the native side for its cached small PNG, falls back to the original file (its first frame for formats that may animate). */
+/** Image tile: asks the native side for its cached small PNG, falls back to the original file (its first frame for formats that may animate).
+ *  Video tile: the first frame as a cached FFmpeg still (no <video> per tile); the ▶ glyph stays when extraction fails. Tiles only mount while visible. */
 function Thumb({entry}:{entry:MediaEntry}){
+ const video=entry.media==='video';
  const key=`${entry.path}\0${entry.size}\0${entry.modified}`;
  const [src,setSrc]=useState(()=>thumbs.get(key)??'');
  useEffect(()=>{
   if(thumbs.has(key)){setSrc(thumbs.get(key)!);return;}
   let alive=true;
-  invoke<string>('native_media_thumbnail',{path:entry.path}).then(p=>typeof p==='string'?p:entry.path,()=>entry.path).then(p=>{const s=convertFileSrc(p);thumbs.set(key,s);if(alive)setSrc(s);});
+  const still=video?invoke<string>('native_media_reference_thumbnail',{path:entry.path,seconds:0}).then(p=>typeof p==='string'?convertFileSrc(p):'',()=>'')
+   :invoke<string>('native_media_thumbnail',{path:entry.path}).then(p=>typeof p==='string'?p:entry.path,()=>entry.path).then(convertFileSrc);
+  void still.then(s=>{thumbs.set(key,s);if(alive)setSrc(s);});
   return()=>{alive=false;};
  },[key]); // eslint-disable-line react-hooks/exhaustive-deps
+ if(video)return src?<span className="media-video-still"><img src={src} alt="" loading="lazy" decoding="async"/><span className="media-video-badge" aria-hidden="true">▶</span></span>:<span className="media-glyph" aria-hidden="true">▶</span>;
  if(!src)return <span className="media-glyph" aria-hidden="true"/>;
  return src===convertFileSrc(entry.path)&&/\.(webp|gif|apng)$/i.test(entry.name)?<Still src={src}/>:<img src={src} alt="" loading="lazy" decoding="async"/>;
+}
+/** First-frame still of a local video by path (queue rows); `fallback` while loading or when FFmpeg cannot read it. */
+export function VideoStill({path,fallback}:{path:string;fallback:React.ReactNode}){
+ const [src,setSrc]=useState(()=>thumbs.get(path)??'');
+ useEffect(()=>{
+  if(thumbs.has(path)){setSrc(thumbs.get(path)!);return;}
+  let alive=true;
+  void invoke<string>('native_media_reference_thumbnail',{path,seconds:0}).then(p=>typeof p==='string'?convertFileSrc(p):'',()=>'').then(s=>{thumbs.set(path,s);if(alive)setSrc(s);});
+  return()=>{alive=false;};
+ },[path]);
+ return src?<img src={src} alt="" decoding="async"/>:<>{fallback}</>;
 }
 /** Renders only the tile rows in view plus two spare rows; unmeasured (jsdom, empty) renders everything. `folder` changes scroll back to the top. */
 function Tiles<T>({items,render,folder,layout,...rest}:{items:T[];render:(item:T)=>React.ReactNode;folder:string;layout:MediaView}&React.HTMLAttributes<HTMLUListElement>){
@@ -74,6 +90,8 @@ export function MediaLibrary({selected,onSelect,roots={},outputRevision=0,filter
  const [dropped,setDropped]=useState<MediaItem[]>([]);
  const [error,setError]=useState('');
  const [dragging,setDragging]=useState(false);
+ // Explicit copy-in field: a pasted picture or a dropped picture/video becomes a new file in Input.
+ const intake=useRef<HTMLInputElement>(null);const [intakeStatus,setIntakeStatus]=useState('');
  // Right-click menu on a file tile: open its folder in the system file manager (native only) plus the host's feature entries.
  const [menu,setMenu]=useState<{x:number;y:number;item:MediaItem;actions:MediaAction[]}|null>(null);
  useEffect(()=>{if(!menu)return;const close=()=>setMenu(null);const key=(e:KeyboardEvent)=>{if(e.key==='Escape')close();};
@@ -112,6 +130,35 @@ export function MediaLibrary({selected,onSelect,roots={},outputRevision=0,filter
   catch(e){setError(String(e));}
  };
  const currentDrop=useRef(dropPaths);currentDrop.current=dropPaths;
+ const ingested=async(paths:string[])=>{
+  if(!mounted.current||!paths.length)return;
+  if(roots.input)await open(roots.input,depth,true);
+  const item=itemFromEntry((await describeMedia(paths.slice(-1)))[0]);
+  if(item&&mounted.current){selectRef.current(item);setIntakeStatus(t('media.intake.done',{name:item.name}));}
+ };
+ const pasteFiles=async(files:Blob[])=>{
+  try{await ingested(await pasteToInput(files));}
+  catch(e){if(mounted.current)setIntakeStatus(String(e));}
+ };
+ const copyIn=async(paths:string[])=>{
+  try{const copied:string[]=[];for(const path of paths)copied.push(await invoke<string>('native_media_copy_in',{path}));await ingested(copied);}
+  catch(e){if(mounted.current)setIntakeStatus(String(e));}
+ };
+ const intakeActions=useRef({pasteFiles,copyIn});intakeActions.current={pasteFiles,copyIn};
+ // Ctrl+V while the panel (or nothing) has focus; text fields keep their own paste and a modal owns its pastes.
+ useEffect(()=>{
+  if(!native||!roots.input)return;
+  const paste=(event:ClipboardEvent)=>{
+   const el=dropBox.current,target=event.target;
+   if(event.defaultPrevented||!el||el.closest('[hidden]')||!(target instanceof Element))return;
+   const modal=document.querySelector('dialog[open], [aria-modal="true"]');
+   if((modal&&!modal.contains(el))||!(el.contains(target)||target===document.body)||(target!==intake.current&&target.closest('input, textarea, [contenteditable="true"]')))return;
+   const media=target===intake.current?[...(event.clipboardData?.files??[])].filter(f=>f.type.startsWith('image/')):pastedPictures(event);
+   if(!media.length){if(event.clipboardData?.files.length||target===intake.current)setIntakeStatus(t('media.intake.ignored'));return;}
+   event.preventDefault();void intakeActions.current.pasteFiles(media);
+  };
+  document.addEventListener('paste',paste);return()=>document.removeEventListener('paste',paste);
+ },[native,roots.input]);
  // Native webviews deliver OS drops as paths; the HTML5 handlers below serve the browser preview.
  useEffect(()=>{
   if(!native)return;
@@ -124,6 +171,8 @@ export function MediaLibrary({selected,onSelect,roots={},outputRevision=0,filter
     if(e.payload.type!=='leave'){
      const r=el.getBoundingClientRect(),{x,y}=dropCssPoint(e.payload.position);
      if(r.width<=0||r.height<=0||x<r.left||x>r.right||y<r.top||y>r.bottom){setDragging(false);return;}
+     const field=intake.current?.getBoundingClientRect();
+     if(e.payload.type==='drop'&&field&&field.width>0&&x>=field.left&&x<=field.right&&y>=field.top&&y<=field.bottom){setDragging(false);void intakeActions.current.copyIn(e.payload.paths);return;}
     }
     if(e.payload.type==='enter'||e.payload.type==='over')setDragging(true);
     else{setDragging(false);if(e.payload.type==='drop')void currentDrop.current(e.payload.paths);}
@@ -170,7 +219,7 @@ export function MediaLibrary({selected,onSelect,roots={},outputRevision=0,filter
    {isOpen&&(folderErrors[path]?<p className="media-error" role="alert">{folderErrors[path]}</p>:data?<><ul>{children?.map(e=>folderBranch(e.path,e.name,e.symlink,[...ancestors,path]))}</ul>{data.truncated&&listing?.path!==path&&<p className="media-help">{t('media.truncated')}</p>}</>:<p className="media-help" role="status">{t('media.loadingFolders')}</p>)}
   </li>;
  };
- // Only images get real thumbnails: video elements would open one GStreamer pipeline per tile in WebKitGTK.
+ // Videos get FFmpeg stills, never <video> tiles: each would open one GStreamer pipeline in WebKitGTK.
  const pathMarks=useMemo(()=>new Map([...(marks??[])].map(([path,label])=>[normalizedPath(path),label])),[marks]);
  const mark=(path?:string)=>path?pathMarks.get(normalizedPath(path)):undefined;
  // Beside the button, so the tile's accessible name stays the file name.
@@ -183,6 +232,10 @@ export function MediaLibrary({selected,onSelect,roots={},outputRevision=0,filter
    {(roots.input||roots.output)&&<div className="media-roots" role="group" aria-label={t('media.roots')}>{(['output','starred','input'] as const).map(key=>{const path=key==='output'?rawRoot:key==='starred'?starredRoot:roots.input;return path&&<button key={key} type="button" data-media-root={key} aria-pressed={!!listing&&(key==='output'?inOutput&&!inStarred&&!underRoot(listing.path,roots.input):key==='starred'?inStarred:underRoot(listing.path,roots.input))} onClick={()=>void open(path)}>{t(`media.root.${key}`)}</button>;})}</div>}
 
    <label className="media-depth"><span>{t('media.depth')}</span><select value={depth} onChange={e=>changeDepth(Number(e.target.value))}>{depths.map(d=><option key={d} value={d}>{d}</option>)}</select></label>
+   {native&&roots.input&&<input ref={intake} type="text" readOnly className="media-intake" data-media-intake aria-label={t('media.intake.label')} placeholder={t('media.intake.label')} title={t('media.intake.hint')} value=""
+    onDragOver={e=>{if(e.dataTransfer.types.includes(MEDIA_DRAG)){e.preventDefault();e.stopPropagation();}}}
+    onDrop={e=>{const item=draggedItem(e.dataTransfer);if(!item)return;e.preventDefault();e.stopPropagation();setDragging(false);if(item.path)void copyIn([item.path]);else setIntakeStatus(t('media.intake.ignored'));}}/>}
+   {intakeStatus&&<span className="media-intake-status" role="status">{intakeStatus}</span>}
    <span className="media-drop-hint">{t(native?'media.dropHelp':'media.browserHelp')}</span>
    <button type="button" disabled={!native} onClick={()=>void pick()}>{t('media.openFolder')}</button></header>
   <div className="media-browser">
@@ -193,7 +246,7 @@ export function MediaLibrary({selected,onSelect,roots={},outputRevision=0,filter
    <div className="media-files">
   {dropped.length>0&&<ul className="media-list" aria-label={t('media.dropped')}>{dropped.filter(i=>type==='all'||i.media===type).map((item,i)=><li key={`${item.src}-${i}`} data-mark={mark(item.path)}><button type="button" data-media={item.media} aria-current={selected?.src===item.src} draggable onDragStart={e=>dragItem(e.dataTransfer,item)} onContextMenu={onMenu(item)} onClick={()=>onSelect(item)}>{thumb(item.media,item.src)}<span className="media-name">{item.name}</span></button>{badge(item.path)}{canStar(item)&&<StarMediaButton item={item}/>}</li>)}</ul>}
   {error&&<p className="media-error" role="alert">{error}</p>}
-  {listing&&<Tiles folder={listing.path} layout={view} className="media-list" aria-label={t('media.entries')} items={visible} render={entry=><li key={entry.path} data-mark={mark(entry.path)}><button type="button" data-kind={entry.kind} data-media={entry.media??undefined} aria-current={selected?.path===entry.path} title={entry.name} draggable onDragStart={e=>{const item=itemFromEntry(entry);if(item)dragItem(e.dataTransfer,item);}} onContextMenu={onMenu(itemFromEntry(entry))} onClick={()=>choose(entry)}>{native&&entry.media==='image'?<Thumb entry={entry}/>:thumb(entry.media,null)}<span className="media-name">{entry.name}{entry.symlink&&<span className="media-symlink" aria-label={t('media.symlink')}> ⤳</span>}</span></button>{badge(entry.path)}{canStar(itemFromEntry(entry)!)&&<StarMediaButton key={`${entry.path}:${outputRevision}`} item={itemFromEntry(entry)!}/>}</li>}/>}
+  {listing&&<Tiles folder={listing.path} layout={view} className="media-list" aria-label={t('media.entries')} items={visible} render={entry=><li key={entry.path} data-mark={mark(entry.path)}><button type="button" data-kind={entry.kind} data-media={entry.media??undefined} aria-current={selected?.path===entry.path} title={entry.name} draggable onDragStart={e=>{const item=itemFromEntry(entry);if(item)dragItem(e.dataTransfer,item);}} onContextMenu={onMenu(itemFromEntry(entry))} onClick={()=>choose(entry)}>{native&&(entry.media==='image'||entry.media==='video')?<Thumb entry={entry}/>:thumb(entry.media,null)}<span className="media-name">{entry.name}{entry.symlink&&<span className="media-symlink" aria-label={t('media.symlink')}> ⤳</span>}</span></button>{badge(entry.path)}{canStar(itemFromEntry(entry)!)&&<StarMediaButton key={`${entry.path}:${outputRevision}`} item={itemFromEntry(entry)!}/>}</li>}/>}
   {menu&&<div className="media-menu" role="menu" aria-label={menu.item.name} style={{left:Math.min(menu.x,window.innerWidth-200),top:Math.min(menu.y,window.innerHeight-48*(1+menu.actions.length))}}>
    {menu.actions.map((a,i)=><button key={a.label} type="button" role="menuitem" autoFocus={i===0} disabled={!!a.blocked} onClick={()=>{setMenu(null);a.onClick();}}>{a.label}{a.blocked&&<small>{a.blocked}</small>}</button>)}
    {native&&menu.item.path&&<button type="button" role="menuitem" autoFocus={!menu.actions.length} onClick={()=>reveal(menu.item.path!)}>{t('media.reveal')}</button>}</div>}

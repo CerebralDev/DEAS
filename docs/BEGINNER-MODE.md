@@ -23,7 +23,8 @@ prerequisites still apply.
 - **Generation** — creation mode (Text to Image, Image to Image, Text to Video, Image to Video,
   limited to the selected model family), the selected model, **Format** and **Quality** selects
   offering exactly the shared aspect and resolution options of the advanced panel (values snap to
-  the model's own grid), optional LoRAs and an optional starting image (pick it in Media or drop
+  the model's own grid), **Steps** and **CFG** (the same fields, limits and fixed-schedule rule
+  as Advanced; they start at the family's values), optional LoRAs and an optional starting image (pick it in Media or drop
   an image file straight onto its row). The prompt is the shared
   advanced prompt editor under the preview (spellcheck and tag autocompletion active; Prompt Forge,
   copy/clear, expand and the negative prompt hidden). The positive field fills the prompt row;
@@ -55,7 +56,9 @@ prerequisites still apply.
 - Entering Beginner resets only the Beginner view: technical preferences are kept in a separate
   in-session Advanced draft and restored when switching back. Prompts and the chosen model are
   shared. Only authored intent (prompt, model, pipeline) persists from Beginner; automatic
-  Beginner settings never overwrite persisted advanced defaults.
+  Beginner settings never overwrite persisted advanced defaults. Steps and CFG are kept when
+  switching modes: entering Beginner keeps the current values (a model change resets them to the
+  family's starting values), and values typed in Beginner carry back into Advanced.
 - Beginner keeps a model-bound LoRA draft in `beginner.loras`. A model change clears the Beginner
   LoRAs unless the saved draft belongs to that exact model. Only valid safetensors LoRAs whose
   declared family matches the model's LoRA family are offered; GGUF LoRAs remain unavailable.

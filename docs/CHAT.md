@@ -4,7 +4,7 @@
 
 ## Requirements
 
-- An Ollama or OpenAI-compatible LLM server under **Backend → LLM backend** (llama.cpp, llama-swap, vLLM, Ollama). The local GGUF runner cannot call tools yet, so Chat says so instead of answering.
+- A model: either an Ollama or OpenAI-compatible LLM server under **Backend → LLM backend** (llama.cpp, llama-swap, vLLM, Ollama), or a local GGUF from the model folders — the same ones Prompt Forge lists. A local GGUF runs in DEAS's own runner with the same tool support as Prompt Forge (tags, guides, prompt writing, drawing). It answers each round in one piece instead of streaming, is loaded for the turn only, and is unloaded before a requested picture is drawn. Pictures in a message need a matching `*.mmproj*.gguf` projector next to the model. If a server is set, it stays the default choice.
 - Prompt Forge data is included in the executable, including the chat prompt, model guides and tag database. Existing files in `<environment>/forge-data` (or `DEAS_FORGE_DATA`) override the bundled defaults. No separate download or running ComfyUI backend is required to talk or write the four native image prompts; making a picture, and writing for the other image families, needs the backend running (see [Making pictures](#making-pictures)). See [Prompting](PROMPTING.md#prompt-forge).
 - The model is picked at the top of the tab, from the same list as Prompt Forge.
 
@@ -22,7 +22,7 @@ The model decides when to use these; what it used is listed under its answer.
 | Tool | What it does |
 | --- | --- |
 | `render_picture` | Makes a picture: writes the prompt with the Prompt Forge writer of the checkpoint selected in **Studio → Generate**, then draws it there (see [Making pictures](#making-pictures)). Offered only while Generate can draw; otherwise the model is told why and says so. |
-| `write_prompt` | Writes a prompt for the specified generation model with that model’s own writer, the same engine as the **Prompt Forge** tab with its default settings: the native writer (character canon, tag tools, clean-up) for **Illustrious, Anima, Krea2 and MOSS**, the node pack’s writer for the other image families (needs the backend running). The result appears verbatim as a card with **Copy** and **Send to Generate**. **Video models** (MiniMax H3, Wan, LTX) are pointed to **Studio → Prompt Forge → Write for**, because their shots, timing and references are set there. A model without a Forge mode can use its registered simple writer; if neither exists, Chat says no compatible prompt writer is available and never substitutes another model. |
+| `write_prompt` | Writes a prompt for the specified generation model with that model’s own writer, the same engine as the **Prompt Forge** tab with its default settings: the native writer (character canon, tag tools, clean-up) for **Illustrious, Anima, Krea2, MOSS and Qwen Image 2.1**, the node pack’s writer for the other image families (needs the backend running). The result appears verbatim as a card with **Copy** and **Send to Generate**. **Video models** (MiniMax H3, Wan, LTX) are pointed to **Studio → Prompt Forge → Write for**, because their shots, timing and references are set there. A model without a Forge mode can use its registered simple writer; if neither exists, Chat says no compatible prompt writer is available and never substitutes another model. |
 | `read_guide` | Reads model prompt-writing instructions, the MiniMax H3/Wan/LTX guides and bundled DEAS user guides, including Music and App updates. Each call reads at most 16,000 Unicode characters. Optional `page` is a 1-based positive integer (default 1); the response gives page count, next-page instructions and an end marker. Later sections are reachable without dumping the whole document into a small model’s context. `deas-tve` explicitly uses the Studio guide, where TVE is documented; `deas-music` and `deas-app-updates` read their own guides. Native validation rejects invalid or out-of-range pages. |
 | `search_tags` | Looks tags up in the local Danbooru tag database: whether a tag exists, its spelling and how common it is. |
 
@@ -59,14 +59,14 @@ With a search mode chosen, the **Search** button appears beside the message box.
 
 - Chat makes pictures with text-to-image only. Picture editing (change this picture) and video are not in Chat yet; use Generate’s image-to-image and the Prompt Forge tab’s video modes.
 - One picture per answer.
-- The family plugin currently provides Prompt Forge modes for **Illustrious/SDXL/Pony, Anima, Krea2, MOSS, MiniMax H3, Wan and LTX**. Chat writes the image models’ prompts itself and points video requests to their Forge mode; it never asks you to choose one of the four image writers instead of the requested video model.
+- The family plugin currently provides Prompt Forge modes for **Illustrious/SDXL/Pony, Anima, Krea2, MOSS, Qwen Image 2.1, MiniMax H3, Wan and LTX**. Chat writes the image models’ prompts itself and points video requests to their Forge mode; it never asks you to choose one of the four image writers instead of the requested video model.
 - A guide alone does not establish a compatible simple writer. Explanation-only guides and DEAS user guides never become prompt writers. Unsupported models are refused rather than written from the chat model’s memory or mapped to an unrelated model. The bundled writers currently all have Forge modes; the simple fallback is exercised with a registered-writer fixture, not advertised as extra bundled model support.
 - The LLM must call `write_prompt` for native routing to enforce this policy. A model that ignores tool instructions can still answer in prose; the system prompt explicitly forbids inventing a writer or substituting another model.
 - Small models may skip a tool and answer from memory; ask again ("read the LTX guide first") if an answer looks invented.
 
 ## Troubleshooting
 
-- *"Chat needs an LLM server…"*: set an Ollama or OpenAI-compatible server under **Backend → LLM backend**.
+- *"Chat needs a model…"*: pick a local GGUF in the model menu, or set an Ollama or OpenAI-compatible server under **Backend → LLM backend**.
 - *"The LLM took too long to answer"*: the server may be loading the model or busy with another job; try again.
 - Search says *"refused the JSON request (403)"*: enable JSON in SearXNG's `settings.yml`.
 - *"Not drawn: The backend is not running…"* (or no checkpoint, or not text-to-image): fix what it names in Studio → Generate, then **Draw again** or ask again.
