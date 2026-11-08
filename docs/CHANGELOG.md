@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.20 BETA (unreleased)
+## 0.2.20 BETA
 
 - **Local vision GGUF models can now see reference pictures (#28).** A GGUF placed in DEAS's own LLM model folder runs on DEAS's built-in runner, which until now could not read pictures at all: Prompt Forge wrote from the brief alone and said so. The built-in runner now finds the vision projector that belongs to a model — a `*.mmproj*.gguf` sitting next to the model file with a matching name (`<name>.mmproj-Q8_0.gguf`, `mmproj-<name>-f16.gguf`, or a lone `mmproj-*.gguf` in that folder) — loads it, and Prompt Forge sends reference pictures through the read and write rounds like with any server model. A model without a projector keeps the honest old behavior: the pictures are not sent and the write says why. A picker entry shaped like a folder path (`GGUF/…/model.gguf`) is DEAS's local copy; the entry named by your configured server is the server's copy, where the server's own vision handling applies.
 

@@ -1,6 +1,12 @@
 # News
 
-## 0.2.20 BETA (unreleased)
+## 0.2.20 BETA
+
+- **Local GGUF models can now see your reference pictures (#28).** Put the matching `*.mmproj*.gguf` projector file next to the model in DEAS's LLM folder and Prompt Forge sends pictures through DEAS's built-in runner; a model without one says so honestly instead of guessing.
+
+- **Chat now makes pictures and writes prompts itself.** Ask Chat for a picture: it writes the prompt with the Prompt Forge writer of the checkpoint selected in Studio → Generate and draws it there with your current settings — edits across messages ("make the highlights teal"), asked sizes (`16:9`, `1080p`), and a conversation list with right-click Rename, Pin and Delete. On one GPU, the chat model and ComfyUI step aside for each other. Video models still write through their Prompt Forge mode. [Usage](CHAT.md#making-pictures).
+
+- **Prompt Forge stops runaway writers.** A write with Length on Default now has an 8,192-token ceiling, and a write that runs past it is refused instead of kept half-finished. A Length you set still cuts off exactly as before.
 
 - **Theme editing now stays inside DEAS.** **Quick Settings → Edit themes** opens the editor in its own frame — no browser tab — and its **Edit theme** list offers the themes of your selected environment, saving straight into that theme folder with a backup of the previous manifest. [Theme guide](THEME-PACKS.md).
 

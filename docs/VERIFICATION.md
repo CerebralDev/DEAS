@@ -8,7 +8,7 @@
 
 **Fresh evidence:** 47 llm + 85 forge library tests pass, including a new pairing test covering the reporter's exact rename forms and symlink/ambiguity refusal; updated `forge::chat` local-round test; Clippy `--lib` clean; `py_compile` clean. Not exercised: a real GGUF+mmproj vision inference end-to-end (no owned vision GGUF run performed; llama-cpp-python `mmproj=`/image content parts are library behavior, not yet observed in DEAS), Windows runtime, and the reporter's environment.
 
-## In-app theme editing (0.2.20, unreleased)
+## In-app theme editing (0.2.20)
 
 **Quick Settings → Edit themes** no longer hands a local `file://` page to the system browser. `native_theme_editor` now returns the bundled editor path, Quick Settings renders it in its own `[role="dialog"]` iframe and the page (unchanged File System Access logic) is served by a `postMessage` bridge through `native_theme_folders`/`native_theme_read`/`native_theme_write`. The editor's control reads **Edit theme** and lists only the selected environment's theme folders; the stale Quick Settings hint line about the starter folder/offline editor was removed in all six locales. File commands accept only `theme.json`, `assets/…` or `backups/…` inside one slug-named theme folder, re-validate the manifest (`schema_version`, identity, base palette, colour tokens, asset roles) or PNG/WebP magic bytes before replacing, reject links/special files and swap atomically through a sibling temporary file. The theme catalog reloads after each manifest/asset save; the frame stays mounted while closed so an unfinished edit is not thrown away by Escape.
 
@@ -16,7 +16,7 @@ Fresh evidence: `npm run typecheck` ok; **151 core** and full Vitest **78 files 
 
 Not exercised: the packaged Linux WebKitGTK (and Windows WebView2) window actually rendering an `asset:`-protocol frame under the widened CSP, a real native save round trip in the running app, and the standalone browser's directory-permission dialog. These stay open in PLAN §4.10. No build, commit, push or publication was performed; concurrent sibling WIP (`.gitignore` deletion, Workbench/history files) was left untouched.
 
-## Enhanced preview prerequisite repair (0.2.20, unreleased)
+## Enhanced preview prerequisite repair (0.2.20)
 
 - Root cause confirmed by read-only inspection of the actual owned backend: `/object_info` had no `ModelPreviewOverrideKJ`, KJNodes was not installed, generated model YAML omitted `vae_approx`, but the normal VAE list already contained `MiniMaxH3/taeh3.safetensors`. The option was correctly fail-closed; the delivery had omitted the producer/setup path and preview-folder registration. A file in another ComfyUI checkout did not establish availability on this backend.
 - New setup and explicitly approved ComfyUI/node-pack updates now plan official KJNodes at `d3cfe21625e5170126ce06fbfcfe1d88108688c3`, install its declared requirements under existing Torch constraints, and verify producer registration before publishing the installation result. Optional immutable `previewRef`/`previewRevision` preserves legacy read-only reopening/Start and app-only/Torch-only scope. Recorded revision, detached HEAD and pinned Python/requirements hashes are checked; modified/unowned KJNodes does not pass the foreign-pack gate. Existing checkout/path, logs, cancellation and plan-consent mechanisms are reused. No weights are acquired by this step.
@@ -40,7 +40,7 @@ c5288bbec3ad3578432e2590df57af9624f9619fa7a45f5a8be2633bbe92e846  deas-linux-amd
 
 - Linux binary: ldd clean (0 not found), direct glibc floor 2.39, toolchain rustc 1.97.0 / node v26.13.0. Windows `deas.exe` cross-compiled only — no Windows runtime acceptance yet; the first real Windows launch is the acceptance test. No NSIS/deb/AppImage assets in this fallback set.
 
-## Video metadata, Civitai compatibility, audio enhance naming and Studio media fixes (0.2.20, unreleased)
+## Video metadata, Civitai compatibility, audio enhance naming and Studio media fixes (0.2.20)
 
 - **Metadata producer sanitation.** Marked DEAS saves clone the graph before embedding, strip node-level `is_changed` cache attributes and reject remaining non-finite values, so published `prompt`/`workflow` tags are strict-valid JSON. Unmarked standalone saves remain untouched. Verified with the real CPU saver (four PNGs and two audio WebMs; FFprobe-confirmed strict embedded JSON) and 9 Python adapter plus 11 node tests.
 - **Readable presentation and legacy files.** `imageMetadata.ts` parses bounded bare-`NaN` literals quote/escape-aware; the pane shows the full authored prompt and extracted settings with the graph only in collapsed diagnostics. The actual H3 REF2VA original was replayed: all 1,327 prompt characters, steps 6, correct model/LoRA, no invented CFG.
