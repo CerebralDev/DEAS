@@ -16,6 +16,11 @@
 .wb-stage[data-video-metadata] > .wb-current-preview > .media-preview,
 .wb-stage[data-video-metadata] > [data-browsed-preview] { margin-right: calc(min(22rem, 45%) + 8px); }
 .wb-stage > .wb-media-tools:has(.wb-more[open]) { z-index: 4; }
+/* Native video pixels cannot be painted beneath a web overlay: while a More menu is
+   open over a shown native video, reserve the menu's own max-height below the toolbar. */
+.wb-stage:has(.native-video:not([data-audio-only])):has(> .wb-media-tools .wb-more[open]) > .wb-current-preview > .wb-shown,
+.wb-stage:has(.native-video:not([data-audio-only])):has(> .wb-media-tools .wb-more[open]) > .wb-current-preview > .media-preview,
+.wb-stage:has(.native-video:not([data-audio-only])):has(> .wb-media-tools .wb-more[open]) > [data-browsed-preview] { margin-top: calc(min(16rem, 40vh) + 12px); }
 .wb-metadata h3 { margin: 0 0 .6rem; font-size: .9rem; }
 .wb-metadata dl { margin: 0; font-size: .75rem; line-height: 1.45; }
 .wb-metadata dl > div { margin-bottom: .5rem; overflow-wrap: anywhere; }

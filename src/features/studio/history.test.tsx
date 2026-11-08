@@ -78,11 +78,28 @@ test('representable refine preserves exact pass; anisotropic geometry is disclos
  expect(restored.unsupported).toEqual([]);
  expect(historyRestore(record({...image,refine:{width:2432,height:2048,denoise:0.35}}),context).unsupported).toContain('refine.dimensions');
 });
-test('video mapper discloses components and Continuity without reconstructing a session',()=>{
+ test('video mapper discloses components and Continuity without reconstructing a session',()=>{
  const {imageFormat,imageCompression,...output}=defaultVideoOutput;void imageFormat;void imageCompression;
  const restored=historyRestore(record({recipeId:'video-generation',version:1,family:'minimax-h3',positivePrompt:'video',negativePrompt:'',model:'h3.safetensors',textEncoder:'clip.safetensors',vae:'vae.safetensors',seed:43,width:768,height:512,frames:124,frameRate:24,steps:20,cfg:5,sampler:'euler',scheduler:'normal',outputPrefix:'raw/video/exact',output,h3:{mode:'I2VA',audioVae:'missing-audio.safetensors',shiftVideo:10,shiftAudio:3,references:[{slot:0,image:'first.png'}],continuity:{session:'secret-session',sourceId:'source',capture:true,action:'next',outputMode:'segment'}}}),context);
  expect(restored.pipeline).toBe('i2v');expect(restored.source).toEqual({name:'first.png',strength:1});
  expect(restored.unavailable).toContain('vae: missing-audio.safetensors');expect(restored.unsupported).toContain('h3.continuity');
+});
+test('REF2VA media files restore as named re-pick inputs in Director lane order instead of blocking the draft',()=>{
+ const {imageFormat,imageCompression,...output}=defaultVideoOutput;void imageFormat;void imageCompression;
+ const restored=historyRestore(record({recipeId:'video-generation',version:1,family:'minimax-h3',positivePrompt:'video',negativePrompt:'',model:'h3.safetensors',textEncoder:'clip.safetensors',vae:'vae.safetensors',seed:43,width:768,height:512,frames:124,frameRate:24,steps:20,cfg:5,sampler:'euler',scheduler:'normal',outputPrefix:'raw/video/exact',output,h3:{mode:'REF2VA',audioVae:'vae.safetensors',shiftVideo:10,shiftAudio:3,references:[],media:[
+  {type:'audio',file:'song.mp3',slot:0},
+  {type:'video',file:'motion.mp4',slot:1,mediaMode:'video_audio',trimStart:1.5,trimEnd:9.5},
+  {type:'video',file:'clip.mp4',slot:0},
+  {type:'image',file:'face.png',slot:2},
+ ]}}),context);
+ expect(restored.pipeline).toBe('ref2v');expect(restored.unsupported).toEqual([]);
+ expect(restored.videoRefs).toEqual([
+  {name:'face.png',type:'image',strength:1},
+  {name:'clip.mp4',type:'video',strength:1},
+  {name:'motion.mp4',type:'video',strength:1,mediaMode:'video_audio',trimStart:1.5,trimEnd:9.5},
+  {name:'song.mp3',type:'audio',strength:1},
+ ]);
+ expect(historyRestore(record({recipeId:'video-generation',version:1,family:'minimax-h3',positivePrompt:'video',negativePrompt:'',model:'h3.safetensors',textEncoder:'clip.safetensors',vae:'vae.safetensors',seed:43,width:768,height:512,frames:124,frameRate:24,steps:20,cfg:5,sampler:'euler',scheduler:'normal',outputPrefix:'raw/video/exact',output,h3:{mode:'REF2VA',audioVae:'vae.safetensors',shiftVideo:10,shiftAudio:3,references:[{slot:1,image:'last.png'}]}}),context).unsupported).toContain('h3.references');
 });
 test.each([
  {endpoint:'http://127.0.0.1:7801/',inputRoot:'/environment-B/input',outputRoot:'/environment-A/output'},

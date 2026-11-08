@@ -55,9 +55,11 @@ export interface RestoreContext {
  models:readonly {name:string;family?:string}[];
 }
 export interface RestoredReference {name:string;strength:number;path?:string}
+/** A REF2VA media file kept as a named authoring input; re-pick supplies the file. */
+export interface RestoredVideoRef {name:string;type:'image'|'video'|'audio';strength:number;mediaMode?:'video'|'audio'|'video_audio';trimStart?:number;trimEnd?:number}
 export interface HistoryRestore {
  intent:JobIntent; pipeline:'t2i'|'i2i'|'t2v'|'i2v'|'v2v'|'ref2v'|'t2m'|'cover'; options:OptionsPref;
- references:RestoredReference[]; source?:RestoredReference; lastFrame?:RestoredReference;
+ references:RestoredReference[]; source?:RestoredReference; lastFrame?:RestoredReference; videoRefs:RestoredVideoRef[];
  /** Unsupported authoring data is disclosed before apply and keeps Run blocked. */
  unsupported:string[]; unavailable:string[]; environmentMismatch:boolean; backendOrigin:string;
 }
@@ -102,9 +104,9 @@ export function historyRestore(record:HistoryRecord,context:RestoreContext):Hist
  const intent=structuredClone(record.intent),video=isVideoIntent(intent),image=isImageIntent(intent);
  const unsupported:string[]=[],unavailable:string[]=[];
  const environmentMismatch=origin(context.endpoint)!==record.backendOrigin;
- if(isMusicIntent(intent)&&(intent.family==='yue2'?Object.hasOwn(intent,'ace')||Object.hasOwn(intent,'diffusion'):!isAceMusicIntent(intent)||!restorableAce(intent)))return {intent,pipeline:'t2m',options:structuredClone(defaultOptions),references:[],unsupported:['music intent'],unavailable,environmentMismatch,backendOrigin:record.backendOrigin};
+ if(isMusicIntent(intent)&&(intent.family==='yue2'?Object.hasOwn(intent,'ace')||Object.hasOwn(intent,'diffusion'):!isAceMusicIntent(intent)||!restorableAce(intent)))return {intent,pipeline:'t2m',options:structuredClone(defaultOptions),references:[],videoRefs:[],unsupported:['music intent'],unavailable,environmentMismatch,backendOrigin:record.backendOrigin};
  // TVE enhance jobs have no authoring controls in Studio; the record stays readable, not restorable.
- if(isVideoEnhanceIntent(intent))return {intent,pipeline:'v2v',options:structuredClone(defaultOptions),references:[],unsupported:['video-enhance'],unavailable,environmentMismatch,backendOrigin:record.backendOrigin};
+ if(isVideoEnhanceIntent(intent))return {intent,pipeline:'v2v',options:structuredClone(defaultOptions),references:[],videoRefs:[],unsupported:['video-enhance'],unavailable,environmentMismatch,backendOrigin:record.backendOrigin};
  // This schema records no original input-root identity or backend namespace.
  // A currently listed name, matching origin, or output root cannot supply it.
  // Keep every historical input unresolved until the user explicitly reselects.
@@ -125,7 +127,7 @@ export function historyRestore(record:HistoryRecord,context:RestoreContext):Hist
  if(o?.sage&&!context.allow?.sage?.includes(o.sage))unavailable.push(`sage: ${o.sage}`);
  if(o?.compile&&!context.allow?.compile?.includes(o.compile))unavailable.push(`compile: ${o.compile}`);
  for(const node of [o?.cache?.node,o?.vaeTile?'VAEDecodeTiled':undefined])if(node&&!context.allow?.nodes.includes(node))unavailable.push(node);
- let references:RestoredReference[]=[],source:RestoredReference|undefined,lastFrame:RestoredReference|undefined;
+ let references:RestoredReference[]=[],videoRefs:RestoredVideoRef[]=[],source:RestoredReference|undefined,lastFrame:RestoredReference|undefined;
  let pipeline:HistoryRestore['pipeline']='t2i';
  if(isMusicIntent(intent)){
   pipeline=intent.mode;
@@ -218,18 +220,24 @@ export function historyRestore(record:HistoryRecord,context:RestoreContext):Hist
    component(intent.h3.audioVae,'vae');
    if(intent.firstFrame||intent.lastFrame)unsupported.push('h3.frame fields');
    if(intent.h3.mode==='REF2VA')pipeline='ref2v';
-   for(const key of ['media','continuity','refmods'] as const)if(intent.h3[key])unsupported.push(`h3.${key}`);
+   for(const key of ['continuity','refmods'] as const)if(intent.h3[key])unsupported.push(`h3.${key}`);
    if(intent.h3.mode!=='REF2VA'){
     const first=intent.h3.references.find(r=>r.slot===0),last=intent.h3.references.find(r=>r.slot===1);
     if(first){source=resolve(first.image);pipeline='i2v';}if(last)lastFrame=resolve(last.image);
    }else if(intent.h3.references.length)unsupported.push('h3.references');
+   // REF2VA media files are restorable inputs: hand them over unresolved (name only),
+   // in Director lane order, so the Workbench lists each as a missing input to re-pick.
+   else if(intent.h3.media?.length){
+    const rank={image:0,video:1,audio:2} as const;
+    videoRefs=[...intent.h3.media].sort((a,b)=>rank[a.type]-rank[b.type]||a.slot-b.slot).map(m=>({name:m.file,type:m.type,strength:1,...(m.mediaMode?{mediaMode:m.mediaMode}:{}),...(m.trimStart!==undefined?{trimStart:m.trimStart}:{}),...(m.trimEnd!==undefined?{trimEnd:m.trimEnd}:{})}));
+   }
   }
   if(!context.allow?.textEncoders?.includes(intent.textEncoder))unavailable.push(`textEncoder: ${intent.textEncoder}`);
   if(!context.allow?.vaes?.includes(intent.vae))unavailable.push(`vae: ${intent.vae}`);
  }
  for(const ref of [source,lastFrame,...references])if(ref&&!ref.path)unavailable.push(`input: ${ref.name}`);
  if(environmentMismatch)unavailable.push('backendOrigin');
- return {intent,pipeline,options,references,source,lastFrame,unsupported,unavailable,environmentMismatch,backendOrigin:record.backendOrigin};
+ return {intent,pipeline,options,references,videoRefs,source,lastFrame,unsupported,unavailable,environmentMismatch,backendOrigin:record.backendOrigin};
 }
 
 /** One metadata row per native identity; this never populates the live collection. */

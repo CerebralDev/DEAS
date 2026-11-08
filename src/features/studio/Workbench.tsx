@@ -520,6 +520,7 @@ const loadChoices=()=>{if(native&&!choices&&endpoint.trim())void refreshChoices(
  ]:[
   ...latentProblems,
   ...imageRefs.filter(r=>!r.item.path).map(r=>t('studio.history.missingInput',{name:r.item.name})),
+  ...refs.filter(r=>!r.item.path).map(r=>t('studio.history.missingInput',{name:r.item.name})),
   ...mossIssues.map(i=>t('studio.run.moss.plain',{name:i.name})),
   ...(imageRefs.length&&!referenceMethod?[t('studio.run.reference.inactive')]:[]),
   ...(imageRefs.length&&referenceMethod?(!choices?[]:(revisionOk?['CLIPVisionLoader','LoadImage','CLIPVisionEncode','unCLIPConditioning']:[promptEncoder,'LoadImage',...(qwenRefs?['ImageScale']:[])]).filter(n=>!choices.nodes.includes(n))):[]),
@@ -1391,7 +1392,7 @@ const promptTools=forgeContext&&<>
   // autosave and unsaved-close protection. Native jobs and the queue are untouched.
   setHistoryDraft(value);setHistorySelectionContext(historyInputContext);setHistorySourceSelected(false);
   sourceEpoch.current++;setMedia(null);setMediaSize(null);setLayers([]);setMasked(false);setMusicSource(null);
-  setLastFrame(null);setLastOnlySrc(null);setBrowsed(null);setSelectedJob('');setRefs([]);setRefmods([]);setFramePeople({});setImageRefs([]);
+  setLastFrame(null);setLastOnlySrc(null);setBrowsed(null);setSelectedJob('');setRefs(value.videoRefs.map(v=>({item:{name:v.name,media:v.type,src:v.name},second:0,strength:v.strength,mediaMode:v.mediaMode??'video',...(v.trimStart!==undefined?{trimStart:v.trimStart}:{}),...(v.trimEnd!==undefined?{trimEnd:v.trimEnd}:{})})));setRefmods([]);setFramePeople({});setImageRefs([]);
   if(isMusicIntent(intent)){
    audioEnhance.restore(intent.audioEnhance);
    // Music restores only music state; image/video controls keep their current values.
