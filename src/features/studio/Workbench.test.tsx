@@ -2131,14 +2131,14 @@ test('session drafts restore last edited controls and prompts per full model pat
  sessionModel('other/a.safetensors');sessionSettings({positive:'i2i B',steps:55});
  choosePipe('Text → Image');
  expect(document.querySelector('[data-model-picker]')).toHaveProperty('value','folder/a.safetensors');
- expect(screen.getByLabelText('Prompt')).toHaveProperty('value','B draft');
+ expect(screen.getByLabelText('Prompt')).toHaveProperty('value','i2i B'); // same output kind: the prompt on screen carries over
  expect(screen.getByLabelText('Steps')).toHaveProperty('value','37');
  choosePipe('Image → Image');
  expect(document.querySelector('[data-model-picker]')).toHaveProperty('value','other/a.safetensors');
  expect(screen.getByLabelText('Prompt')).toHaveProperty('value','i2i B');
  sessionModel('folder/a.safetensors');expect(screen.getByLabelText('Prompt')).toHaveProperty('value','i2i B');
  sessionModel('other/a.safetensors');choosePipe('Text → Image');sessionModel('other/a.safetensors');
- expect(screen.getByLabelText('Prompt')).toHaveProperty('value','B draft');
+ expect(screen.getByLabelText('Prompt')).toHaveProperty('value','i2i B');
  expect(runWorkbenchJob).not.toHaveBeenCalled();expect(uploadInput).not.toHaveBeenCalled();
 });
 test('session draft cache resets on a fresh Workbench session without adding storage records',async()=>{
@@ -2200,7 +2200,7 @@ test('session video drafts restore video/audio references and trims without uplo
  expect(screen.getByLabelText('Use of clip.mp4')).toHaveProperty('value','audio');expect(screen.getByLabelText('Start of clip.mp4')).toHaveProperty('value','2');expect(screen.getByLabelText('End of clip.mp4')).toHaveProperty('value','6');
  fireEvent.click(within(screen.getByRole('dialog',{name:'Edit clip.mp4'})).getByRole('button',{name:'Close'}));dock('Media');
  choosePipe('Text → Video');sessionSettings({positive:'text video'});choosePipe('Multi-reference → Video');
- expect(screen.getByLabelText('Prompt')).toHaveProperty('value','video B');sessionModel('h3-b.safetensors');expect(document.querySelector('[data-open-references]')?.textContent).toContain('2');
+ expect(screen.getByLabelText('Prompt')).toHaveProperty('value','text video');sessionModel('h3-b.safetensors');expect(document.querySelector('[data-open-references]')?.textContent).toContain('2'); // same output kind: the prompt carries over, references stay per pipeline
  expect(runWorkbenchJob).not.toHaveBeenCalled();expect(uploadInput).not.toHaveBeenCalled();view.unmount();
 });
 
@@ -4253,7 +4253,8 @@ test('Stop drops delayed video preparation and the next press uses the new nativ
 });
 
 
-const stopAll=()=>{fireEvent.click(document.querySelector('[data-run-stop]')!);fireEvent.click(screen.getByRole('menuitem',{name:'Stop all'}));};
+// A single run stops on the button itself; only more queued work opens the choice.
+const stopAll=()=>{fireEvent.click(document.querySelector('[data-run-stop]')!);const all=screen.queryByRole('menuitem',{name:'Stop all'});if(all)fireEvent.click(all);};
 const imageModels=[{category:'checkpoints',name:'a.safetensors',family:'sdxl',path:'/m/a',size:1,info:null}];
 test.each(['empty','settled','partial'] as const)('Stop %s preserves native products, stays quiet on partial and frees the queue',async outcome=>{
  vi.mocked(scanModels).mockResolvedValue(imageModels);
@@ -4312,7 +4313,7 @@ test.each(['selected','cancel','escape'] as const)('Stop choice %s preserves a p
  fireEvent.click(document.querySelector('[data-run-stop]')!);
  const menu=screen.getByRole('menu',{name:'Stop Workbench work'});
  if(action==='escape')fireEvent.keyDown(document,{key:'Escape'});
- else if(action==='selected')fireEvent.click(within(menu).getByRole('menuitem',{name:'Stop selected item'}));
+ else if(action==='selected')fireEvent.click(within(menu).getByRole('menuitem',{name:'Stop current run'}));
  else fireEvent.mouseDown(document.body);
  if(action==='selected')await waitFor(()=>expect(stopWorkbenchJob).toHaveBeenCalledTimes(1));else expect(stopWorkbenchJob).not.toHaveBeenCalled();
  await act(async()=>release('deas-inputs/second.png'));
@@ -4328,12 +4329,12 @@ test('Stop choice disables a captured item that finishes while the menu is open'
  render(<I18nProvider><Workbench endpoint=""/></I18nProvider>);
  await waitFor(()=>expect(document.querySelector('[data-run-stop]')).not.toBeNull());
  fireEvent.click(document.querySelector('[data-run-stop]')!);
- const button=screen.getByRole('menuitem',{name:'Stop selected item'});
+ const button=screen.getByRole('menuitem',{name:'Stop current run'});
  await waitFor(()=>expect(button.hasAttribute('disabled')).toBe(true),{timeout:2500});
- expect(button.title).toBe('The selected item is no longer queued or running.');
+ expect(button.title).toBe('This run has already finished.');
  fireEvent.click(button);expect(stopWorkbenchJob).not.toHaveBeenCalled();expect(stopWorkbench).not.toHaveBeenCalled();
 });
-test.each(['queued','running'] as const)('Stop choice pins the %s selection and leaves peers progressing',async state=>{
+test.each(['running'] as const)('Stop choice pins the %s current run and leaves peers progressing',async state=>{
  const selected=heldJob('selected',state),peer=heldJob('peer','queued');
  vi.mocked(readCurrentWorkbench).mockResolvedValue(collection([peer,selected]));
  vi.mocked(stopWorkbenchJob).mockResolvedValue({...selected,state:'cancelled'});
@@ -4342,14 +4343,25 @@ test.each(['queued','running'] as const)('Stop choice pins the %s selection and 
  await waitFor(()=>expect(document.querySelector('[data-job-id="selected"]')).not.toBeNull());
  fireEvent.click(document.querySelector('[data-run-stop]')!);
  const menu=screen.getByRole('menu',{name:'Stop Workbench work'});
- expect(document.activeElement).toBe(within(menu).getByRole('menuitem',{name:'Stop selected item'}));
+ expect(document.activeElement).toBe(within(menu).getByRole('menuitem',{name:'Stop current run'}));
  expect(stopWorkbenchJob).not.toHaveBeenCalled();expect(stopWorkbench).not.toHaveBeenCalled();
  // Selection changes while the menu is open must not retarget the captured item.
  fireEvent.click(document.querySelector('[data-job-id="peer"] .wb-queue-select')!);
- fireEvent.click(within(menu).getByRole('menuitem',{name:'Stop selected item'}));
+ fireEvent.click(within(menu).getByRole('menuitem',{name:'Stop current run'}));
  await waitFor(()=>expect(stopWorkbenchJob).toHaveBeenCalledWith(expect.objectContaining({id:'selected',state})));
  expect(stopWorkbench).not.toHaveBeenCalled();
  await waitFor(()=>expect(document.querySelector('[data-job-id="peer"] [data-state]')?.getAttribute('data-state')).toBe('running'),{timeout:2500});
+});
+test('Stop on a single run stops it directly without a choice menu',async()=>{
+ vi.mocked(readCurrentWorkbench).mockResolvedValue(collection([heldJob('only','running')]));
+ vi.mocked(stopWorkbench).mockResolvedValue({...collection([heldJob('only','cancelled')]),admissionEpoch:1,outcome:'settled',discarded:0,issues:[]});
+ render(<I18nProvider><Workbench endpoint=""/></I18nProvider>);
+ await waitFor(()=>expect(document.querySelector('[data-run-stop]')).not.toBeNull());
+ const trigger=document.querySelector<HTMLButtonElement>('[data-run-stop]')!;
+ expect(trigger.hasAttribute('aria-haspopup')).toBe(false);expect(trigger.title).toBe('Stop current run');
+ fireEvent.click(trigger);
+ expect(screen.queryByRole('menu')).toBeNull();
+ await waitFor(()=>expect(stopWorkbench).toHaveBeenCalledTimes(1));expect(stopWorkbenchJob).not.toHaveBeenCalled();
 });
 test.each(['outside','escape'] as const)('Stop choice %s leaves jobs and preparation untouched and restores focus',async action=>{
  vi.mocked(readCurrentWorkbench).mockResolvedValue(collection([heldJob('held','running')],1));
@@ -4364,23 +4376,23 @@ test.each(['outside','escape'] as const)('Stop choice %s leaves jobs and prepara
 });
 test.each(['missing','succeeded','unknown','unsupported'] as const)('Stop choice explains disabled %s selection',async state=>{
  const selected=heldJob('selected',state==='unsupported'?'running':state==='missing'?'queued':state);
- vi.mocked(readCurrentWorkbench).mockResolvedValue({...collection(state==='missing'?[]:[selected],1),stopAvailable:state!=='unsupported'});
+ vi.mocked(readCurrentWorkbench).mockResolvedValue({...collection(state==='missing'?[]:[selected],2),stopAvailable:state!=='unsupported'});
  render(<I18nProvider><Workbench endpoint=""/></I18nProvider>);
  await waitFor(()=>expect(document.querySelector('[data-run-stop]')).not.toBeNull());
  fireEvent.click(document.querySelector('[data-run-stop]')!);
- const menu=screen.getByRole('menu',{name:'Stop Workbench work'}),button=within(menu).getByRole('menuitem',{name:'Stop selected item'});
+ const menu=screen.getByRole('menu',{name:'Stop Workbench work'}),button=within(menu).getByRole('menuitem',{name:'Stop current run'});
  expect(button.hasAttribute('disabled')).toBe(true);expect(button.getAttribute('title')).toBeTruthy();
  expect(within(menu).getByText(button.getAttribute('title')!)).toBeTruthy();
  fireEvent.click(button);expect(stopWorkbenchJob).not.toHaveBeenCalled();expect(stopWorkbench).not.toHaveBeenCalled();
 });
 test.each(['rejected','unknown'] as const)('selected Stop keeps %s truthful without global fallback',async outcome=>{
  const job={...heldJob('retained','running'),outputs:[{filename:'keep.png',subfolder:'',type:'output' as const}],outputRoot:'/old/output'};
- vi.mocked(readCurrentWorkbench).mockResolvedValue(collection([job]));
+ vi.mocked(readCurrentWorkbench).mockResolvedValue(collection([job],1));
  if(outcome==='rejected')vi.mocked(stopWorkbenchJob).mockRejectedValue(new Error('Scoped interrupt unsupported'));
  else vi.mocked(stopWorkbenchJob).mockResolvedValue({...job,state:'unknown',error:'Scoped interrupt outcome unknown'});
  render(<I18nProvider><Workbench endpoint=""/></I18nProvider>);
  await waitFor(()=>expect(document.querySelector('[data-run-stop]')).not.toBeNull());
- fireEvent.click(document.querySelector('[data-run-stop]')!);fireEvent.click(screen.getByRole('menuitem',{name:'Stop selected item'}));
+ fireEvent.click(document.querySelector('[data-run-stop]')!);fireEvent.click(screen.getByRole('menuitem',{name:'Stop current run'}));
  await waitFor(()=>expect(document.querySelector('.wb-stage-warning[role="alert"]')?.textContent).toContain(outcome==='rejected'?'Scoped interrupt unsupported':'Scoped interrupt outcome unknown'));
  expect(stopWorkbench).not.toHaveBeenCalled();expect(document.querySelector('[data-job-id="retained"] [data-state]')?.getAttribute('data-state')).toBe(outcome==='rejected'?'running':'unknown');
 });
@@ -4404,19 +4416,19 @@ test('selected Stop owns only its H3 Run all sequence',async()=>{
  fireEvent.click(screen.getByRole('button',{name:'Run all'}));
  fireEvent.click(within(screen.getByRole('dialog',{name:'Continuity'})).getByRole('button',{name:'Close'}));
  await waitFor(()=>expect(document.querySelector('[data-job-id="continuity-selected-stop"]')).not.toBeNull());
- fireEvent.click(document.querySelector('[data-run-stop]')!);fireEvent.click(screen.getByRole('menuitem',{name:'Stop selected item'}));
+ fireEvent.click(document.querySelector('[data-run-stop]')!);fireEvent.click(screen.getByRole('menuitem',{name:'Stop current run'}));
  await waitFor(()=>expect(document.querySelector('[data-job-id="continuity-selected-stop"] [data-state]')?.getAttribute('data-state')).toBe('cancelled'));
  expect(stopWorkbench).not.toHaveBeenCalled();expect(runWorkbenchJob).toHaveBeenCalledTimes(1);
  expect(document.querySelector<HTMLButtonElement>('[data-run]')!.disabled).toBe(false);
 });
 test('late selected Stop cannot overwrite a newer Stop all result',async()=>{
  const job=heldJob('selected','running');let finish!:(job:JobStatus)=>void;
- vi.mocked(readCurrentWorkbench).mockResolvedValue(collection([job]));
+ vi.mocked(readCurrentWorkbench).mockResolvedValue(collection([job],1));
  vi.mocked(stopWorkbenchJob).mockReturnValue(new Promise(resolve=>{finish=resolve;}));
  vi.mocked(stopWorkbench).mockResolvedValue({...collection([{...job,state:'succeeded',outputs:[{filename:'keep.png',subfolder:'',type:'output'}],outputRoot:'/old/output'}]),admissionEpoch:1,outcome:'settled',discarded:0,issues:[]});
  render(<I18nProvider><Workbench endpoint=""/></I18nProvider>);
  await waitFor(()=>expect(document.querySelector('[data-run-stop]')).not.toBeNull());
- fireEvent.click(document.querySelector('[data-run-stop]')!);fireEvent.click(screen.getByRole('menuitem',{name:'Stop selected item'}));
+ fireEvent.click(document.querySelector('[data-run-stop]')!);fireEvent.click(screen.getByRole('menuitem',{name:'Stop current run'}));
  await waitFor(()=>expect(stopWorkbenchJob).toHaveBeenCalledTimes(1));stopAll();
  await screen.findByText('Stop finished. Check the retained job states.');
  await act(async()=>finish({...job,state:'unknown',error:'Late unknown'}));
@@ -4461,7 +4473,7 @@ test('Stop fences a sent Run reply, coalesces presses and passes the captured na
  fireEvent.click(document.querySelector('[data-run]')!);await waitFor(()=>expect(runWorkbenchJob).toHaveBeenCalledTimes(1));
  expect(vi.mocked(runWorkbenchJob).mock.calls[0][2]).toBe(7);
  const stop=document.querySelector<HTMLButtonElement>('[data-run-stop]')!;
- fireEvent.click(stop);fireEvent.click(screen.getByRole('menuitem',{name:'Stop all'}));fireEvent.click(stop);fireEvent.click(document.querySelector('[data-run]')!);
+ fireEvent.click(stop);fireEvent.click(stop);fireEvent.click(document.querySelector('[data-run]')!); // a single sent run stops on the button itself
  expect(stopWorkbench).toHaveBeenCalledTimes(1);expect(runWorkbenchJob).toHaveBeenCalledTimes(1);
  await act(async()=>finishStop({...collection([heldJob('stopped','cancelled')]),admissionEpoch:8,outcome:'settled',discarded:0,issues:[]}));
  await act(async()=>finishRun(heldJob('stale-run','running')));

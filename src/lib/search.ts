@@ -75,7 +75,7 @@ export const searchIndex: readonly SearchEntry[] = [
   { view: studio, studioTab: 'generate', tab: 'setup.tab.studio', section: 'search.section.prompts', label: 'studio.run.positive', target: '#run-positive', aliases: ['prompt', 'text'] },
   { view: studio, studioTab: 'generate', tab: 'setup.tab.studio', section: 'search.section.prompts', label: 'studio.run.negative', target: '#run-negative', aliases: ['prompt', 'exclude'] },
   { view: studio, studioTab: 'generate', tab: 'setup.tab.studio', section: 'search.section.run', label: 'studio.run.run', target: '[data-run]', aliases: ['generate', 'submit'], reason: 'search.reason.backend' },
-  { view: studio, studioTab: 'generate', tab: 'setup.tab.studio', section: 'search.section.run', label: 'studio.run.stop.choose', target: '[data-run-stop]', aliases: ['stop selected item', 'stop all', 'cancel', 'interrupt', 'queue'], reason: 'studio.run.queueEmpty' },
+  { view: studio, studioTab: 'generate', tab: 'setup.tab.studio', section: 'search.section.run', label: 'studio.run.stop.choose', target: '[data-run-stop]', aliases: ['stop current run', 'stop all', 'cancel', 'interrupt', 'queue'], reason: 'studio.run.queueEmpty' },
   { view: studio, studioTab: 'generate', tab: 'setup.tab.studio', section: 'studio.run.queue', label: 'studio.run.queue', target: '#studio-queue' },
   { view: studio, studioTab: 'generate', tab: 'setup.tab.studio', section: 'studio.run.metadata', label: 'studio.run.metadata.apply', target: '[data-media-settings]', aliases: ['reuse', 'restore', 'media settings', 'metadata'], reason: 'studio.run.metadata.empty' },
   { view: studio, studioTab: 'generate', tab: 'setup.tab.studio', section: 'studio.run.queue', label: 'studio.run.metadata.reuse', target: '[data-job-reuse-prompt]', aliases: ['reuse prompt', 'queue prompt'], reason: 'studio.run.metadata.empty' },
@@ -97,7 +97,7 @@ export const searchIndex: readonly SearchEntry[] = [
   { view: studio, studioTab: 'generate', tab: 'setup.tab.studio', section: 'studio.run.dock', label: 'studio.run.dock.loras', target: '[data-dock-tab="loras"]', aliases: ['lora'] },
   { view: studio, studioTab: 'generate', tab: 'setup.tab.studio', section: 'studio.run.dock', label: 'presets.title', target: '[data-dock-tab="presets"]', aliases: ['preset'] },
   { view: studio, studioTab: 'generate', tab: 'setup.tab.studio', section: 'studio.run.dock', label: 'wildcards.title', target: '[data-dock-tab="wildcards"]', aliases: ['wildcard'] },
-  { view: studio, studioTab: 'generate', tab: 'setup.tab.studio', section: 'studio.run.dock', label: 'studio.run.dock.references', target: '[data-open-references]', aliases: ['reference', 'image'], reason: 'search.reason.references' },
+  { view: studio, studioTab: 'generate', tab: 'setup.tab.studio', section: 'studio.run.dock', label: 'studio.run.dock.references', target: '[data-open-references]', aliases: ['reference', 'image', 'refmod', 'create refmod'], reason: 'search.reason.references' },
   // Studio · Options dock cards
   { view: studio, studioTab: 'generate', dockTab: 'options', tab: 'setup.tab.studio', section: 'studio.run.dock.options', label: 'studio.run.opt.attention', target: '[data-option="attention"]', aliases: ['sage', 'flash', 'kitchen'], reason: 'search.reason.backend' },
   { view: studio, studioTab: 'generate', dockTab: 'options', tab: 'setup.tab.studio', section: 'studio.run.dock.options', label: 'studio.run.opt.enhancedPreview', target: '[data-option="enhancedPreview"]', aliases: ['animated', 'temporal', 'tiny vae', 'video preview'], reason: 'search.reason.backend' },

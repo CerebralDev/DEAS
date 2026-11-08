@@ -2,7 +2,7 @@ import { invoke, isTauri } from '@tauri-apps/api/core';
 import type { CompiledRecipe, DiagnosticImageIntentV1 } from './execution';
 import type { Sam3MaskIntentV1 } from './sam3';
 import { type MusicIntentV1 } from './musicIntent';
-import { type VideoEnhanceIntentV1, type VideoIntentV1 } from './videoIntent';
+import { type H3Media, type VideoEnhanceIntentV1, type VideoIntentV1 } from './videoIntent';
 
 /** Image recipe, one of the video family recipes or a YuE2 music recipe; all compile natively.
  * TVE enhance jobs (`VideoEnhanceIntentV1`) share the native session: readers check `isVideoEnhanceIntent` before narrowing. */
@@ -141,6 +141,14 @@ export interface H3Clip { importedVideo?:H3ImportedVideo; clipId: string; parent
 /** One DaSiWa RefMod library entry (`models/refmods`), read-only. */
 export interface RefModEntry { name: string; kinds: ('image' | 'video' | 'audio')[]; description: string }
 export const readRefMods = (baseUrl: string): Promise<RefModEntry[]> => native('native_h3_refmods', { baseUrl });
+/** Director *Create RefMod*: an isolated `DaSiWaH3RefModExport` prompt, not a Workbench job. Files are this app's uploads (`deas-inputs/…`). */
+export type RefModConcept = 'generic' | 'identity' | 'style' | 'motion' | 'audio';
+export interface RefModCreateRequest { name: string; description: string; conceptType: RefModConcept; media: (H3Media & { description?: string })[]; refmods: string[]; vae?: string; audioVae?: string }
+export interface RefModCreated { name: string; members: number; counts: { image: number; video: number; audio: number }; warnings: string[] }
+export type RefModExportState = { state: 'queued' | 'running' | 'cancelled' | 'missing' } | { state: 'done'; result: RefModCreated } | { state: 'failed'; error: string };
+export const submitRefMod = (baseUrl: string, request: RefModCreateRequest): Promise<{ promptId: string }> => native('native_h3_refmod_submit', { baseUrl, request });
+export const refModStatus = (baseUrl: string, promptId: string): Promise<RefModExportState> => native('native_h3_refmod_status', { baseUrl, promptId });
+export const cancelRefMod = (baseUrl: string, promptId: string): Promise<{ cancelled: 'queued' | 'running' | 'none' }> => native('native_h3_refmod_cancel', { baseUrl, promptId });
 export const readH3Session = (baseUrl: string, session: string): Promise<{ latestId: string | null; clips: H3Clip[] }> => native('native_h3_session', { baseUrl, session });
 export const submitDiagnosticJob = (planId: string): Promise<JobStatus> => native('native_job_submit', { planId, confirmed: true });
 export const readDiagnosticJobStatus = (jobId: string): Promise<JobStatus> => native('native_job_status', { jobId });

@@ -37,3 +37,9 @@
 .references-editor [data-edit-reference] { border-radius: 999px; background: rgb(var(--copper-rgb) / 0.12); color: var(--copper-hi); box-shadow: 0 0 8px rgb(var(--copper-rgb) / 0.45); }
 .references-editor [data-edit-reference]:hover:not(:disabled) { color: var(--copper-text); box-shadow: 0 0 12px rgb(var(--copper-hi-rgb) / 0.55); }
 @media (forced-colors: active) { .references-editor [data-edit-reference] { background: transparent; box-shadow: none; color: accentcolor; } }
+.refmod-create { display: grid; gap: .65rem; min-width: 0; }
+.refmod-create > label { display: grid; gap: .25rem; }
+.refmod-create input[type="text"], .refmod-create textarea, .refmod-create select { width: 100%; min-width: 0; box-sizing: border-box; }
+.refmod-create-members { list-style: none; margin: 0; padding: 0; display: grid; gap: .5rem; }
+.refmod-create-members li { display: grid; gap: .25rem; }
+.refmod-create-members label { display: flex; gap: .4rem; align-items: center; overflow-wrap: anywhere; }

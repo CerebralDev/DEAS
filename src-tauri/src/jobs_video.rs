@@ -588,7 +588,7 @@ fn validate_refmods(r: &Value) -> Result<(), String> {
 }
 
 /// Empty media is valid with RefMods or a continuation that ignores references; present items still validate.
-fn validate_h3_media(m: &Value, refmods: bool, allow_empty: bool) -> Result<(), String> {
+pub(crate) fn validate_h3_media(m: &Value, refmods: bool, allow_empty: bool) -> Result<(), String> {
     let items = m
         .as_array()
         .filter(|a| (allow_empty || refmods || !a.is_empty()) && a.len() <= 12)
