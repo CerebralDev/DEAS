@@ -63,3 +63,9 @@
 .chat-drawing img { max-height: 260px; opacity: 0.85; }
 .chat-render-error { color: var(--danger-hi); }
 .chat-prompt [data-chat-redraw] { justify-self: start; }
+.chat-menu { position: fixed; z-index: 50; display: grid; min-width: 160px; padding: 4px; border: 1px solid rgb(var(--ink-rgb) / 0.12); border-radius: 8px; background: var(--surface); box-shadow: 0 8px 24px rgb(0 0 0 / 0.35); }
+.chat-menu button { text-align: left; padding: 6px 10px; border: 0; border-radius: 6px; background: transparent; color: inherit; font: inherit; font-size: 12px; cursor: pointer; }
+.chat-menu button:hover, .chat-menu button:focus-visible { background: rgb(var(--ink-rgb) / 0.08); outline: none; }
+.chat-menu button.danger { color: var(--danger-hi); }
+.chat-menu button:disabled { opacity: 0.5; cursor: default; }
+.chat-row-pin { font-size: 0.85em; }

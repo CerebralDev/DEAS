@@ -46,7 +46,7 @@ export function chatRenderSize(ask: RenderAsk, model: Size, current: Size, grid:
 }
 export interface ChatMessage { role: 'user' | 'assistant'; content: string; pictures: number; prompts: WrittenPrompt[]; citations: ChatHit[]; tools: string[]; at: number }
 export interface ChatThread { id: string; title: string; model: string; created: number; updated: number; messages: ChatMessage[] }
-export interface ChatSummary { id: string; title: string; updated: number; count: number }
+export interface ChatSummary { id: string; title: string; updated: number; count: number; pinned?: boolean }
 export interface ChatSettings { search: 'off' | 'duckduckgo' | 'searxng'; searxngUrl: string }
 export type ChatEvent =
   | { event: 'chat'; id: string; title: string }
@@ -67,6 +67,8 @@ export const cancelChat = (id: string) => invoke<boolean>('native_chat_cancel', 
 export const listChats = (root: string) => invoke<ChatSummary[]>('native_chat_list', { root });
 export const getChat = (root: string, id: string) => invoke<ChatThread>('native_chat_get', { root, id });
 export const renameChat = (root: string, id: string, title: string) => invoke<void>('native_chat_rename', { root, id, title });
+/** Pins a conversation to the top of the list (or unpins it). */
+export const pinChat = (root: string, id: string, pinned: boolean) => invoke<void>('native_chat_pin', { root, id, pinned });
 export const deleteChat = (root: string, id: string) => invoke<void>('native_chat_delete', { root, id });
 /** Writes what came of a render onto the chat message that asked for it; resolves with the updated message. */
 export const recordRender = (root: string, id: string, at: number, index: number, result: RenderResult) => invoke<ChatMessage>('native_chat_render_result', { root, id, at, index, result });

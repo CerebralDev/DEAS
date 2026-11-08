@@ -13,7 +13,7 @@
 - Type and press **Enter** to send (**Shift+Enter** for a new line). Answers appear as they are written; **Stop** ends one early and keeps what arrived.
 - **Pictures:** **Picture** or paste an image (up to four per message, PNG/JPEG/WebP, large ones scaled down). They go to the model with that message only and are never saved; the history notes that pictures were sent. The model has to be able to see pictures.
 - **Include what I'm working on:** sends Studio's current prompt, negative prompt, model, size and sampler settings, and your Prompt Forge draft with each message, so you can ask about them directly ("why does this prompt keep giving two people?").
-- **New chat**, and the list of conversations on the left: open, rename (✎) or delete (×, then **Delete?** to confirm).
+- **New chat**, and the list of conversations on the left: open, rename (✎) or delete (×, then **Delete?** to confirm). Right-click a conversation for **Rename**, **Pin to top** / **Unpin** and **Delete**. Pinned conversations (📌) stay at the top. Conversations are kept until you delete them; nothing is removed on its own.
 
 ## What it can do on its own
 

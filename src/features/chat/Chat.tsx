@@ -2,7 +2,7 @@ import { Fragment, useEffect, useRef, useState, type ClipboardEvent, type ReactN
 import { useI18n } from '../../i18n/I18nProvider';
 import { PromptTextarea } from '../studio/PromptTextarea';
 import { convertFileSrc } from '@tauri-apps/api/core';
-import { cancelChat, chatSettings, deleteChat, freeChatLlm, getChat, listChats, recordRender, renameChat, saveChatSettings, sendChat, workingContext, type ChatEvent, type ChatHit, type ChatMessage, type ChatRenderOutcome, type ChatRenderRequest, type ChatSettings, type ChatStudio, type ChatSummary, type RenderResult, type WrittenPrompt } from '../../lib/chat';
+import { cancelChat, chatSettings, deleteChat, freeChatLlm, getChat, listChats, pinChat, recordRender, renameChat, saveChatSettings, sendChat, workingContext, type ChatEvent, type ChatHit, type ChatMessage, type ChatRenderOutcome, type ChatRenderRequest, type ChatSettings, type ChatStudio, type ChatSummary, type RenderResult, type WrittenPrompt } from '../../lib/chat';
 import { pollWorkbench, stopWorkbenchJob, type JobStatus } from '../../lib/jobs';
 import { forgeError, nativeModelId } from '../../lib/forge';
 import { isBoolean, isString, usePref } from '../../lib/preferences';
@@ -282,19 +282,34 @@ export function Chat({ endpoint, root, active = true, onSend, studio, onRender }
     if (files.length) { e.preventDefault(); void addPictures(files); }
   };
   const statusText = (s: string, d: string | null) => t(`chat.status.${s}`, { detail: d ?? '' });
+  // PromptForge's conversation menu: right-click a row for Rename, Pin to top and Delete.
+  const [menu, setMenu] = useState<{ chat: ChatSummary; x: number; y: number } | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!menu) return;
+    menuRef.current?.querySelector('button')?.focus();
+    const close = (e: Event) => { if (!(e.target instanceof Node && menuRef.current?.contains(e.target))) setMenu(null); };
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenu(null); };
+    window.addEventListener('pointerdown', close, true);
+    window.addEventListener('keydown', key);
+    window.addEventListener('blur', close);
+    return () => { window.removeEventListener('pointerdown', close, true); window.removeEventListener('keydown', key); window.removeEventListener('blur', close); };
+  }, [menu]);
+  const pin = (c: ChatSummary) => { if (root) void pinChat(root, c.id, !c.pinned).then(refresh, err => setError(forgeError(err))); };
 
   if (!root) return <section className="chat-tab"><p className="field-help">{t('forge.noBackend')}</p></section>;
   return <section className="chat-tab" aria-label={t('studio.tab.chat')}>
     <aside className="forge-card chat-side">
       <button type="button" className="action-button" data-chat-new disabled={busy} onClick={() => void open(undefined)}>{t('chat.new')}</button>
       <nav className="chat-list" aria-label={t('chat.history')}>
-        {chats.map(c => <div key={c.id} className={`chat-row${c.id === id ? ' on' : ''}`} data-chat-row={c.id}>
+        {chats.map(c => <div key={c.id} className={`chat-row${c.id === id ? ' on' : ''}${c.pinned ? ' pinned' : ''}`} data-chat-row={c.id} data-chat-pinned={c.pinned || undefined}
+          onContextMenu={e => { e.preventDefault(); setConfirmDelete(null); setMenu({ chat: c, x: e.clientX, y: e.clientY }); }}>
           {renaming?.id === c.id
             ? <input type="text" autoFocus aria-label={t('chat.rename')} value={renaming.title} maxLength={120}
               onChange={e => setRenaming({ id: c.id, title: e.target.value })}
               onKeyDown={e => { if (e.key === 'Enter') { void renameChat(root, c.id, renaming.title).then(refresh, err => setError(forgeError(err))); setRenaming(null); } else if (e.key === 'Escape') setRenaming(null); }}
               onBlur={() => setRenaming(null)}/>
-            : <button type="button" className="chat-row-open" disabled={busy} onClick={() => void open(c.id)}>{c.title}</button>}
+            : <button type="button" className="chat-row-open" disabled={busy} onClick={() => void open(c.id)}>{c.pinned && <span className="chat-row-pin" aria-label={t('chat.pinned')} title={t('chat.pinned')}>📌 </span>}{c.title}</button>}
           <div className="chat-row-actions">
             <button type="button" className="forge-ghost" aria-label={t('chat.rename')} title={t('chat.rename')} onClick={() => setRenaming({ id: c.id, title: c.title })}>✎</button>
             {confirmDelete === c.id
@@ -304,6 +319,11 @@ export function Chat({ endpoint, root, active = true, onSend, studio, onRender }
         </div>)}
         {!chats.length && <p className="forge-note">{t('chat.noHistory')}</p>}
       </nav>
+      {menu && <div ref={menuRef} className="chat-menu" role="menu" data-chat-menu style={{ left: Math.min(menu.x, window.innerWidth - 180), top: Math.min(menu.y, window.innerHeight - 130) }}>
+        <button type="button" role="menuitem" data-chat-menu-rename onClick={() => { setRenaming({ id: menu.chat.id, title: menu.chat.title }); setMenu(null); }}>{t('chat.rename')}</button>
+        <button type="button" role="menuitem" data-chat-menu-pin onClick={() => { pin(menu.chat); setMenu(null); }}>{t(menu.chat.pinned ? 'chat.unpin' : 'chat.pin')}</button>
+        <button type="button" role="menuitem" className="danger" data-chat-menu-delete disabled={busy && menu.chat.id === id} onClick={() => { setConfirmDelete(menu.chat.id); setMenu(null); }}>{t('chat.delete')}</button>
+      </div>}
     </aside>
     <div className="forge-card chat-main">
       <div className="forge-card-head chat-head">

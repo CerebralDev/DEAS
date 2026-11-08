@@ -56,5 +56,8 @@
   "chat.render.timeout": "30分たっても終わっていません。状態はスタジオ → 生成で確認してください。",
   "chat.render.failed": "生成が失敗を報告しました。詳細はログを確認してください。",
   "chat.render.room": "GPUの空きを作っています…",
-  "chat.status.loading_model": "モデルを再読み込みしています…"
+  "chat.status.loading_model": "モデルを再読み込みしています…",
+  "chat.pin": "上部に固定",
+  "chat.unpin": "固定を解除",
+  "chat.pinned": "固定済み"
 }

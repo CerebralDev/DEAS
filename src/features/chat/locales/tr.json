@@ -56,5 +56,8 @@
   "chat.render.timeout": "30 dakika sonra hâlâ bitmedi. Durumunu Stüdyo → Oluştur'da gör.",
   "chat.render.failed": "Oluştur bir hata bildirdi. Ayrıntılar Günlüklerde.",
   "chat.render.room": "GPU’da yer açılıyor…",
-  "chat.status.loading_model": "Model yeniden yükleniyor…"
+  "chat.status.loading_model": "Model yeniden yükleniyor…",
+  "chat.pin": "En üste sabitle",
+  "chat.unpin": "Sabitlemeyi kaldır",
+  "chat.pinned": "Sabitlendi"
 }

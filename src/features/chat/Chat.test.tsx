@@ -246,3 +246,37 @@ it('says why a picture was not drawn when Generate refuses it', async () => {
   await screen.findByText('Not drawn: The backend is not running. Start it under Backend, then ask again.');
   expect(screen.getByRole('button', { name: 'Draw again' })).toBeTruthy();
 });
+
+it('right-click opens Rename, Pin to top and Delete; pinned chats show a pin', async () => {
+  let pinned = false;
+  const base = vi.mocked(invoke).getMockImplementation()!;
+  vi.mocked(invoke).mockImplementation(async (command, args) => {
+    const a = args as Record<string, any>;
+    if (command === 'native_chat_list') return [{ id: ID, title: old.title, updated: 2, count: 2, pinned }];
+    if (command === 'native_chat_pin') { pinned = a.pinned; return undefined; }
+    return base(command, args);
+  });
+  render(<I18nProvider><Chat endpoint="http://127.0.0.1:8188" root="/env" onSend={vi.fn()}/></I18nProvider>);
+  const row = await screen.findByRole('button', { name: old.title });
+  fireEvent.contextMenu(row);
+  const menu = await screen.findByRole('menu');
+  expect([...menu.querySelectorAll('button')].map(b => b.textContent)).toEqual(['Rename', 'Pin to top', 'Delete']);
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Pin to top' }));
+  await waitFor(() => expect(vi.mocked(invoke)).toHaveBeenCalledWith('native_chat_pin', { root: '/env', id: ID, pinned: true }));
+  expect(screen.queryByRole('menu')).toBeNull();
+  await screen.findByLabelText('Pinned');
+  // Unpin is offered once pinned; Escape closes without acting.
+  fireEvent.contextMenu(screen.getByRole('button', { name: /how does LTX/ }));
+  expect(await screen.findByRole('menuitem', { name: 'Unpin' })).toBeTruthy();
+  fireEvent.keyDown(window, { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+  // Rename puts the title in an edit box; Delete still asks first.
+  fireEvent.contextMenu(screen.getByRole('button', { name: /how does LTX/ }));
+  fireEvent.click(await screen.findByRole('menuitem', { name: 'Rename' }));
+  expect((await screen.findByRole('textbox', { name: 'Rename' }) as HTMLInputElement).value).toBe(old.title);
+  fireEvent.keyDown(screen.getByRole('textbox', { name: 'Rename' }), { key: 'Escape' });
+  fireEvent.contextMenu(screen.getByRole('button', { name: /how does LTX/ }));
+  fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
+  expect(screen.getByRole('button', { name: 'Delete?' })).toBeTruthy();
+  expect(vi.mocked(invoke).mock.calls.some(([c]) => c === 'native_chat_delete')).toBe(false);
+});

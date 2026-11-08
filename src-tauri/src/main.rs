@@ -187,6 +187,7 @@ fn main() {
             deas::forge::assistant::native_chat_settings_write,
             deas::forge::assistant::native_chat_render_result,
             deas::forge::assistant::native_chat_free_llm,
+            deas::forge::assistant::native_chat_pin,
             deas::forge::engine::native_forge_reference_readback,
             deas::forge::randomizer::native_forge_randomizer_list,
             deas::forge::randomizer::native_forge_randomizer_roll,

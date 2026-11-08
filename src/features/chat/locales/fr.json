@@ -56,5 +56,8 @@
   "chat.render.timeout": "Toujours pas terminée après 30 minutes. Voyez son état dans Studio → Générer.",
   "chat.render.failed": "Générer a signalé un échec. Les détails sont dans les Logs.",
   "chat.render.room": "Libération de la place sur le GPU…",
-  "chat.status.loading_model": "Rechargement du modèle…"
+  "chat.status.loading_model": "Rechargement du modèle…",
+  "chat.pin": "Épingler en haut",
+  "chat.unpin": "Désépingler",
+  "chat.pinned": "Épinglée"
 }

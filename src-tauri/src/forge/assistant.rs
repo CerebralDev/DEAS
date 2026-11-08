@@ -197,6 +197,9 @@ pub struct Chat {
     pub model: String,
     pub created: u64,
     pub updated: u64,
+    /// Pinned to the top of the list (PromptForge's Pin to top).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub pinned: bool,
     pub messages: Vec<Message>,
 }
 
@@ -207,6 +210,7 @@ pub struct Summary {
     pub title: String,
     pub updated: u64,
     pub count: usize,
+    pub pinned: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -325,9 +329,11 @@ pub fn list(root: &Path) -> Vec<Summary> {
             title: c.title,
             updated: c.updated,
             count: c.messages.len(),
+            pinned: c.pinned,
         })
         .collect();
-    out.sort_by_key(|s| std::cmp::Reverse(s.updated));
+    // Pinned first, then newest; a pinned chat is never past the cut-off below.
+    out.sort_by_key(|s| (std::cmp::Reverse(s.pinned), std::cmp::Reverse(s.updated)));
     out.truncate(MAX_CHATS);
     out
 }
@@ -909,6 +915,7 @@ pub async fn send(
                 model: req.model.clone(),
                 created: t,
                 updated: t,
+                pinned: false,
                 messages: vec![],
             }
         }
@@ -1309,6 +1316,19 @@ pub async fn native_chat_rename(root: String, id: String, title: String) -> Resu
     let mut chat = load(&root, &id)?;
     chat.title = title;
     save(&root, &chat)
+}
+
+/// Pins a conversation to the top of the list, or unpins it. Does not change when it was last spoken to.
+#[tauri::command]
+pub async fn native_chat_pin(root: String, id: String, pinned: bool) -> Result<(), String> {
+    let root = env_root(&root)?;
+    tokio::task::spawn_blocking(move || {
+        let mut chat = load(&root, &id)?;
+        chat.pinned = pinned;
+        save(&root, &chat)
+    })
+    .await
+    .map_err(|_| "Chat history failed to save")?
 }
 
 #[tauri::command]
@@ -2217,6 +2237,7 @@ mod tests {
             model: "m".into(),
             created: 1,
             updated,
+            pinned: false,
             messages: vec![],
         };
         let a = "00000000-0000-4000-8000-000000000001";
@@ -2228,6 +2249,18 @@ mod tests {
             l.iter().map(|s| s.id.as_str()).collect::<Vec<_>>(),
             vec![b, a]
         );
+        // Pinned goes first even when older, and pinning does not touch "updated".
+        let mut older = load(&root, a).unwrap();
+        older.pinned = true;
+        save(&root, &older).unwrap();
+        let l = list(&root);
+        assert_eq!(
+            l.iter()
+                .map(|s| (s.id.as_str(), s.pinned))
+                .collect::<Vec<_>>(),
+            vec![(a, true), (b, false)]
+        );
+        assert_eq!(load(&root, a).unwrap().updated, 5);
         assert_eq!(load(&root, a).unwrap().title, "t5");
         assert!(load(&root, "../../etc/passwd").is_err());
         assert!(file(&root, "x").is_err());
@@ -2279,6 +2312,7 @@ mod tests {
             model: "m".into(),
             created: 0,
             updated: 0,
+            pinned: false,
             messages: vec![
                 msg("user", "draw a cat girl", vec![]),
                 msg(
@@ -2322,6 +2356,7 @@ mod tests {
             model: "m".into(),
             created: 0,
             updated: 0,
+            pinned: false,
             messages: vec![
                 Message {
                     role: "user".into(),
