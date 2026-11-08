@@ -253,11 +253,8 @@ fn image_mime(bytes: &[u8], webp: bool) -> Result<&'static str, String> {
         Ok("image/png")
     }
 }
-fn read_pack(folder: &Path, used: &mut usize) -> Result<ThemePack, String> {
-    plain(folder, true)?;
-    let bytes = bounded(&folder.join("theme.json"), MANIFEST_LIMIT)?;
-    let m: Manifest =
-        serde_json::from_slice(crate::bom_free(&bytes)).map_err(|_| "Invalid theme.json schema")?;
+// Manifest field rules shared by the read scan and the editor's save path.
+fn manifest_fields(m: &Manifest) -> Result<(), String> {
     if m.schema_version != 1
         || !slug(&m.id)
         || !label(&m.name)
@@ -276,12 +273,20 @@ fn read_pack(folder: &Path, used: &mut usize) -> Result<ThemePack, String> {
     if m.assets.len() > 16 {
         return Err("Too many theme assets".into());
     }
+    if m.assets.keys().any(|role| !slug(role)) {
+        return Err("Unsupported theme image role".into());
+    }
+    Ok(())
+}
+fn read_pack(folder: &Path, used: &mut usize) -> Result<ThemePack, String> {
+    plain(folder, true)?;
+    let bytes = bounded(&folder.join("theme.json"), MANIFEST_LIMIT)?;
+    let m: Manifest =
+        serde_json::from_slice(crate::bom_free(&bytes)).map_err(|_| "Invalid theme.json schema")?;
+    manifest_fields(&m)?;
     let mut assets = BTreeMap::new();
     let mut pack_bytes = 0;
     for (role, file) in &m.assets {
-        if !slug(role) {
-            return Err("Unsupported theme image role".into());
-        }
         let path = asset_path(folder, file)?;
         let bytes = bounded(&path, ASSET_LIMIT)?;
         pack_bytes += bytes.len();
@@ -424,34 +429,8 @@ fn ensure_starter_pack(themes: &Path, source: &Path) -> Result<(), String> {
     copy_folder(&starter, &target)
 }
 
-fn open_local_file(path: &Path) -> Result<(), String> {
-    #[cfg(target_os = "linux")]
-    let mut command = {
-        let mut command = std::process::Command::new("xdg-open");
-        command.arg(path);
-        command
-    };
-    #[cfg(windows)]
-    let mut command = {
-        let mut command = std::process::Command::new("cmd");
-        let path = path.to_string_lossy().into_owned();
-        command.args(["/C", "start", ""]).arg(path);
-        command
-    };
-    #[cfg(target_os = "macos")]
-    let mut command = {
-        let mut command = std::process::Command::new("open");
-        command.arg(path);
-        command
-    };
-    command
-        .spawn()
-        .map(|_| ())
-        .map_err(|_| "Cannot open the theme editor".to_string())
-}
-
 #[tauri::command]
-pub async fn native_theme_editor(app: AppHandle, root: String) -> Result<(), String> {
+pub async fn native_theme_editor(app: AppHandle, root: String) -> Result<String, String> {
     let result = tauri::async_runtime::spawn_blocking(move || {
         let directory = environment(&root)?.join("themes");
         if !directory
@@ -463,11 +442,200 @@ pub async fn native_theme_editor(app: AppHandle, root: String) -> Result<(), Str
         plain(&directory, true)?;
         let source = theme_editor_source(&app)?;
         ensure_starter_pack(&directory, &source)?;
-        open_local_file(&source.join("EDIT-THEMES.html"))
+        // The webview renders this file in its own frame instead of a system browser, so
+        // the folder picker below serves the environment's themes over native reads/writes.
+        Ok(source
+            .join("EDIT-THEMES.html")
+            .to_string_lossy()
+            .into_owned())
     })
     .await
     .map_err(|_| "Theme editor operation could not complete".to_owned())
     .and_then(|result| result);
+    if let Err(error) = &result {
+        diagnostic(error);
+    }
+    result
+}
+
+/// One theme folder inside the selected environment's `themes/`, by name.
+fn theme_folder(root: &str, folder: &str) -> Result<PathBuf, String> {
+    if !slug(folder) {
+        return Err("Theme folder name is invalid".into());
+    }
+    let themes = environment(root)?.join("themes");
+    plain(&themes, true)?;
+    let target = themes.join(folder);
+    plain(&target, true)?;
+    let real = fs::canonicalize(&target).map_err(|_| "Cannot resolve theme directory")?;
+    if !real.starts_with(fs::canonicalize(&themes).map_err(|_| "Cannot resolve themes folder")?) {
+        return Err("Theme folder leaves the themes folder".into());
+    }
+    Ok(real)
+}
+
+// The offline editor's own document tree: manifest, images under assets/ and its own backups.
+fn theme_target(root: &str, folder: &str, file: &str) -> Result<(PathBuf, u64), String> {
+    let directory = theme_folder(root, folder)?;
+    let (parent, name, limit) = match file.split('/').collect::<Vec<_>>().as_slice() {
+        ["theme.json"] => (directory, "theme.json".to_owned(), MANIFEST_LIMIT),
+        ["assets", name] => {
+            let assets = directory.join("assets");
+            if assets.try_exists().map_err(|_| "Cannot inspect theme folder")? {
+                plain(&assets, true)?;
+            }
+            let stem = name.rsplit_once('.').map(|(stem, _)| stem).unwrap_or(name);
+            if name.len() > 120
+                || !slug(stem)
+                || !["png", "webp"].contains(&name.rsplit('.').next().unwrap_or_default())
+            {
+                return Err("Theme images must use local PNG or WebP filenames".into());
+            }
+            (assets, (*name).to_owned(), ASSET_LIMIT)
+        }
+        ["backups", name] => {
+            let backups = directory.join("backups");
+            if backups.try_exists().map_err(|_| "Cannot inspect theme folder")? {
+                plain(&backups, true)?;
+            }
+            let stem = name.rsplit_once('.').map(|(stem, _)| stem).unwrap_or(name);
+            if name.len() > 120
+                || !slug(stem)
+                || name.rsplit('.').next().unwrap_or_default() != "json"
+            {
+                return Err("Theme backups must be JSON files under backups/".into());
+            }
+            (backups, (*name).to_owned(), MANIFEST_LIMIT)
+        }
+        _ => {
+            return Err(
+                "Theme editor files must be theme.json, an image under assets/ or a backup under backups/"
+                    .into(),
+            )
+        }
+    };
+    Ok((parent.join(name), limit))
+}
+
+fn list_folders(root: &str) -> Result<Vec<String>, String> {
+    let themes = environment(root)?.join("themes");
+    let mut names = Vec::new();
+    if !themes
+        .try_exists()
+        .map_err(|_| "Cannot inspect themes folder")?
+    {
+        return Ok(names);
+    }
+    plain(&themes, true)?;
+    for entry in fs::read_dir(&themes).map_err(|_| "Cannot read themes folder")? {
+        let entry = entry.map_err(|_| "Cannot read themes folder")?;
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if !slug(&name) || !entry.path().is_dir() {
+            continue;
+        }
+        if !entry
+            .path()
+            .join("theme.json")
+            .try_exists()
+            .unwrap_or(false)
+        {
+            continue;
+        }
+        names.push(name);
+        if names.len() > 128 {
+            return Err("Themes folder contains more than 128 entries".into());
+        }
+    }
+    names.sort();
+    Ok(names)
+}
+
+#[tauri::command]
+pub async fn native_theme_folders(root: String) -> Result<Vec<String>, String> {
+    let result = tauri::async_runtime::spawn_blocking(move || list_folders(&root))
+        .await
+        .map_err(|_| "Theme folder listing could not complete".to_owned())
+        .and_then(|result| result);
+    if let Err(error) = &result {
+        diagnostic(error);
+    }
+    result
+}
+
+fn read_file(root: &str, folder: &str, path: &str) -> Result<Option<String>, String> {
+    let (target, limit) = theme_target(root, folder, path)?;
+    match fs::symlink_metadata(&target) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(_) => return Err("Cannot inspect theme file".into()),
+        Ok(_) => (),
+    }
+    Ok(Some(STANDARD.encode(bounded(&target, limit)?)))
+}
+
+#[tauri::command]
+pub async fn native_theme_read(
+    root: String,
+    folder: String,
+    path: String,
+) -> Result<Option<String>, String> {
+    let result = tauri::async_runtime::spawn_blocking(move || read_file(&root, &folder, &path))
+        .await
+        .map_err(|_| "Theme file read could not complete".to_owned())
+        .and_then(|result| result);
+    if let Err(error) = &result {
+        diagnostic(error);
+    }
+    result
+}
+
+// The editor replaces one file of its own pack: manifest, image or backup, never anything else.
+fn write_file(root: &str, folder: &str, path: &str, base64: &str) -> Result<(), String> {
+    let (target, limit) = theme_target(root, folder, path)?;
+    let bytes = STANDARD
+        .decode(base64.as_bytes())
+        .map_err(|_| "Theme file payload is invalid")?;
+    if bytes.len() as u64 > limit {
+        return Err("Theme file exceeds its size limit".into());
+    }
+    if path == "theme.json" {
+        let m: Manifest = serde_json::from_slice(crate::bom_free(&bytes))
+            .map_err(|_| "Invalid theme.json schema")?;
+        manifest_fields(&m)?;
+    } else if path.starts_with("assets/") {
+        image_mime(&bytes, path.ends_with(".webp"))?;
+    }
+    let parent = target.parent().ok_or("Theme file parent is unavailable")?;
+    fs::create_dir_all(parent).map_err(|_| "Cannot create theme folder")?;
+    plain(parent, true)?;
+    if let Ok(meta) = fs::symlink_metadata(&target) {
+        if linked(&meta) || !meta.is_file() {
+            return Err("Theme links and special files are not supported".into());
+        }
+    }
+    // Replace atomically through a sibling temporary file, like every other DEAS write.
+    let mut tmp = tempfile::NamedTempFile::new_in(parent)
+        .map_err(|_| "Cannot create theme temporary file")?;
+    std::io::Write::write_all(&mut tmp, &bytes).map_err(|_| "Cannot write theme file")?;
+    tmp.as_file()
+        .sync_all()
+        .map_err(|_| "Cannot write theme file")?;
+    tmp.persist(&target)
+        .map_err(|_| "Cannot replace theme file")?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn native_theme_write(
+    root: String,
+    folder: String,
+    path: String,
+    base64: String,
+) -> Result<(), String> {
+    let result =
+        tauri::async_runtime::spawn_blocking(move || write_file(&root, &folder, &path, &base64))
+            .await
+            .map_err(|_| "Theme file write could not complete".to_owned())
+            .and_then(|result| result);
     if let Err(error) = &result {
         diagnostic(error);
     }

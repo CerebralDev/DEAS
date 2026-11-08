@@ -1,10 +1,10 @@
 {
   "theme.ui.someThemePacksCouldNotBeLoadedBuilt": "Einige Theme-Pakete konnten nicht geladen werden. Default bleibt zur Wiederherstellung verfügbar. Siehe Logs.",
   "theme.ui.theSavedThemeIsUnavailableDefaultIsShown": "Das gespeicherte Theme ist nicht verfügbar. Bis zur Wiederherstellung oder einer anderen Auswahl wird Default angezeigt.",
-  "theme.ui.folderHint": "DEAS legt einen Starter-Theme-Ordner an und öffnet den Offline-Editor.",
   "theme.ui.chooseEnvironment": "Wähle deine DEAS-Umgebung unter Backend, um Theme-Pakete zu laden.",
   "theme.ui.loading": "Themes werden geladen…",
   "theme.ui.refresh": "Themes aktualisieren",
   "theme.ui.folderFailed": "Der Theme-Editor konnte nicht geöffnet werden. Siehe Logs.",
-  "theme.ui.editThemes": "Themes bearbeiten"
+  "theme.ui.editThemes": "Themes bearbeiten",
+  "theme.ui.closeEditor": "Theme-Editor schließen"
 }

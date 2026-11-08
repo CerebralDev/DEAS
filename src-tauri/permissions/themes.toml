@@ -1,4 +1,10 @@
 [[permission]]
 identifier = "allow-native-theme-packs"
-description = "Read bounded data-only packs in the selected environment and open the offline theme editor."
-commands.allow = ["native_theme_packs", "native_theme_editor"]
+description = "Read bounded data-only packs in the selected environment and edit one theme through the built-in offline editor."
+commands.allow = [
+    "native_theme_packs",
+    "native_theme_editor",
+    "native_theme_folders",
+    "native_theme_read",
+    "native_theme_write",
+]

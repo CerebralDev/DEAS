@@ -341,11 +341,152 @@ fn native_theme_commands_are_local_and_registered() {
             .iter()
             .map(|c| c.as_str().unwrap())
             .collect::<Vec<_>>(),
-        ["native_theme_packs", "native_theme_editor"]
+        [
+            "native_theme_packs",
+            "native_theme_editor",
+            "native_theme_folders",
+            "native_theme_read",
+            "native_theme_write",
+        ]
     );
-    for command in ["native_theme_packs", "native_theme_editor"] {
+    for command in [
+        "native_theme_packs",
+        "native_theme_editor",
+        "native_theme_folders",
+        "native_theme_read",
+        "native_theme_write",
+    ] {
         assert!(include_str!("main.rs").contains(&format!("deas::{command},")));
     }
+}
+
+#[test]
+fn editor_reads_lists_and_writes_only_inside_one_pack() {
+    let t = env();
+    put(&t, "new-theme", &manifest("new-theme"));
+    put(&t, "other", &manifest("other-theme"));
+    fs::create_dir_all(t.path().join("themes/no-manifest")).unwrap();
+    assert_eq!(
+        list_folders(t.path().to_str().unwrap()).unwrap(),
+        ["new-theme", "other"]
+    );
+    let read = read_file(t.path().to_str().unwrap(), "new-theme", "theme.json").unwrap();
+    assert!(String::from_utf8(STANDARD.decode(read.unwrap()).unwrap())
+        .unwrap()
+        .contains("new-theme"));
+    assert!(read_file(
+        t.path().to_str().unwrap(),
+        "new-theme",
+        "assets/missing.png"
+    )
+    .unwrap()
+    .is_none());
+
+    let changed = json!({"schemaVersion":1,"id":"new-theme","name":"Edited","author":"DEAS","base":"default"});
+    let encoded = STANDARD.encode(serde_json::to_vec(&changed).unwrap());
+    write_file(
+        t.path().to_str().unwrap(),
+        "new-theme",
+        "theme.json",
+        &encoded,
+    )
+    .unwrap();
+    assert_eq!(scan(t.path().to_str().unwrap()).unwrap().packs.len(), 2);
+    let back = read_file(t.path().to_str().unwrap(), "new-theme", "theme.json")
+        .unwrap()
+        .unwrap();
+    assert!(STANDARD
+        .decode(&back)
+        .unwrap()
+        .windows(6)
+        .any(|w| w == b"Edited"));
+
+    for path in [
+        "../escape.json",
+        "theme.json/../../x",
+        "assets/../theme.json",
+        "other/file.png",
+        "outside/theme.json",
+    ] {
+        assert!(
+            read_file(t.path().to_str().unwrap(), "new-theme", path).is_err(),
+            "{path}"
+        );
+        assert!(
+            write_file(t.path().to_str().unwrap(), "new-theme", path, &encoded).is_err(),
+            "{path}"
+        );
+    }
+    assert!(write_file(t.path().to_str().unwrap(), "..", "theme.json", &encoded).is_err());
+    assert!(!t.path().join("escape.json").exists());
+}
+
+#[test]
+fn editor_writes_reject_invalid_content_and_links() {
+    let t = env();
+    put(&t, "new-theme", &manifest("new-theme"));
+    let broken = json!({"schemaVersion":1,"id":"new-theme","name":"x".repeat(121),"author":"DEAS","base":"default"});
+    let encoded = STANDARD.encode(serde_json::to_vec(&broken).unwrap());
+    assert!(write_file(
+        t.path().to_str().unwrap(),
+        "new-theme",
+        "theme.json",
+        &encoded
+    )
+    .is_err());
+    assert!(write_file(
+        t.path().to_str().unwrap(),
+        "new-theme",
+        "theme.json",
+        "not base64"
+    )
+    .is_err());
+    assert!(write_file(
+        t.path().to_str().unwrap(),
+        "new-theme",
+        "assets/x.png",
+        &STANDARD.encode(b"not an image")
+    )
+    .is_err());
+    let before = read_file(t.path().to_str().unwrap(), "new-theme", "theme.json")
+        .unwrap()
+        .unwrap();
+
+    let directory = t.path().join("themes/new-theme");
+    let backup = directory.join("backups/theme-old.json");
+    fs::create_dir_all(backup.parent().unwrap()).unwrap();
+    let encoded = STANDARD.encode(serde_json::to_vec(&manifest("new-theme")).unwrap());
+    write_file(
+        t.path().to_str().unwrap(),
+        "new-theme",
+        "backups/theme-old.json",
+        &encoded,
+    )
+    .unwrap();
+    assert!(backup.is_file());
+
+    fs::remove_file(backup.clone()).unwrap();
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(t.path().join("deas-install.json"), &backup).unwrap();
+        assert!(write_file(
+            t.path().to_str().unwrap(),
+            "new-theme",
+            "backups/theme-old.json",
+            &encoded
+        )
+        .is_err());
+        assert_eq!(
+            fs::read_to_string(t.path().join("deas-install.json")).unwrap(),
+            "{}"
+        );
+    }
+    assert_eq!(
+        read_file(t.path().to_str().unwrap(), "new-theme", "theme.json")
+            .unwrap()
+            .unwrap(),
+        before
+    );
 }
 
 #[test]

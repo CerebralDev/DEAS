@@ -11,7 +11,7 @@
   "app": {
     "windows": [{"label":"main","create":false,"title":"DEAS — Dark Engine AI Studio","width":1440,"height":960,"minWidth":960,"minHeight":640}],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: asset: http://asset.localhost https://*.civitai.com; media-src 'self' blob: asset: http://asset.localhost http://127.0.0.1:*; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost asset: http://asset.localhost; object-src 'none'; base-uri 'self'; frame-src http://127.0.0.1:*; form-action 'none'",
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: asset: http://asset.localhost https://*.civitai.com; media-src 'self' blob: asset: http://asset.localhost http://127.0.0.1:*; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost asset: http://asset.localhost; object-src 'none'; base-uri 'self'; frame-src http://127.0.0.1:* asset: http://asset.localhost https://asset.localhost; form-action 'none'",
       "capabilities": ["main"],
       "assetProtocol": {"enable": true, "scope": {"allow": ["**"], "requireLiteralLeadingDot": false}}
     }

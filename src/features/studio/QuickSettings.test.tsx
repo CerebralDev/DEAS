@@ -6,7 +6,7 @@ import { QuickSettings } from './QuickSettings';
 import { applySavedScheme, refreshThemePacks } from '../../lib/theme';
 import { revealTarget, searchIndex } from '../../lib/search';
 
-vi.mock('@tauri-apps/api/core',()=>({invoke:vi.fn(),isTauri:vi.fn(()=>false)}));
+vi.mock('@tauri-apps/api/core',()=>({invoke:vi.fn(),isTauri:vi.fn(()=>false),convertFileSrc:(path:string)=>`asset://localhost/${path}`}));
 beforeEach(async()=>{vi.mocked(invoke).mockReset();vi.mocked(isTauri).mockReturnValue(false);await refreshThemePacks();});
 
 test('Quick Settings exposes separate layout and authoring reset requests and closes with Escape',()=>{
@@ -118,3 +118,37 @@ test('refresh reloads the environment catalog and opening the editor reports fai
  expect(vi.mocked(invoke).mock.calls.filter(([c])=>c==='native_theme_packs')).toHaveLength(2);
  view.unmount();await refreshThemePacks();
 });
+
+test('Edit themes renders the offline editor inside DEAS and its bridge serves the environment themes',async()=>{
+ localStorage.setItem('deas.locale.v1','en');vi.mocked(isTauri).mockReturnValue(true);
+ vi.mocked(invoke).mockImplementation(async command=>{
+  if(command==='native_theme_packs')return {directory:'/env/themes',packs:[],warnings:[]};
+  if(command==='native_theme_editor')return '/env/theme-packs/EDIT-THEMES.html';
+  if(command==='native_theme_folders')return ['new-theme'];
+  if(command==='native_theme_read')return btoa('{"schemaVersion":1}');
+  if(command==='native_theme_write')return null;
+  if(command==='native_spellcheck_status')return {available:true,installed:true};
+  throw Error('Unexpected fixture IPC '+command);
+ });
+ const view=render(<I18nProvider><QuickSettings root="/env"/></I18nProvider>);
+ fireEvent.click(screen.getByRole('button',{name:'Quick Settings'}));
+ await waitFor(()=>expect(screen.getByRole('button',{name:'Edit themes'}).matches(':disabled')).toBe(false));
+ fireEvent.click(screen.getByRole('button',{name:'Edit themes'}));
+ const dialog=await screen.findByRole('dialog',{name:'Edit themes'});
+ const frame=dialog.querySelector('iframe')!;
+ expect(frame.getAttribute('src')).toContain('EDIT-THEMES.html');
+ // Requests from any other window are ignored; only the editor frame's own messages are served.
+ const replies:Record<string,unknown>[]=[];
+ frame.contentWindow!.postMessage=(body)=>{replies.push(body);};
+ window.dispatchEvent(new MessageEvent('message',{data:{source:'deas-theme-editor',id:'x',op:'folders'},source:window}));
+ await waitFor(()=>expect(vi.mocked(invoke).mock.calls.filter(([c])=>c==='native_theme_folders')).toHaveLength(0));
+ window.dispatchEvent(new MessageEvent('message',{data:{source:'deas-theme-editor',id:'1',op:'folders'},source:frame.contentWindow}));
+ await waitFor(()=>expect(replies).toContainEqual({source:'deas-theme-host',id:'1',folders:['new-theme']}));
+ window.dispatchEvent(new MessageEvent('message',{data:{source:'deas-theme-editor',id:'2',op:'write',folder:'new-theme',path:'theme.json',base64:btoa('{}')},source:frame.contentWindow}));
+ await waitFor(()=>expect(invoke).toHaveBeenCalledWith('native_theme_write',{root:'/env',folder:'new-theme',path:'theme.json',base64:btoa('{}')}));
+ await waitFor(()=>expect(vi.mocked(invoke).mock.calls.filter(([c])=>c==='native_theme_packs')).toHaveLength(2));
+ fireEvent.keyDown(window,{key:'Escape'});
+ await waitFor(()=>expect(screen.queryByRole('dialog')).toBeNull());
+ view.unmount();await refreshThemePacks();
+});
+

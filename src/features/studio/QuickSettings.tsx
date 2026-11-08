@@ -2,13 +2,16 @@ import { useEffect, useRef, useState } from 'react';
 import { useI18n } from '../../i18n/I18nProvider';
 import { availableSchemes, useScheme, useThemeCatalog,refreshThemePacks } from '../../lib/theme';
 import './quickSettings.css';
-import { invoke, isTauri } from '@tauri-apps/api/core';
+import { convertFileSrc, invoke, isTauri } from '@tauri-apps/api/core';
 import { DICTIONARY_EVENT, reportPromptSpellcheckError, usePromptTools } from '../../lib/promptTools';
 import { ExperienceSwitch, type Experience } from '../beginner/Experience';
 
 export function QuickSettings({root,experience='advanced',onExperience}:{root?:string;experience?:Experience;onExperience?:(value:Experience)=>void}={}){
  const themes=useThemeCatalog(root);
  const [folderError,setFolderError]=useState(false);
+ const [editor,setEditor]=useState<string|null>(null);
+ const [editorOpen,setEditorOpen]=useState(false);
+ const editorFrame=useRef<HTMLIFrameElement>(null);
  const tools=usePromptTools();
  // Dictionary status only (read-only, no network); the install lives under Backend → Language.
  const [dictionaries,setDictionaries]=useState(0);
@@ -31,6 +34,30 @@ export function QuickSettings({root,experience='advanced',onExperience}:{root?:s
  // Studio is lazy-mounted; reset events have no receiver before its first visit.
  const ready=!!document.querySelector('[data-workbench]');
  const request=(event:string)=>{setOpen(false);button.current?.focus();window.dispatchEvent(new Event(event));};
+ // The offline editor renders in a frame of its own; it reaches the environment through
+ // these bounded native file calls instead of browser folder permissions.
+ useEffect(()=>{
+  if(!editor||!root)return; // the frame stays mounted while closed so an unfinished theme edit survives
+  const frame=editorFrame.current;
+  const onMessage=async(event:MessageEvent)=>{
+   const request=event.data as {source?:string;id?:string;op?:string;folder?:string;path?:string;base64?:string};
+   if(!frame||event.source!==frame.contentWindow||request?.source!=='deas-theme-editor'||!request.id||!request.op)return;
+   const reply=(body:Record<string,unknown>)=>frame.contentWindow?.postMessage({source:'deas-theme-host',id:request.id,...body},'*');
+   try{
+    if(request.op==='folders')reply({folders:await invoke<string[]>('native_theme_folders',{root})});
+    else if(request.op==='read')reply({base64:await invoke<string|null>('native_theme_read',{root,folder:request.folder,path:request.path})});
+    else if(request.op==='write'){
+     await invoke('native_theme_write',{root,folder:request.folder,path:request.path,base64:request.base64});
+     reply({written:true});
+     void refreshThemePacks(root);
+    }else reply({error:'Unknown request'});
+   }catch(error){reply({error:error instanceof Error?error.message:String(error)});}
+  };
+  const escape=(event:KeyboardEvent)=>{if(event.key==='Escape')setEditorOpen(false);};
+  window.addEventListener('message',onMessage);
+  window.addEventListener('keydown',escape);
+  return()=>{window.removeEventListener('message',onMessage);window.removeEventListener('keydown',escape);};
+ },[editor,root]);
  return <div className="studio-quick" ref={host}>
   <button type="button" ref={button} className="repo-button" aria-label={t('studio.quick.title')} title={t('studio.quick.title')} aria-expanded={open} aria-controls="studio-quick-actions" onClick={()=>setOpen(!open)}>{t('studio.quick.title')}</button>
   {open&&<div id="studio-quick-actions" className="studio-quick-actions" aria-label={t('studio.quick.title')}>
@@ -48,14 +75,18 @@ export function QuickSettings({root,experience='advanced',onExperience}:{root?:s
     </button>)}
    </div>
    <div className="theme-pack-actions">
-    <small>{t(root?'theme.ui.folderHint':'theme.ui.chooseEnvironment')}</small>
+    {!root&&<small>{t('theme.ui.chooseEnvironment')}</small>}
     <button type="button" data-theme-action="refresh" disabled={!root||!isTauri()||themes.loading} onClick={()=>void refreshThemePacks(root)}>{t(themes.loading?'theme.ui.loading':'theme.ui.refresh')}</button>
-    <button type="button" data-theme-action="edit" disabled={!root||!isTauri()} onClick={()=>{setFolderError(false);void invoke('native_theme_editor',{root}).catch(()=>setFolderError(true));}}>{t('theme.ui.editThemes')}</button>
+    <button type="button" data-theme-action="edit" disabled={!root||!isTauri()} onClick={()=>{setFolderError(false);void invoke<string>('native_theme_editor',{root}).then(path=>{setEditor(path);setEditorOpen(true);}).catch(()=>setFolderError(true));}}>{t('theme.ui.editThemes')}</button>
     {folderError&&<p role="status">{t('theme.ui.folderFailed')}</p>}
     {themes.directory&&<small className="theme-pack-directory">{themes.directory}</small>}
     {(themes.error||themes.warnings.length>0)&&<p role="status">{t('theme.ui.someThemePacksCouldNotBeLoadedBuilt')}</p>}
     {!availableSchemes().some(s=>s.id===scheme)&&<p role="status">{t('theme.ui.theSavedThemeIsUnavailableDefaultIsShown')}</p>}
    </div>
+  </div>}
+  {editor&&<div className="theme-editor" role="dialog" aria-modal="true" hidden={!editorOpen} aria-label={t('theme.ui.editThemes')}>
+   <div className="theme-editor-bar"><strong>{t('theme.ui.editThemes')}</strong><button type="button" data-theme-action="close" onClick={()=>setEditorOpen(false)}>{t('theme.ui.closeEditor')}</button></div>
+   <iframe ref={editorFrame} title={t('theme.ui.editThemes')} src={convertFileSrc(editor)}/>
   </div>}
  </div>;
 }

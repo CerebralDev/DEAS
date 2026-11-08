@@ -15,9 +15,9 @@ flowchart LR
   A["Quick Settings → Edit themes"] --> B{"Is there a themes/new-theme folder?"}
   B -- "No" --> C["Copy the bundled starter theme"]
   B -- "Yes" --> D["Keep the existing folder and edits"]
-  C --> E["Open the offline HTML editor"]
+  C --> E["Open the theme editor inside DEAS"]
   D --> E
-  E --> F["Choose a folder containing theme.json"]
+  E --> F["Choose one of your environment's themes"]
   F --> G["Give it a unique Theme ID"]
   G --> H["Change colors or images"]
   H --> I["Save theme.json and assets"]
@@ -25,19 +25,19 @@ flowchart LR
   J --> K["Choose the theme in Colour scheme"]
 ```
 
-The editor is opened by DEAS but runs in the browser. DEAS never loads or executes the HTML as application code.
+The editor runs inside DEAS in a frame of its own and only talks to the app for the manifest, images and backups of the one theme folder you selected. The same file still opens in Chrome or Edge if you prefer to edit a folder through the browser's own directory permission.
 
 ## Create your first theme
 
 1. Select your DEAS environment in **Backend**.
 2. Click **Quick Settings → Edit themes**.
 3. DEAS creates `themes/new-theme` in the selected environment only when absent and opens the editor.
-4. Click **Choose theme folder** and select that `new-theme` folder. The browser asks permission for the chosen folder; nothing is uploaded.
+4. Pick that `new-theme` in the **Edit theme** list; it lists only the theme folders of the selected environment. Nothing is uploaded.
 5. Replace its Theme ID with a unique lowercase value, for example `my-space-blue`. `new-theme` is only the initial template.
 6. Pick a built-in `base` and change only the colours you want. Omitted colours inherit the base palette.
 7. Optionally replace images through the image rows, or drag a PNG/WebP onto a row.
 8. Click **Save changes**.
-9. Return to DEAS and click **Quick Settings → Refresh themes**, then select it under **Colour scheme**.
+9. DEAS reloads the theme list after each save. If needed, click **Quick Settings → Refresh themes**, then select the theme under **Colour scheme**.
 
 Deleting a custom theme folder and refreshing removes only its entry. A saved theme that cannot be loaded falls back to Default without erasing the saved selection.
 
@@ -116,14 +116,14 @@ It is bundled with the application. Quick Settings opens it; users do not need t
 
 What the editor does:
 
-- Opens a folder containing `theme.json` through the browser's directory permission.
+- Inside DEAS it lists the selected environment's theme folders; every read and write goes through DEAS and stays inside that one folder. Opened directly in a browser it uses that browser's directory permission instead.
 - Edits identity, colours and images in memory.
 - Writes new selected images under `assets/` with fresh filenames.
 - Backs up the previous manifest and replaced images in `backups/`.
 - Refuses external edits made to `theme.json` after the folder was opened.
 - Offers JSON download when the browser lacks directory access; image replacement then remains disabled.
 
-Chrome and Edge are the supported browsers for direct folder access. Firefox does not provide the required directory-editing API. The editor is English-only and has no network code.
+For the direct browser route Chrome and Edge are the supported choices; Firefox does not provide the required directory-editing API. The editor is English-only and has no network code.
 
 ## Recovery and safety
 
@@ -136,10 +136,10 @@ If DEAS shows a bad result, choose **Default**, restore the backup files into th
 
 DEAS rejects parent traversal, absolute paths, URLs, drive syntax, backslashes, symlinked or reparse-point theme paths, malformed JSON and oversize images/manifests. Invalid packs are skipped independently. Duplicate IDs are rejected together instead of choosing one by directory order.
 
-Native commands are `native_theme_packs(root)` and `native_theme_editor(app, root)`, behind `allow-native-theme-packs`. The selected root must be an existing absolute environment. Edit themes creates the environment's `themes/` directory and copies the bundled `new-theme` starter only if that starter folder is absent. It never overwrites an existing `new-theme` folder and never copies the nine built-in schemes.
+Native commands are `native_theme_packs(root)`, `native_theme_editor(app, root)`, `native_theme_folders(root)`, `native_theme_read(root, folder, path)` and `native_theme_write(root, folder, path, base64)`, all behind `allow-native-theme-packs`. The selected root must be an existing absolute environment. Edit themes creates the environment's `themes/` directory and copies the bundled `new-theme` starter only if that starter folder is absent. It never overwrites an existing `new-theme` folder and never copies the nine built-in schemes. The file commands accept only `theme.json`, an image under `assets/` or a backup under `backups/` inside one named theme folder, re-validate the manifest or image bytes before replacing, and swap files atomically.
 
 ## Verification boundaries
 
-Rust filesystem tests, React component tests and the Chromium offline-editor tools verify catalog parsing, no-clobber starter copying, traversal/link rejection, caps and editor save races. They do not prove every OS's browser directory permission dialog or default-browser behavior. Windows WebView2 and Linux WebKitGTK/external browser acceptance remain open in [PLAN.md](PLAN.md).
+Rust filesystem tests, React component tests and the Chromium editor tools verify catalog parsing, no-clobber starter copying, traversal/link rejection, caps, editor save races and the framed editor's bridge against a host fixture. They do not prove the framed editor renders in the shipped WebKitGTK/WebView2 window or the standalone browser's directory permission dialog. Those native acceptance gates remain open in [PLAN.md](PLAN.md).
 
 Pack integrity is recorded in [`theme-packs/FILES.json`](../theme-packs/FILES.json).

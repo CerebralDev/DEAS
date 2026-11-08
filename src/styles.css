@@ -278,7 +278,7 @@ select option:disabled { color: var(--muted); }
 .media-header button, .media-path button, .media-roots button,
 .aio-actions button, .aio-draft-actions button, .aio-input-row button, .aio-detail > button, .aio-auto-fields button, button[data-upgrade],
 .download-categories button, .preset-controls button, .preset-menu button, .preset-editor-actions button, .preset-row-meta button,
-.studio-quick-actions button {
+.studio-quick-actions button, .theme-editor-bar button {
   background: var(--raised);
   border: 1px solid var(--line-strong);
   color: var(--chalk);
@@ -291,7 +291,7 @@ select option:disabled { color: var(--muted); }
 .media-header button, .media-path button, .media-roots button,
 .aio-actions button, .aio-draft-actions button, .aio-input-row button, .aio-detail > button, .aio-auto-fields button, button[data-upgrade],
 .download-categories button, .preset-controls button, .preset-menu button, .preset-editor-actions button, .preset-row-meta button,
-.studio-quick-actions button):hover:not(:disabled) {
+.studio-quick-actions button, .theme-editor-bar button):hover:not(:disabled) {
   border-color: var(--blue);
   box-shadow: 0 0 0 1px rgb(var(--blue-rgb) / 0.35), 0 0 10px rgb(var(--blue-rgb) / 0.3);
 }
@@ -299,7 +299,7 @@ select option:disabled { color: var(--muted); }
 .media-header button, .media-path button, .media-roots button,
 .aio-actions button, .aio-draft-actions button, .aio-input-row button, .aio-detail > button, .aio-auto-fields button, button[data-upgrade],
 .download-categories button, .preset-controls button, .preset-menu button, .preset-editor-actions button, .preset-row-meta button,
-.studio-quick-actions button):is([aria-pressed="true"], [aria-selected="true"]) {
+.studio-quick-actions button, .theme-editor-bar button):is([aria-pressed="true"], [aria-selected="true"]) {
   background: var(--ok-soft);
   border-color: var(--ok);
   color: var(--chalk);
@@ -308,7 +308,7 @@ select option:disabled { color: var(--muted); }
 .media-header button, .media-path button, .media-roots button,
 .aio-actions button, .aio-draft-actions button, .aio-input-row button, .aio-detail > button, .aio-auto-fields button, button[data-upgrade],
 .download-categories button, .preset-controls button, .preset-menu button, .preset-editor-actions button, .preset-row-meta button,
-.studio-quick-actions button):disabled {
+.studio-quick-actions button, .theme-editor-bar button):disabled {
   opacity: .55;
   cursor: not-allowed;
   box-shadow: none;

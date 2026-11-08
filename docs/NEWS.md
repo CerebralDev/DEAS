@@ -2,6 +2,8 @@
 
 ## 0.2.20 BETA (unreleased)
 
+- **Theme editing now stays inside DEAS.** **Quick Settings → Edit themes** opens the editor in its own frame — no browser tab — and its **Edit theme** list offers the themes of your selected environment, saving straight into that theme folder with a backup of the previous manifest. [Theme guide](THEME-PACKS.md).
+
 - **H3 Enhanced preview setup fixed.** The explicit ComfyUI/node-pack update now includes the missing pinned preview node pack. Tiny VAEs in configured `vae_approx` and existing `vae` folders become visible without moving files; Options explains when the backend update is required. Reopen this build, then approve the ComfyUI/node-pack update on an idle owned environment. No preview weights are downloaded automatically.
 
 - **Video metadata repaired end to end.** New saves embed strict-valid metadata; the pane shows the actual prompt and settings (old `NaN` files parse too). Audio-enhanced videos keep that metadata and get a readable `-audio-enhanced` name instead of a UUID file. Civitai still cannot show prompts for H3 node graphs until it supports those node types upstream.

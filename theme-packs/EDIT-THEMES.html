@@ -9,9 +9,9 @@
 .asset.dropping{outline:2px dashed #6a9955;outline-offset:-2px;border-radius:8px}</style>
 <main>
 <h1>Make DEAS your own.</h1>
-<p>Choose a theme folder, change its colors or images, then save. In DEAS, click <strong>Quick Settings → Refresh themes</strong> to apply your changes.</p>
+<p>Choose a theme, change its colors or images, then save. In DEAS, click <strong>Quick Settings → Refresh themes</strong> to apply your changes.</p>
 <p class="hint">Works offline. Open it from DEAS → Quick Settings → Edit themes, or open this file directly in Microsoft Edge or Chrome. DEAS creates <code>new-theme</code> in your environment when needed. Choose that folder, or duplicate a folder under <code>themes/</code>, then give the copy a unique Theme ID below.</p>
-<div class="toolbar"><button id="open">Choose theme folder</button><button id="save" disabled>Save changes</button><button id="undo" class="secondary" disabled>Undo unsaved changes</button><span id="dirty" aria-live="polite"></span></div>
+<div class="toolbar"><button id="open">Edit theme</button><label id="choose" hidden>Edit theme<select id="theme" aria-label="Edit theme"></select></label><button id="save" disabled>Save changes</button><button id="undo" class="secondary" disabled>Undo unsaved changes</button><span id="dirty" aria-live="polite"></span></div>
 <div id="status" role="status" aria-live="polite">No folder selected. Choose a folder containing theme.json.</div>
 <input type="file" id="fallback" accept=".json,application/json" hidden>
 <div id="editor" class="columns" hidden>
@@ -112,6 +112,30 @@ async function render(){
 }
 async function load(text,handle){if(new TextEncoder().encode(text).length>65536)throw Error('theme.json is too large (maximum 64 KiB).');const value=JSON.parse(text);validate(value);folder=handle;model=value;original=structuredClone(value);originalText=text;pending.clear();changes=false;$('dirty').textContent='';$('save').disabled=true;$('undo').disabled=true;await render();status(handle?'Folder opened. Your files stay on this computer.':'Preview mode: this browser cannot save directly into a folder. Color edits can be downloaded as theme.json. Use Edge or Chrome for image replacement and direct saving.');}
 function discardAllowed(){return !changes||confirm('Discard your unsaved theme changes?');}
+// Inside DEAS this page runs in a frame of its own: the app serves the environment's
+// theme folders over postMessage, so no browser folder permission is needed.
+const host=window.__themeHost||(window.parent!==window?window.parent:null);
+let rpcSeq=0;const rpcs=new Map();
+if(host)addEventListener('message',event=>{const reply=event.data;if(!reply||reply.source!=='deas-theme-host'||!rpcs.has(reply.id))return;const settled=rpcs.get(reply.id);rpcs.delete(reply.id);reply.error?settled.reject(Error(reply.error)):settled.resolve(reply);});
+function rpc(op,fields={}){return new Promise((resolve,reject)=>{const id=String(++rpcSeq);rpcs.set(id,{resolve,reject});host.postMessage({source:'deas-theme-editor',id,op,...fields},'*');});}
+const bytesOf=binary=>{const bytes=new Uint8Array(binary.length);for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);return bytes;};
+async function base64Of(value){const bytes=typeof value==='string'?new TextEncoder().encode(value):new Uint8Array(await value.arrayBuffer());let binary='';for(let start=0;start<bytes.length;start+=8192)binary+=String.fromCharCode.apply(null,bytes.subarray(start,start+8192));return btoa(binary);}
+// Same handle shape as the browser File System Access API, so the editor logic below is unchanged.
+function environmentFolder(name){
+ const fileHandle=path=>({kind:'file',name:path.split('/').pop(),
+  async getFile(){const reply=await rpc('read',{folder:name,path});if(reply.base64===null)throw new DOMException('Not found','NotFoundError');return new File([bytesOf(atob(reply.base64))],path.split('/').pop());},
+  async createWritable(){let value;return{async write(next){value=next;},async close(){await rpc('write',{folder:name,path,base64:await base64Of(value)});},async abort(){}};}});
+ const directoryHandle=prefix=>({kind:'directory',name:prefix||name,
+  async getDirectoryHandle(child){if(!/^[a-z0-9-]+$/.test(child))throw Error('Unexpected folder name');return directoryHandle(prefix?prefix+'/'+child:child);},
+  async getFileHandle(child,options={}){if(String(child).includes('/'))throw Error('Unexpected file name');const path=prefix?prefix+'/'+child:child;if(!options.create&&(await rpc('read',{folder:name,path})).base64===null)throw new DOMException('Not found','NotFoundError');return fileHandle(path);}});
+ return directoryHandle('');
+}
+if(host){
+ $('open').hidden=true;$('choose').hidden=false;
+ status('Choose the theme you want to edit.');
+ $('theme').onchange=async()=>{if(busy||!discardAllowed())return;const name=$('theme').value;if(!name)return;try{const reply=await rpc('read',{folder:name,path:'theme.json'});if(reply.base64===null)throw Error('That theme has no theme.json.');await load(new TextDecoder().decode(bytesOf(atob(reply.base64))),environmentFolder(name));}catch(error){status('Could not open theme. '+error.message,true);}};
+ rpc('folders').then(reply=>$('theme').replaceChildren(new Option('Choose a theme…',''),...(reply.folders||[]).map(name=>new Option(name,name)))).catch(error=>status('Could not list your DEAS themes. '+error.message,true));
+}
 $('open').onclick=async()=>{if(busy||!discardAllowed())return;try{if(!window.showDirectoryPicker){$('fallback').click();return;}const handle=await showDirectoryPicker({mode:'readwrite'});const file=await (await handle.getFileHandle('theme.json')).getFile();await load(await manifestText(file),handle);}catch(error){if(error.name!=='AbortError')status('Could not open theme. '+error.message,true);}};
 $('fallback').onchange=async()=>{try{const file=$('fallback').files[0];if(file)await load(await manifestText(file),null);}catch(error){status('Could not open theme. '+error.message,true);}finally{$('fallback').value='';}};
 $('undo').onclick=async()=>{if(busy||!discardAllowed())return;model=structuredClone(original);pending.clear();changes=false;$('dirty').textContent='';$('save').disabled=true;$('undo').disabled=true;await render();status('Unsaved edits discarded.');};

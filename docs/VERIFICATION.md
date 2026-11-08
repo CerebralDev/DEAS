@@ -1,5 +1,13 @@
 # DEAS verification — native baseline, optional capabilities and languages
 
+## In-app theme editing (0.2.20, unreleased)
+
+**Quick Settings → Edit themes** no longer hands a local `file://` page to the system browser. `native_theme_editor` now returns the bundled editor path, Quick Settings renders it in its own `[role="dialog"]` iframe and the page (unchanged File System Access logic) is served by a `postMessage` bridge through `native_theme_folders`/`native_theme_read`/`native_theme_write`. The editor's control reads **Edit theme** and lists only the selected environment's theme folders; the stale Quick Settings hint line about the starter folder/offline editor was removed in all six locales. File commands accept only `theme.json`, `assets/…` or `backups/…` inside one slug-named theme folder, re-validate the manifest (`schema_version`, identity, base palette, colour tokens, asset roles) or PNG/WebP magic bytes before replacing, reject links/special files and swap atomically through a sibling temporary file. The theme catalog reloads after each manifest/asset save; the frame stays mounted while closed so an unfinished edit is not thrown away by Escape.
+
+Fresh evidence: `npm run typecheck` ok; **151 core** and full Vitest **78 files / 1604 tests passed**, including a new Quick Settings test asserting the frame renders, that only the editor frame's own messages are served (a same-`source` message from another window is ignored), that folders/read/write reach the native commands and that Escape closes it; Rust **21 theme tests**, full serial native library **835 passed / 0 failed / 63 ignored**, all-target Clippy `-D warnings` clean and `cargo fmt --check` clean. The Chromium offline-editor tool passed every check, including the new framed-host regression: the picker lists the environment theme, loading and saving go through the bridge fixture and the saved manifest plus `backups/theme-…` land in the fixture store. `theme-packs/FILES.json` regenerated (canonical editor 31,157 bytes).
+
+Not exercised: the packaged Linux WebKitGTK (and Windows WebView2) window actually rendering an `asset:`-protocol frame under the widened CSP, a real native save round trip in the running app, and the standalone browser's directory-permission dialog. These stay open in PLAN §4.10. No build, commit, push or publication was performed; concurrent sibling WIP (`.gitignore` deletion, Workbench/history files) was left untouched.
+
 ## Enhanced preview prerequisite repair (0.2.20, unreleased)
 
 - Root cause confirmed by read-only inspection of the actual owned backend: `/object_info` had no `ModelPreviewOverrideKJ`, KJNodes was not installed, generated model YAML omitted `vae_approx`, but the normal VAE list already contained `MiniMaxH3/taeh3.safetensors`. The option was correctly fail-closed; the delivery had omitted the producer/setup path and preview-folder registration. A file in another ComfyUI checkout did not establish availability on this backend.
@@ -125,11 +133,11 @@ Canonical local files: `artifacts/releases/v0.2.17/` (Linux binary, Windows exe,
 
 ## Theme-authoring consolidation (shipped in 0.2.18)
 
-The redundant `theme-packs/classic` palette copies were removed, leaving one canonical `EDIT-THEMES.html` and one `new-theme` starter. Built-in schemes remain the single palette source. `native_theme_folder` was replaced by `native_theme_editor(app, root)`, which validates the environment root, creates the environment `themes/` directory, copies `new-theme` only when absent, and opens the bundled offline editor.
+The redundant `theme-packs/classic` palette copies were removed, leaving one canonical `EDIT-THEMES.html` and one `new-theme` starter. Built-in schemes remain the single palette source. `native_theme_folder` was replaced by `native_theme_editor(app, root)`, which validates the environment root, creates the environment `themes/` directory and copies `new-theme` only when absent. Since 0.2.20 it returns the bundled editor path and Quick Settings renders it in a frame of its own, served by `native_theme_folders`/`native_theme_read`/`native_theme_write` (see the 0.2.20 section above).
 
-Fresh evidence: Rust theme tests **19 passed / 0 failed**, including no-clobber starter creation; TypeScript typecheck passed; Quick Settings/theme tests **17 passed** and i18n **144 passed**; Chromium editor tool passed all 17 save-race/permission/manifest checks with the starter manifest; Chromium pack/catalog tool passed starter application, built-in fallback, reload and runtime palette-edit refresh. `FILES.json` regenerated for three theme files (29,018 bytes). Tauri bundles the canonical editor and starter.
+Fresh evidence (0.2.20 re-run): Rust theme tests **21 passed / 0 failed**, including no-clobber starter creation and the bounded editor file commands; TypeScript typecheck passed; Quick Settings/theme tests and i18n passed inside the full Vitest run; Chromium editor tool passed all 18 save-race/permission/manifest/framed-bridge checks with the starter manifest; Chromium pack/catalog tool passed starter application, built-in fallback, reload and runtime palette-edit refresh. `FILES.json` regenerated for three theme files (canonical editor 31,157 bytes). Tauri bundles the canonical editor and starter.
 
-Not exercised: the running packaged application resource directory, Linux/Windows OS browser opening, real Chrome/Edge folder permission and actual saved-file round trip through the native path. These remain acceptance gates in PLAN §4.10.
+Not exercised (0.2.18): the running packaged application resource directory and the then-current external-browser opening. The current framed-editor gates are listed above.
 
 ## Beginner guide illustration removal (shipped in 0.2.18)
 

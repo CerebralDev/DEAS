@@ -1,5 +1,5 @@
 """Actual Chromium offline editor; browser directory handles are a strict in-memory fixture."""
-import base64,json,struct,zlib
+import base64,json,struct,tempfile,zlib
 from pathlib import Path
 from playwright.sync_api import expect
 import verify_postprocessing as runner
@@ -136,6 +136,47 @@ def regressions(page,root,manifest,checks):
  checks.append('PNG/WebP header dimensions rejected before decode; existing mismatched-extension images rejected before preview and save')
 
 
+HOST=r"""<!doctype html><meta charset=utf-8><title>DEAS host fixture</title>
+<iframe id="editor" src="__EDITOR__" style="width:1400px;height:900px;border:0"></iframe>
+<script>
+const files={'theme.json':__MANIFEST__};window.__files=files;window.__reads=[];window.__writes=[];
+const encoded=value=>btoa(unescape(encodeURIComponent(value)));
+addEventListener('message',async event=>{const request=event.data;if(!request||request.source!=='deas-theme-editor')return;
+ const reply={source:'deas-theme-host',id:request.id};
+ if(request.op==='folders')reply.folders=['my-theme'];
+ else if(request.op==='read'){window.__reads.push(request.path);reply.base64=Object.hasOwn(files,request.path)?encoded(files[request.path]):null;}
+ else if(request.op==='write'){window.__writes.push(request.path);files[request.path]=decodeURIComponent(escape(atob(request.base64)));reply.written=true;}
+ else reply.error='Unknown request';
+ event.source.postMessage(reply,'*');});
+</script>"""
+
+
+def embedded(browser,root,manifest,checks,errors):
+ """The editor inside DEAS: a host fixture stands in for the native theme file bridge."""
+ with tempfile.TemporaryDirectory() as temporary:
+  page_file=Path(temporary)/'host.html'
+  page_file.write_text(HOST.replace('__EDITOR__',(root/'theme-packs/EDIT-THEMES.html').as_uri()).replace('__MANIFEST__',json.dumps(manifest)),encoding='utf-8')
+  context=browser.new_context(viewport={'width':1440,'height':960});page=context.new_page()
+  page.on('pageerror',lambda error:errors.append('embedded: '+str(error)))
+  page.on('dialog',lambda dialog:dialog.accept())
+  try:
+   page.goto(page_file.as_uri(),wait_until='networkidle')
+   frame=page.frame_locator('#editor')
+   expect(frame.locator('#open')).to_be_hidden();expect(frame.locator('#choose')).to_be_visible()
+   expect(frame.locator('#theme')).to_have_js_property('options.length',2)
+   frame.locator('#theme').select_option('my-theme')
+   expect(frame.locator('#name')).to_have_value('New theme');expect(frame.locator('#status')).to_contain_text('Folder opened')
+   frame.locator('#name').fill('Environment theme')
+   frame.get_by_role('button',name='Save changes',exact=True).click()
+   expect(frame.locator('#status')).to_contain_text('Saved.')
+   saved=page.evaluate("JSON.parse(__files['theme.json'])")
+   assert saved['name']=='Environment theme',saved
+   assert any(path.startswith('backups/theme-') for path in page.evaluate('__writes')),page.evaluate('__writes')
+   assert 'theme.json' in page.evaluate('__reads')
+   checks.append('framed editor lists environment themes and saves manifest plus backup through the native bridge fixture')
+  finally:context.close()
+
+
 def verify(browser,url,shots):
  root=Path(__file__).resolve().parents[1]
  manifest=(root/'theme-packs/new-theme/theme.json').read_text()
@@ -150,7 +191,7 @@ def verify(browser,url,shots):
  page.add_init_script(FIXTURE.replace('__MANIFEST__',json.dumps(manifest)))
  try:
   page.goto((root/'theme-packs/EDIT-THEMES.html').as_uri(),wait_until='networkidle')
-  page.get_by_role('button',name='Choose theme folder').click();expect(page.locator('#name')).to_have_value('New theme')
+  page.get_by_role('button',name='Edit theme').click();expect(page.locator('#name')).to_have_value('New theme')
   page.locator('#name').fill('My custom theme');page.locator('#id').fill('my-custom-theme')
   page.get_by_role('textbox',name='Main buttons hex',exact=True).fill('#123abc')
   webp=page.evaluate("""async()=>{const canvas=document.createElement('canvas');canvas.width=16;canvas.height=16;canvas.getContext('2d').fillRect(0,0,16,16);const blob=await new Promise(r=>canvas.toBlob(r,'image/webp'));return btoa(String.fromCharCode(...new Uint8Array(await blob.arrayBuffer())));}""")
@@ -183,7 +224,7 @@ def verify(browser,url,shots):
   page.get_by_role('button',name='Save changes',exact=True).click();expect(page.locator('#status')).to_contain_text('changed outside this editor')
   assert page.evaluate("__themeFiles['theme.json']")==previous
   checks.append('invalid colors and concurrent external edits are not overwritten')
-  page.get_by_role('button',name='Choose theme folder').click();expect(page.locator('#status')).to_contain_text('Folder opened')
+  page.get_by_role('button',name='Edit theme').click();expect(page.locator('#status')).to_contain_text('Folder opened')
   page.locator('[data-asset=background]').set_input_files({'name':'fake.png','mimeType':'image/png','buffer':b'not an image'})
   expect(page.locator('#status')).to_contain_text('Choose a PNG or static WebP')
   checks.append('invalid image rejection')
@@ -195,7 +236,7 @@ def verify(browser,url,shots):
  page.add_init_script('window.showDirectoryPicker=undefined')
  try:
   page.goto((root/'theme-packs/EDIT-THEMES.html').as_uri(),wait_until='networkidle')
-  with page.expect_file_chooser() as chooser:page.get_by_role('button',name='Choose theme folder').click()
+  with page.expect_file_chooser() as chooser:page.get_by_role('button',name='Edit theme').click()
   chooser.value.set_files(root/'theme-packs/new-theme/theme.json')
   expect(page.locator('#status')).to_contain_text('Preview mode')
   page.locator('#name').fill('Downloaded theme')
@@ -209,6 +250,7 @@ def verify(browser,url,shots):
   assert page.evaluate('window.__fallbackReads')==0
   checks.append('fallback manifest upload also rejects oversized bytes before reading text')
  finally:fallback.close()
+ embedded(browser,root,manifest,checks,errors)
  result={'status':'PASS','kind':'Actual Chromium; offline editor save uses strict directory-handle fixture, native browser folder permission remains a manual gate','checks':checks,'screenshots':str(shots)}
  (shots/'result.json').write_text(json.dumps(result,indent=2)+'\n');print(json.dumps(result,indent=2),flush=True)
 

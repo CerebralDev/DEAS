@@ -1,10 +1,10 @@
 {
   "theme.ui.someThemePacksCouldNotBeLoadedBuilt": "一部のテーマを読み込めませんでした。復旧用に Default を利用できます。ログを確認してください。",
   "theme.ui.theSavedThemeIsUnavailableDefaultIsShown": "保存したテーマは利用できません。復元するか別のテーマを選ぶまで Default を表示します。",
-  "theme.ui.folderHint": "DEAS はスターターテーマフォルダーを作成し、オフラインエディターを開きます。",
   "theme.ui.chooseEnvironment": "テーマを読み込むには Backend で DEAS 環境を選んでください。",
   "theme.ui.loading": "テーマを読み込み中…",
   "theme.ui.refresh": "テーマを更新",
   "theme.ui.folderFailed": "テーマエディターを開けませんでした。ログを確認してください。",
-  "theme.ui.editThemes": "テーマを編集"
+  "theme.ui.editThemes": "テーマを編集",
+  "theme.ui.closeEditor": "テーマエディターを閉じる"
 }

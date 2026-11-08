@@ -1,10 +1,10 @@
 {
   "theme.ui.someThemePacksCouldNotBeLoadedBuilt": "Bazı tema paketleri yüklenemedi. Kurtarma için Default kullanılabilir. Günlüklere bakın.",
   "theme.ui.theSavedThemeIsUnavailableDefaultIsShown": "Kaydedilen tema kullanılamıyor. Paketi geri yükleyene veya başka tema seçene kadar Default gösterilir.",
-  "theme.ui.folderHint": "DEAS başlangıç tema klasörünü oluşturur ve çevrimdışı düzenleyiciyi açar.",
   "theme.ui.chooseEnvironment": "Tema paketlerini yüklemek için Backend altında DEAS ortamınızı seçin.",
   "theme.ui.loading": "Temalar yükleniyor…",
   "theme.ui.refresh": "Temaları yenile",
   "theme.ui.folderFailed": "Tema düzenleyicisi açılamadı. Günlüklere bakın.",
-  "theme.ui.editThemes": "Temaları düzenle"
+  "theme.ui.editThemes": "Temaları düzenle",
+  "theme.ui.closeEditor": "Tema düzenleyicisini kapat"
 }
