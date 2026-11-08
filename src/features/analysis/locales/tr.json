@@ -104,6 +104,13 @@
   "analysis.frames.sent": "Kare {frame}: {action}. Üret sekmesinde ayarlandı.",
   "analysis.frames.already": "Bu kare zaten orada ({action}).",
   "analysis.frames.sendGone": "Üret artık bir resmi bu şekilde almıyor; orada seçili modeli kontrol edin.",
+  "analysis.frames.sentMany": "{count} kare gönderildi ({frames}): {action}. Üret sekmesinde ayarlandılar.",
+  "analysis.frames.notSent": "Gönderilmedi: {list}.",
+  "analysis.frames.skipAlready": "{frames} zaten orada",
+  "analysis.frames.skipReason": "{frames}: {reason}",
+  "analysis.frames.listOne": "kare {n}",
+  "analysis.frames.listMany": "kareler {list}",
+  "analysis.frames.sendManyHelp": "Seçilen her kareyi sırayla gönderir ({count}).",
   "analysis.frames.noSends": "Bir kareyi Üret'e göndermek için (bir video modelinin ilk ya da son karesi, ya da H3 resimleri) önce o modeli Üret sekmesinde seçin.",
   "analysis.frames.privacy": "Kareler bu bilgisayarda FFmpeg ile dosyadan tek tek okunur; video asla değiştirilmez ya da yüklenmez."
 }

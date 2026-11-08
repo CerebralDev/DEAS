@@ -2,7 +2,7 @@
 
 ## 0.2.20 BETA (unreleased)
 
-- **New: Media Analysis.** Drop a picture on **Studio → Media Analysis** for its tags, the settings that made it and **Open in ComfyUI** for its workflow; press **Describe** for the picture in words from your vision LLM, with the characters it recognises and what the tagger missed. It uses the taggers you already have (WD14 node, animetimm ONNX, and others) and downloads one only if you have none and ask. Drop a video to get every frame in a strip: save frames, analyse one, or send it to Generate as a first/last frame or H3 picture. [Media Analysis guide](MEDIA-ANALYSIS.md).
+- **New: Media Analysis.** Drop a picture on **Studio → Media Analysis** for its tags, the settings that made it and **Open in ComfyUI** for its workflow; press **Describe** for the picture in words from your vision LLM, with the characters it recognises and what the tagger missed. It uses the taggers you already have (WD14 node, animetimm ONNX, and others) and downloads one only if you have none and ask. Drop a video to get every frame in a strip: save frames, analyse one, or send it to Generate as a first/last frame or H3 picture (several picked frames at once as H3 references). [Media Analysis guide](MEDIA-ANALYSIS.md).
 
 - **Theme editing now stays inside DEAS.** **Quick Settings → Edit themes** opens the editor in its own frame — no browser tab — and its **Edit theme** list offers the themes of your selected environment, saving straight into that theme folder with a backup of the previous manifest. [Theme guide](THEME-PACKS.md).
 

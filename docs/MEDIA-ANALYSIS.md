@@ -76,7 +76,7 @@ A video opens as a strip of every frame (every *k*-th past 2,000 frames; the arr
 - **Step** with ‹ › or ←/→ (Shift for 10), Home/End; click a thumbnail to go there.
 - **Pick** with the button, Space, Ctrl-click or Shift-click (a range). **Save frame…** / **Save picked…** ask for a folder once and write `<video>-f0001.png` files; an existing file is never replaced.
 - **Use this frame** (Enter) makes it the picture Media Analysis reads: tags, Made with (none for a frame) and Describe.
-- **Send this frame to Generate** shows exactly what the Generate tab would do with a picture right now — for a Wan or H3 video model, *Use as first frame*, *Use as last frame*, *Use as both*, and H3's *Add as reference*; blocked actions are greyed with Generate's reason. With no such model chosen in Generate, the picker says to choose one first.
+- **Send this frame to Generate** shows exactly what the Generate tab would do with a picture right now — for a Wan or H3 video model, *Use as first frame*, *Use as last frame*, *Use as both*, and H3's *Add as reference*. A send that collects pictures (H3 references, a picture model's prompt references) takes every picked frame at once, in order, and says which frames it skipped and why (already there, references full); blocked actions are greyed with Generate's reason. With no such model chosen in Generate, the picker says to choose one first.
 
 Frames for analysis and sends are kept in the runtime's `frames` folder (the newest clips only). The video is never changed or uploaded.
 
@@ -93,5 +93,4 @@ Frames for analysis and sends are kept in the runtime's `frames` folder (the new
 
 ## Not yet
 
-- Several picked frames cannot be sent to Generate in one click (PromptForge's "send picked" for H3 pictures); send them one at a time.
 - Describe takes one picture; a frame range is not read as a clip.

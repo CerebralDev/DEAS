@@ -79,14 +79,36 @@ export function FramePicker({ video, onUse, frameActions, onClose }: FramePicker
   // Sends are the Generate tab's own actions for a picture, asked for the frame that is about to go.
   const placeholder: MediaItem = { name: `${video.name}-f${index + 1}.png`, path: `${video.path}.frame-${index + 1}.png`, src: thumb(index) ? src(thumb(index)!) : '', media: 'image' };
   const sends = (frameActions?.(placeholder) ?? []);
+  // A send that collects pictures (references) takes every picked frame, in order; the others take the current frame.
+  const manyAt = (at: number) => !!sends[at]?.many && picked.size > 0;
   const send = (at: number) => work(`send-${at}`, async () => {
-    const item = await frameItem(index);
-    const action = (frameActions?.(item) ?? [])[at];
-    if (!action || action.blocked) throw new Error(action?.blocked || t('analysis.frames.sendGone'));
-    // This frame is already there (the action turned into its Remove): say so, change nothing.
-    if (action.label !== sends[at]?.label) { setNote(t('analysis.frames.already', { action: sends[at]?.label ?? '' })); return; }
-    action.onClick();
-    setNote(t('analysis.frames.sent', { action: action.label, frame: String(index + 1) }));
+    const label = sends[at]?.label ?? '';
+    const order = manyAt(at) ? [...picked].sort((a, b) => a - b) : [index];
+    const sent: number[] = [];
+    const skipped = new Map<string, number[]>(); // reason ('' = already there) → frames
+    for (const i of order) {
+      const item = await frameItem(i);
+      // Let Generate render the previous frame's send, so its actions (and limits) are current.
+      if (sent.length) await new Promise(r => setTimeout(r, 0));
+      const action = (frameActions?.(item) ?? [])[at];
+      if (!action) throw new Error(t('analysis.frames.sendGone'));
+      // This frame is already there (the action turned into its Remove): say so, change nothing.
+      if (action.label !== label) {
+        if (order.length === 1) { setNote(t('analysis.frames.already', { action: label })); return; }
+        skipped.set('', [...(skipped.get('') ?? []), i + 1]); continue;
+      }
+      if (action.blocked) {
+        if (order.length === 1) throw new Error(action.blocked);
+        skipped.set(action.blocked, [...(skipped.get(action.blocked) ?? []), i + 1]); continue;
+      }
+      action.onClick();
+      sent.push(i + 1);
+    }
+    const done = sent.length === 1 ? t('analysis.frames.sent', { action: label, frame: String(sent[0]) })
+      : sent.length ? t('analysis.frames.sentMany', { count: String(sent.length), frames: sent.join(', '), action: label }) : '';
+    const frames = (list: number[]) => list.length === 1 ? t('analysis.frames.listOne', { n: String(list[0]) }) : t('analysis.frames.listMany', { list: list.join(', ') });
+    const why = [...skipped].map(([reason, list]) => reason ? t('analysis.frames.skipReason', { frames: frames(list), reason }) : t('analysis.frames.skipAlready', { frames: frames(list) }));
+    setNote([done, why.length ? t('analysis.frames.notSent', { list: why.join(' · ').replace(/[.。]$/, '') }) : ''].filter(Boolean).join(' '));
   });
   const click = (i: number, e: MouseEvent) => {
     if (e.shiftKey && last !== null) {
@@ -146,7 +168,7 @@ export function FramePicker({ video, onUse, frameActions, onClose }: FramePicker
     </div>
     {sends.length > 0 && <div className="forge-actions analysis-frames-sends" data-frame-sends>
       <span className="forge-note">{t('analysis.frames.sendTo')}</span>
-      {sends.map((a, at) => <button type="button" key={`${at}-${a.label}`} className="forge-ghost" data-frame-send={at} disabled={!!busy || !!a.blocked} title={a.blocked || undefined} onClick={() => void send(at)}>{busy === `send-${at}` ? t('analysis.frames.working') : a.label}</button>)}
+      {sends.map((a, at) => <button type="button" key={`${at}-${a.label}`} className="forge-ghost" data-frame-send={at} disabled={!!busy || !!a.blocked} title={a.blocked || (manyAt(at) ? t('analysis.frames.sendManyHelp', { count: String(picked.size) }) : undefined)} data-frame-send-many={manyAt(at) ? picked.size : undefined} onClick={() => void send(at)}>{busy === `send-${at}` ? t('analysis.frames.working') : manyAt(at) ? `${a.label} (${picked.size})` : a.label}</button>)}
     </div>}
     {!sends.length && <p className="forge-note" data-frame-no-sends>{t('analysis.frames.noSends')}</p>}
     {note && <p className="forge-note" role="status" data-frame-note>{note}</p>}

@@ -104,6 +104,13 @@
   "analysis.frames.sent": "Bild {frame}: {action}. Es ist im Tab Generieren gesetzt.",
   "analysis.frames.already": "Dieses Bild ist schon dort ({action}).",
   "analysis.frames.sendGone": "Generieren nimmt ein Bild so nicht mehr an; prüfe das dort gewählte Modell.",
+  "analysis.frames.sentMany": "{count} Bilder gesendet ({frames}): {action}. Sie sind im Tab Generieren gesetzt.",
+  "analysis.frames.notSent": "Nicht gesendet: {list}.",
+  "analysis.frames.skipAlready": "{frames} schon dort",
+  "analysis.frames.skipReason": "{frames}: {reason}",
+  "analysis.frames.listOne": "Bild {n}",
+  "analysis.frames.listMany": "Bilder {list}",
+  "analysis.frames.sendManyHelp": "Sendet jedes ausgewählte Bild der Reihe nach ({count}).",
   "analysis.frames.noSends": "Um ein Bild an Generieren zu senden (erstes oder letztes Bild eines Videomodells oder H3-Bilder), wähle dort zuerst dieses Modell.",
   "analysis.frames.privacy": "Die Bilder werden mit FFmpeg auf diesem PC Bild für Bild aus der Datei gelesen; das Video wird nie verändert oder hochgeladen."
 }

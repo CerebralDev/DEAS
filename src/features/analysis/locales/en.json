@@ -104,6 +104,13 @@
   "analysis.frames.sent": "Frame {frame}: {action}. It is set in the Generate tab.",
   "analysis.frames.already": "That frame is already there ({action}).",
   "analysis.frames.sendGone": "Generate no longer takes a picture that way; check the model chosen there.",
+  "analysis.frames.sentMany": "Sent {count} frames ({frames}): {action}. They are set in the Generate tab.",
+  "analysis.frames.notSent": "Not sent: {list}.",
+  "analysis.frames.skipAlready": "{frames} already there",
+  "analysis.frames.skipReason": "{frames}: {reason}",
+  "analysis.frames.listOne": "frame {n}",
+  "analysis.frames.listMany": "frames {list}",
+  "analysis.frames.sendManyHelp": "Sends every picked frame, in order ({count}).",
   "analysis.frames.noSends": "To send a frame to Generate (a video model's first or last frame, or H3 pictures), choose that model in the Generate tab first.",
   "analysis.frames.privacy": "Frames are read from the file with FFmpeg on this PC, frame by frame; the video is never changed or uploaded."
 }

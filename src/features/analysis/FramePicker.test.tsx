@@ -98,3 +98,26 @@ it('says plainly when a video cannot be read', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Close' }));
   expect(onClose).toHaveBeenCalled();
 });
+
+it('sends every picked frame through a collecting send, in order, and says which it skipped and why', async () => {
+  // A small Generate: references collect up to 3; one already there turns into its Remove.
+  const refs = new Set<string>(['C:/frames/clip-f0003.png']);
+  const frameActions = (item: { path?: string }): MediaAction[] => [
+    { label: 'Use as first frame', onClick: vi.fn(), input: true },
+    refs.has(item.path!) ? { label: 'Remove reference', onClick: () => refs.delete(item.path!) }
+      : { label: 'Add as reference', many: true, onClick: () => refs.add(item.path!), blocked: refs.size >= 3 ? 'References are full.' : undefined },
+  ];
+  ui({ frameActions });
+  await screen.findByText(/49 frames/);
+  for (const i of [9, 2, 5, 7]) fireEvent.click(document.querySelector(`[data-frame-cell="${i}"]`)!, { ctrlKey: true });
+  expect(screen.getByRole('button', { name: 'Use as first frame' })).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Add as reference (4)' }));
+  expect(await screen.findByText('Sent 2 frames (6, 8): Add as reference. They are set in the Generate tab. Not sent: frame 3 already there · frame 10: References are full.')).toBeTruthy();
+  expect([...refs]).toEqual(['C:/frames/clip-f0003.png', 'C:/frames/clip-f0006.png', 'C:/frames/clip-f0008.png']);
+  expect((screen.getByRole('button', { name: 'Add as reference (4)' }) as HTMLButtonElement).disabled).toBe(true);
+  // One taken out in Generate: the same picks again, the skipped ones grouped by why they did not go.
+  refs.delete('C:/frames/clip-f0008.png');
+  fireEvent.click(document.querySelector('[data-frame-cell="20"]')!);
+  fireEvent.click(screen.getByRole('button', { name: 'Add as reference (4)' }));
+  expect(await screen.findByText('Frame 8: Add as reference. It is set in the Generate tab. Not sent: frames 3, 6 already there · frame 10: References are full.')).toBeTruthy();
+});

@@ -104,6 +104,13 @@
   "analysis.frames.sent": "第 {frame} 帧：{action}。已在生成标签页中设置。",
   "analysis.frames.already": "这一帧已经在那里（{action}）。",
   "analysis.frames.sendGone": "生成标签页已不再以这种方式接收图片；请检查那里选择的模型。",
+  "analysis.frames.sentMany": "已发送 {count} 帧（{frames}）：{action}。已在生成标签页中设置。",
+  "analysis.frames.notSent": "未发送：{list}。",
+  "analysis.frames.skipAlready": "{frames} 已经在那里",
+  "analysis.frames.skipReason": "{frames}：{reason}",
+  "analysis.frames.listOne": "第 {n} 帧",
+  "analysis.frames.listMany": "第 {list} 帧",
+  "analysis.frames.sendManyHelp": "按顺序发送所有选中的帧（{count}）。",
   "analysis.frames.noSends": "要把帧发送到生成（视频模型的首帧或尾帧，或 H3 图片），请先在生成标签页中选择该模型。",
   "analysis.frames.privacy": "帧由本机的 FFmpeg 从文件中逐帧读取；视频不会被修改或上传。"
 }

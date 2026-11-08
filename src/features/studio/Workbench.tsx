@@ -1146,10 +1146,10 @@ const loadChoices=()=>{if(native&&!choices&&endpoint.trim())void refreshChoices(
  const togglePromptRef=(item:MediaItem&{path:string})=>{const at=imageRefs.findIndex(r=>r.item.path===item.path);if(at>=0){setImageRefs(v=>v.filter((_,j)=>j!==at));return;}
   setImageRefs(v=>v.length>=4?v:[...v,{item:{...item},strength:0.6}]);
   if(revisionOk&&native&&!(choices?.visionModels?.length??0))setVisionDownload(true);};
- const inputActions=(item:MediaItem):MediaAction[]=>!item.path?[]:pipeline==='ref2v'&&videoFamily?[isRef(item)?{label:t('studio.run.video.removeRef',{name:item.name}),onClick:()=>toggleRef(item)}:{label:t('studio.run.video.addRef'),onClick:()=>toggleRef(item),blocked:refBlock(item)&&t(refBlock(item))}]
+ const inputActions=(item:MediaItem):MediaAction[]=>!item.path?[]:pipeline==='ref2v'&&videoFamily?[isRef(item)?{label:t('studio.run.video.removeRef',{name:item.name}),onClick:()=>toggleRef(item)}:{label:t('studio.run.video.addRef'),many:true,onClick:()=>toggleRef(item),blocked:refBlock(item)&&t(refBlock(item))}]
   // Cover sources are audio files or videos with an audio track (core LoadAudio reads the first stream); images cannot be covered.
   :pipeline==='cover'&&(item.media==='audio'||item.media==='video')?[musicSource?.path===item.path?{label:t('studio.music.removeSource'),input:true,onClick:()=>{setMusicSource(null);if(historyDraft)setHistorySourceSelected(false);}}:{label:t('studio.music.useSource'),input:true,onClick:()=>{setMusicSource(item);if(historyDraft)setHistorySourceSelected(true);}}]
-  :referenceMethod&&item.media==='image'&&validReference(item)?[imageRefs.some(r=>r.item.path===item.path)?{label:t('studio.run.reference.remove'),onClick:()=>togglePromptRef(item)}:{label:t('studio.run.reference.use'),onClick:()=>togglePromptRef(item),blocked:(imageRefs.length>=4&&t('studio.run.reference.max',{count:imageRefs.length,max:4}))||undefined}]
+  :referenceMethod&&item.media==='image'&&validReference(item)?[imageRefs.some(r=>r.item.path===item.path)?{label:t('studio.run.reference.remove'),onClick:()=>togglePromptRef(item)}:{label:t('studio.run.reference.use'),many:true,onClick:()=>togglePromptRef(item),blocked:(imageRefs.length>=4&&t('studio.run.reference.max',{count:imageRefs.length,max:4}))||undefined}]
   // Frame roles like the Director: first (i2v input), last, or the same image as both; t2v takes a last frame only.
   // H3 can run on a last frame alone (L2VA), so there "last frame" moves the role off the input instead of adding it.
   :frameVideo&&item.media==='image'?[

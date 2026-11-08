@@ -104,6 +104,13 @@
   "analysis.frames.sent": "Image {frame} : {action}. Elle est placée dans l'onglet Générer.",
   "analysis.frames.already": "Cette image y est déjà ({action}).",
   "analysis.frames.sendGone": "Générer n'accepte plus d'image de cette façon ; vérifiez le modèle choisi là-bas.",
+  "analysis.frames.sentMany": "{count} images envoyées ({frames}) : {action}. Elles sont placées dans l'onglet Générer.",
+  "analysis.frames.notSent": "Non envoyées : {list}.",
+  "analysis.frames.skipAlready": "{frames} déjà là",
+  "analysis.frames.skipReason": "{frames} : {reason}",
+  "analysis.frames.listOne": "image {n}",
+  "analysis.frames.listMany": "images {list}",
+  "analysis.frames.sendManyHelp": "Envoie chaque image choisie, dans l'ordre ({count}).",
   "analysis.frames.noSends": "Pour envoyer une image vers Générer (première ou dernière image d'un modèle vidéo, ou images H3), choisissez d'abord ce modèle dans l'onglet Générer.",
   "analysis.frames.privacy": "Les images sont lues dans le fichier avec FFmpeg sur ce PC, une par une ; la vidéo n'est jamais modifiée ni envoyée."
 }

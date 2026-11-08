@@ -75,6 +75,8 @@ export function Analysis({ active = true, endpoint = '', roots, root, incoming, 
   const [wantDescribe, setWantDescribe] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   const run = useRef(0);
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
   const refresh = () => analysisOverview(models).then(setOverview, e => setError(analysisError(e)));
   useEffect(() => { if (active) void refresh(); }, [active, key]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -169,7 +171,7 @@ export function Analysis({ active = true, endpoint = '', roots, root, incoming, 
   const setup = async (download = false) => {
     setError('');
     const started = setupAnalysis(models, download);
-    setTimeout(() => void refresh(), 300);
+    setTimeout(() => { if (mounted.current) void refresh(); }, 300);
     // A cancel is said calmly under the setup (analysis.cancelled), not as an error.
     try { setOverview(await started); } catch (e) { if (!String(e).includes('ANALYSIS_CANCELLED')) setError(analysisError(e)); void refresh(); }
   };

@@ -104,6 +104,13 @@
   "analysis.frames.sent": "フレーム {frame}：{action}。生成タブに設定しました。",
   "analysis.frames.already": "このフレームはすでに設定されています（{action}）。",
   "analysis.frames.sendGone": "生成タブがこの方法で画像を受け付けなくなりました。そちらで選んだモデルを確認してください。",
+  "analysis.frames.sentMany": "{count} フレームを送りました（{frames}）：{action}。生成タブに設定しました。",
+  "analysis.frames.notSent": "送れなかったもの：{list}。",
+  "analysis.frames.skipAlready": "{frames} はすでに設定済み",
+  "analysis.frames.skipReason": "{frames}：{reason}",
+  "analysis.frames.listOne": "フレーム {n}",
+  "analysis.frames.listMany": "フレーム {list}",
+  "analysis.frames.sendManyHelp": "選んだフレームをすべて順番に送ります（{count}）。",
   "analysis.frames.noSends": "フレームを生成へ送るには（動画モデルの最初／最後のフレーム、H3の画像）、先に生成タブでそのモデルを選んでください。",
   "analysis.frames.privacy": "フレームはこのPCのFFmpegでファイルから1枚ずつ読み取ります。動画は変更もアップロードもしません。"
 }
