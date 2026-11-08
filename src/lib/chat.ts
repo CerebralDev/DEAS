@@ -70,6 +70,8 @@ export const renameChat = (root: string, id: string, title: string) => invoke<vo
 export const deleteChat = (root: string, id: string) => invoke<void>('native_chat_delete', { root, id });
 /** Writes what came of a render onto the chat message that asked for it; resolves with the updated message. */
 export const recordRender = (root: string, id: string, at: number, index: number, result: RenderResult) => invoke<ChatMessage>('native_chat_render_result', { root, id, at, index, result });
+/** Before a chat render: unloads the chat LLM if it sits on this PC's GPU. Never throws to the caller's render. */
+export const freeChatLlm = (root: string) => invoke<{ unloaded: string[]; freedBytes: number; skipped: string | null }>('native_chat_free_llm', { root }).catch(() => null);
 export const chatSettings = (root: string) => invoke<ChatSettings>('native_chat_settings', { root });
 export const saveChatSettings = (root: string, settings: ChatSettings) => invoke<ChatSettings>('native_chat_settings_write', { root, settings });
 

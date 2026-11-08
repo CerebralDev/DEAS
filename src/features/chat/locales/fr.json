@@ -54,5 +54,7 @@
   "chat.render.stopped": "Arrêté.",
   "chat.render.noFile": "L'image est terminée, mais son fichier est introuvable. Cherchez-la dans Médias.",
   "chat.render.timeout": "Toujours pas terminée après 30 minutes. Voyez son état dans Studio → Générer.",
-  "chat.render.failed": "Générer a signalé un échec. Les détails sont dans les Logs."
+  "chat.render.failed": "Générer a signalé un échec. Les détails sont dans les Logs.",
+  "chat.render.room": "Libération de la place sur le GPU…",
+  "chat.status.loading_model": "Rechargement du modèle…"
 }

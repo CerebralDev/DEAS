@@ -54,5 +54,7 @@
   "chat.render.stopped": "Stopped.",
   "chat.render.noFile": "The picture finished, but its file could not be found. Look for it in Media.",
   "chat.render.timeout": "Still not finished after 30 minutes. Look in Studio → Generate for its state.",
-  "chat.render.failed": "Generate reported a failure. See Logs for the details."
+  "chat.render.failed": "Generate reported a failure. See Logs for the details.",
+  "chat.render.room": "Making room on the GPU…",
+  "chat.status.loading_model": "Loading the model again…"
 }

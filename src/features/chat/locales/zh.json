@@ -54,5 +54,7 @@
   "chat.render.stopped": "已停止。",
   "chat.render.noFile": "图片已完成，但找不到它的文件。请在媒体中查找。",
   "chat.render.timeout": "30 分钟后仍未完成。请在 工作室 → 生成 中查看状态。",
-  "chat.render.failed": "生成报告失败。详情见日志。"
+  "chat.render.failed": "生成报告失败。详情见日志。",
+  "chat.render.room": "正在腾出 GPU 空间…",
+  "chat.status.loading_model": "正在重新加载模型…"
 }

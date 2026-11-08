@@ -510,6 +510,7 @@ async fn write_for(
             }
         }
     };
+    runaway(&label, &prompt)?;
     Ok(Some(WrittenPrompt {
         target,
         label,
@@ -519,6 +520,23 @@ async fn write_for(
         render: None,
         picture: None,
     }))
+}
+
+/// Generate's ceiling on a prompt (`execution.ts`, UTF-16 units).
+const PROMPT_LIMIT: usize = 16_384;
+
+/// A prompt past what Generate can take is a writer stuck repeating itself (seen 7 Nov 2026:
+/// an 8B wrote 131,772 characters). It is never shown or drawn.
+fn runaway(label: &str, prompt: &str) -> Result<(), String> {
+    let units = prompt.encode_utf16().count();
+    if units <= PROMPT_LIMIT {
+        return Ok(());
+    }
+    crate::logs::push(
+        crate::logs::Source::Deas,
+        &format!("WARN: Chat: the {label} prompt writer ran away ({units} characters); discarded"),
+    );
+    Err(format!("The {label} prompt writer got stuck repeating itself ({units} characters, more than Generate can take), so nothing was kept or drawn. Ask again, or pick a bigger model at the top of Chat."))
 }
 
 /// A registered simple writer (a pack model without a Forge mode), written verbatim.
@@ -551,6 +569,9 @@ async fn write_simple(
     };
     match written {
         Ok(r) if r.refused => Err(format!("The {label} prompt writer declined this one.")),
+        Ok(r) if runaway(&label, &r.prompt).is_err() => {
+            Err(runaway(&label, &r.prompt).unwrap_err())
+        }
         Ok(r) => Ok(Some(WrittenPrompt {
             target: key.to_string(),
             label,
@@ -934,6 +955,15 @@ async fn answer(
     ollama: bool,
     emit: &mut (dyn FnMut(ChatEvent) + Send),
 ) -> Result<Message, String> {
+    // One GPU: a model the last chat render unloaded loads again now, and an idle
+    // ComfyUI lets go of its checkpoint first if the model would not fit beside it.
+    if super::gpu_swap::take_reloading() {
+        emit(ChatEvent::Status {
+            state: "loading_model".into(),
+            detail: None,
+        });
+    }
+    super::gpu_swap::make_room_for_llm(config, &req.model).await;
     let settings = search::read(root);
     let mut citations = vec![];
     let mut lead = None;
@@ -1042,6 +1072,8 @@ async fn answer(
                 match renderer(req) {
                     None => "I can't make a picture right now. Select an image checkpoint in Studio → Generate (and start the backend if it isn't running), then ask again.".into(),
                     Some((checkpoint, dialect)) => {
+                        // Only a name that is clearly another known model is refused; a small
+                        // model often puts the checkpoint's file name here (seen 7 Nov 2026, 4B).
                         let wanted = (!asked.is_empty()).then(|| {
                             crate::model_families::prompt_forge_target(&asked)
                                 .map(String::from)
@@ -1049,8 +1081,7 @@ async fn answer(
                                     PromptRoute::Forge(d) => Some(d.to_string()),
                                     _ => None,
                                 })
-                                .unwrap_or_else(|| asked.clone())
-                        });
+                        }).flatten();
                         crate::logs::push(
                             crate::logs::Source::Deas,
                             &format!("INFO: Chat: render_picture chat={} dialect={dialect} same={same}", chat.id),
@@ -1069,7 +1100,7 @@ async fn answer(
                                 .flatten()
                                 .cloned();
                             let written = match previous {
-                                Some(p) => Ok(Some(WrittenPrompt { picture: None, ..p })),
+                                Some(p) => runaway(&p.label, &p.prompt).map(|()| Some(WrittenPrompt { picture: None, ..p })),
                                 None if brief.is_empty() => Err("What should the picture show?".to_string()),
                                 None => write_for(root, data, config, req, dialect, &brief, stop, emit).await,
                             };
@@ -1351,6 +1382,15 @@ pub async fn native_chat_render_result(
     tokio::task::spawn_blocking(move || record_render(&root, &id, at, index, result))
         .await
         .map_err(|_| "Chat history failed to save")?
+}
+
+/// Before a chat render: unload the chat LLM when it sits on this PC's GPU, so the picture
+/// gets the card. The next message loads it again.
+#[tauri::command]
+pub async fn native_chat_free_llm(root: String) -> Result<super::gpu_swap::Freed, String> {
+    let root = env_root(&root)?;
+    let config = crate::llm::read(&root)?;
+    Ok(super::gpu_swap::free_llm(&config).await)
 }
 
 #[tauri::command]
@@ -2087,6 +2127,58 @@ mod tests {
             again.prompts[0].render.as_ref().unwrap().aspect.as_deref(),
             Some("16:9")
         );
+
+        // A writer stuck repeating itself: nothing kept, nothing drawn, a way forward.
+        // Distinct phrases: the clean-up would fold plain repeats away.
+        let looped = (0..2500)
+            .map(|i| format!("the fox turns to look at the snow drift number {i}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let runaway_writer = complete(&json!({"choices":[{"message":{"content":format!("===SEGMENT: Positive prompt===\n{looped}")},"finish_reason":"length"}]}).to_string());
+        let (url, _rx, server) =
+            fixture(vec![call(json!({"brief":"a fox at dawn"})), runaway_writer]).await;
+        let ran = tokio::time::timeout(
+            Duration::from_secs(3),
+            send(
+                &root,
+                &data,
+                &config(url),
+                req(Some(id.clone()), "a fox at dawn"),
+                &mut |_| {},
+            ),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        server.await.unwrap();
+        assert!(ran.prompts.is_empty());
+        assert!(
+            ran.content.contains("got stuck repeating itself"),
+            "{}",
+            ran.content
+        );
+
+        // The checkpoint's own file name as "model" is not another model.
+        let (url, _rx, server) = fixture(vec![
+            call(json!({"brief":"a fox at dusk","model":"anima-v1.safetensors"})),
+            writer(),
+        ])
+        .await;
+        let named = tokio::time::timeout(
+            Duration::from_secs(3),
+            send(
+                &root,
+                &data,
+                &config(url),
+                req(Some(id.clone()), "a fox at dusk"),
+                &mut |_| {},
+            ),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        server.await.unwrap();
+        assert_eq!(named.prompts.len(), 1, "{}", named.content);
 
         // A model the selected checkpoint is not: no write, a way forward.
         let (url, _rx, server) =

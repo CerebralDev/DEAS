@@ -216,6 +216,9 @@ it('draws a render_picture answer with Generate, shows its progress and the pict
   // Generate's settings travel with the message, so the LLM knows what draws.
   await waitFor(() => expect(sends()[0]?.studio).toMatchObject({ checkpoint: 'anima.safetensors', dialect: 'Anima', endpoint: 'http://127.0.0.1:8188', writerModel: 'openai:qwen' }));
   await waitFor(() => expect(onRender).toHaveBeenCalledWith(expect.objectContaining({ positive: 'a fox in snow', negative: 'blurry', aspect: '16:9' })));
+  // The chat LLM is asked to step aside before the picture is handed over.
+  const calls = vi.mocked(invoke).mock.calls.map(([c]) => c);
+  expect(calls.indexOf('native_chat_free_llm')).toBeGreaterThan(calls.indexOf('native_chat_send'));
   await screen.findByText('Drawing… step 3 of 20');
   expect(screen.getByRole('button', { name: 'Stop' })).toBeTruthy();
   const img = await screen.findByRole('img', { name: 'a fox in snow' }, { timeout: 3000 });

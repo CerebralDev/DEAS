@@ -2,7 +2,7 @@ import { Fragment, useEffect, useRef, useState, type ClipboardEvent, type ReactN
 import { useI18n } from '../../i18n/I18nProvider';
 import { PromptTextarea } from '../studio/PromptTextarea';
 import { convertFileSrc } from '@tauri-apps/api/core';
-import { cancelChat, chatSettings, deleteChat, getChat, listChats, recordRender, renameChat, saveChatSettings, sendChat, workingContext, type ChatEvent, type ChatHit, type ChatMessage, type ChatRenderOutcome, type ChatRenderRequest, type ChatSettings, type ChatStudio, type ChatSummary, type RenderResult, type WrittenPrompt } from '../../lib/chat';
+import { cancelChat, chatSettings, deleteChat, freeChatLlm, getChat, listChats, recordRender, renameChat, saveChatSettings, sendChat, workingContext, type ChatEvent, type ChatHit, type ChatMessage, type ChatRenderOutcome, type ChatRenderRequest, type ChatSettings, type ChatStudio, type ChatSummary, type RenderResult, type WrittenPrompt } from '../../lib/chat';
 import { pollWorkbench, stopWorkbenchJob, type JobStatus } from '../../lib/jobs';
 import { forgeError, nativeModelId } from '../../lib/forge';
 import { isBoolean, isString, usePref } from '../../lib/preferences';
@@ -49,7 +49,7 @@ function Rich({ text, citations }: { text: string; citations: ChatHit[] }) {
 }
 
 /** A chat render in progress, shown on its prompt card. */
-interface Draw { state: 'starting' | 'queued' | 'running'; value?: number; max?: number; preview?: string }
+interface Draw { state: 'room' | 'starting' | 'queued' | 'running'; value?: number; max?: number; preview?: string }
 
 /** The picture a render made (or why it did not), and its live progress while it draws. */
 function Picture({ prompt, draw, onRedraw }: { prompt: WrittenPrompt; draw?: Draw; onRedraw?: () => void }) {
@@ -146,6 +146,9 @@ export function Chat({ endpoint, root, active = true, onSend, studio, onRender }
     const show = (d?: Draw) => { if (valid()) setDraws(all => { const next = { ...all }; if (d) next[key] = d; else delete next[key]; return next; }); };
     const started = Date.now();
     const fail = (error: string): RenderResult => ({ width: 0, height: 0, checkpoint: studio?.checkpoint ?? '', error });
+    // One GPU: the chat LLM steps aside for the picture; the next message loads it again.
+    show({ state: 'room' });
+    await freeChatLlm(root);
     show({ state: 'starting' });
     let result: RenderResult;
     try {

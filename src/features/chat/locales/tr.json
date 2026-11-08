@@ -54,5 +54,7 @@
   "chat.render.stopped": "Durduruldu.",
   "chat.render.noFile": "Resim bitti ama dosyası bulunamadı. Medya'da ara.",
   "chat.render.timeout": "30 dakika sonra hâlâ bitmedi. Durumunu Stüdyo → Oluştur'da gör.",
-  "chat.render.failed": "Oluştur bir hata bildirdi. Ayrıntılar Günlüklerde."
+  "chat.render.failed": "Oluştur bir hata bildirdi. Ayrıntılar Günlüklerde.",
+  "chat.render.room": "GPU’da yer açılıyor…",
+  "chat.status.loading_model": "Model yeniden yükleniyor…"
 }
