@@ -1,4 +1,7 @@
 pub mod analysis;
+pub mod analysis_describe;
+pub mod analysis_frames;
+pub mod analysis_taggers;
 pub mod audio_enhance;
 mod audio_runtime;
 mod resources;

@@ -8,10 +8,9 @@
 //! CPU on purpose (PromptForge's call too): a tagger on the GPU would fight the LLM and
 //! ComfyUI for the card, and on CPU it takes a few seconds.
 //!
-//! Taggers are found where people already keep them, never copied:
-//! - `<models>/taggers/**`: DEAS's own folder, where the default WD v3 is downloaded;
-//! - `<ComfyUI>/custom_nodes/comfyui-wd14-tagger/models`: the WD14 Tagger node's folder;
-//! - `<models>/animetimm/<name>/`: animetimm models that have an ONNX file.
+//! Taggers are found where people already keep them, never copied (analysis_taggers.rs).
+//! Nothing is downloaded unless the person asks: the WD v3 EVA02 download is offered only
+//! when no tagger is found at all, and setup with an existing tagger installs only the runtime.
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -96,6 +95,11 @@ fn root() -> PathBuf {
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")));
     base.unwrap_or_default().join("deas/analysis-runtime")
+}
+
+/// The analysis runtime folder: the tagger venv, its inbox, frame strips and frames.
+pub(crate) fn runtime_root() -> PathBuf {
+    root()
 }
 
 fn runtime_dir() -> PathBuf {
@@ -350,141 +354,10 @@ async fn download_default(models: &Path) -> Result<(), String> {
     Ok(())
 }
 
-// ── discovery ───────────────────────────────────────────────────────────────
+// ── discovery: see analysis_taggers.rs ─────────────────────────────────────────
 
-#[derive(Clone, Serialize, Debug, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct Tagger {
-    /// Stable id: the model path.
-    pub id: String,
-    pub name: String,
-    pub model: String,
-    pub labels: String,
-    /// Where it was found: "deas", "wd14-node" or "animetimm".
-    pub source: String,
-    pub general_threshold: f64,
-    pub character_threshold: f64,
-}
-
-fn thresholds(name: &str) -> (f64, f64) {
-    // PromptForge's measured values: WD's 0.35/0.85 hid animetimm characters it was 51-85% sure of.
-    if name.to_ascii_lowercase().contains("animetimm") || name.contains("dbv4") {
-        (0.38, 0.51)
-    } else {
-        (0.35, 0.85)
-    }
-}
-
-fn pretty(stem: &str) -> String {
-    let s = stem.to_ascii_lowercase();
-    let known = [
-        ("wd-eva02-large-tagger-v3", "WD v3 EVA02-Large"),
-        ("wd-vit-large-tagger-v3", "WD v3 ViT-Large"),
-        ("wd-vit-tagger-v3", "WD v3 ViT"),
-        ("wd-swinv2-tagger-v3", "WD v3 SwinV2"),
-        ("wd-convnext-tagger-v3", "WD v3 ConvNeXt"),
-        ("wd-v1-4-moat-tagger-v2", "WD v1.4 MOAT"),
-        ("wd-v1-4-swinv2-tagger-v2", "WD v1.4 SwinV2"),
-        ("wd-v1-4-convnextv2-tagger-v2", "WD v1.4 ConvNeXtV2"),
-        ("convnextv2_huge.dbv4-full", "animetimm ConvNeXtV2-Huge"),
-        ("caformer_s36.dbv4-full", "animetimm CAFormer-S36"),
-    ];
-    known
-        .iter()
-        .find(|(k, _)| s.contains(k))
-        .map(|(_, v)| v.to_string())
-        .unwrap_or_else(|| stem.to_string())
-}
-
-fn push(out: &mut Vec<Tagger>, model: PathBuf, labels: PathBuf, label_stem: &str, source: &str) {
-    if !model.is_file() || !labels.is_file() {
-        return;
-    }
-    let id = model.to_string_lossy().to_string();
-    if out.iter().any(|t| t.id == id) {
-        return;
-    }
-    let name = pretty(label_stem);
-    let (g, c) = thresholds(label_stem);
-    out.push(Tagger {
-        id,
-        name,
-        model: model.to_string_lossy().into(),
-        labels: labels.to_string_lossy().into(),
-        source: source.into(),
-        general_threshold: g,
-        character_threshold: c,
-    });
-}
-
-/// `<file>.onnx` with `<file>.csv` beside it, or `model.onnx` with `selected_tags.csv`.
-fn scan_dir(out: &mut Vec<Tagger>, dir: &Path, source: &str, depth: usize) {
-    let Ok(entries) = fs::read_dir(dir) else {
-        return;
-    };
-    let mut entries: Vec<_> = entries.flatten().map(|e| e.path()).collect();
-    entries.sort();
-    for path in entries {
-        if path.is_dir() {
-            if depth > 0
-                && !path
-                    .file_name()
-                    .is_some_and(|n| n.to_string_lossy().starts_with('.'))
-            {
-                scan_dir(out, &path, source, depth - 1);
-            }
-            continue;
-        }
-        if path.extension().and_then(|e| e.to_str()) != Some("onnx") {
-            continue;
-        }
-        let stem = path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("")
-            .to_string();
-        let folder = path
-            .parent()
-            .and_then(|p| p.file_name())
-            .and_then(|n| n.to_str())
-            .unwrap_or("")
-            .to_string();
-        if stem == "model" {
-            push(
-                out,
-                path.clone(),
-                path.with_file_name("selected_tags.csv"),
-                &folder,
-                source,
-            );
-        } else {
-            push(out, path.clone(), path.with_extension("csv"), &stem, source);
-        }
-    }
-}
-
-/// Every tagger in these model folders, DEAS's own first.
-pub fn discover(models: &[PathBuf]) -> Vec<Tagger> {
-    let mut out = vec![];
-    for m in models {
-        scan_dir(&mut out, &m.join("taggers"), "deas", 2);
-    }
-    for m in models {
-        if let Some(comfy) = m.parent() {
-            scan_dir(
-                &mut out,
-                &comfy
-                    .join("custom_nodes")
-                    .join("comfyui-wd14-tagger")
-                    .join("models"),
-                "wd14-node",
-                0,
-            );
-        }
-        scan_dir(&mut out, &m.join("animetimm"), "animetimm", 1);
-    }
-    out
-}
+pub use crate::analysis_taggers::{Tagger, Unusable};
+use crate::analysis_taggers::discover;
 
 fn model_roots(models: &[String]) -> Vec<PathBuf> {
     let mut out: Vec<PathBuf> = vec![];
@@ -507,6 +380,53 @@ pub struct TagResult {
     pub general: Vec<(String, f64)>,
     pub character: Vec<(String, f64)>,
     pub ms: u64,
+}
+
+/// DEAS's Danbooru tag table, for tag lists that carry no categories (bundled; read once).
+fn tag_table() -> Option<&'static crate::forge::tags::TagStore> {
+    static TABLE: std::sync::OnceLock<Option<crate::forge::tags::TagStore>> =
+        std::sync::OnceLock::new();
+    TABLE
+        .get_or_init(|| {
+            crate::forge::tags::TagStore::open(&root().join("bundled-only/tags.sqlite")).ok()
+        })
+        .as_ref()
+}
+
+/// The tagger's tag list in the one shape the worker reads: `[[tag, kind], ...]` in model
+/// output order, kind g/c/r/o. Written once per list version beside the runtime.
+fn worker_labels(tagger: &Tagger) -> Result<PathBuf, String> {
+    let source = Path::new(&tagger.labels);
+    let meta = fs::metadata(source)
+        .map_err(|_| "ANALYSIS_RUN: The tagger's tag list is gone from its folder")?;
+    let key = Sha256::digest(format!(
+        "labels-v1\0{}\0{}\0{:?}",
+        tagger.labels,
+        meta.len(),
+        meta.modified().ok()
+    ));
+    let path = root().join("labels").join(format!("{key:x}.json"));
+    if path.is_file() {
+        return Ok(path);
+    }
+    let labels = crate::analysis_taggers::read_labels(source)
+        .map_err(|e| format!("ANALYSIS_RUN: {}'s tag list cannot be used: {e}", tagger.name))?;
+    let table = if labels.kinds.is_none() { tag_table() } else { None };
+    let kinds = crate::analysis_taggers::resolve_kinds(&labels, table);
+    let rows: Vec<(&str, &str)> = labels
+        .names
+        .iter()
+        .zip(&kinds)
+        .map(|(n, k)| (n.as_str(), k.code()))
+        .collect();
+    fs::create_dir_all(path.parent().unwrap())
+        .map_err(|_| "ANALYSIS_RUN: Cannot write the tag list for the tagger")?;
+    let text = serde_json::to_string(&rows).map_err(|_| "ANALYSIS_RUN: Cannot write the tag list")?;
+    let temp = path.with_extension("part");
+    fs::write(&temp, text)
+        .and_then(|_| fs::rename(&temp, &path))
+        .map_err(|_| "ANALYSIS_RUN: Cannot write the tag list for the tagger")?;
+    Ok(path)
 }
 
 /// The worker beside the runtime, rewritten whenever this DEAS carries a different one.
@@ -557,6 +477,7 @@ pub async fn tag(
         .await
         .map_err(|_| "ANALYSIS_RUN: Tagger busy")?;
     let worker = worker_path()?;
+    let labels = worker_labels(tagger)?;
     let mut command = Command::new(python(&runtime_dir()));
     command
         .args(["-s", "-E"])
@@ -564,7 +485,7 @@ pub async fn tag(
         .arg("--model")
         .arg(&tagger.model)
         .arg("--labels")
-        .arg(&tagger.labels)
+        .arg(&labels)
         .arg("--image")
         .arg(image)
         .args([
@@ -684,14 +605,15 @@ pub struct Overview {
     pub runtime_ready: bool,
     pub install: InstallStatus,
     pub taggers: Vec<Tagger>,
-    /// The default tagger is missing and can be downloaded (about 1.3 GB).
-    pub default_missing: bool,
+    /// Found, but not usable as they are, each with the reason.
+    pub unusable: Vec<Unusable>,
+    /// The size of the optional WD v3 download, offered only when no tagger is found.
     pub default_size: u64,
 }
 
 #[tauri::command]
 pub fn native_analysis_overview(models: Vec<String>) -> Overview {
-    let taggers = discover(&model_roots(&models));
+    let found = discover(&model_roots(&models));
     Overview {
         runtime_ready: runtime_ready(),
         install: STATUS.lock().map(|s| s.clone()).unwrap_or(InstallStatus {
@@ -701,24 +623,28 @@ pub fn native_analysis_overview(models: Vec<String>) -> Overview {
             total: 0,
             error: None,
         }),
-        default_missing: !taggers
-            .iter()
-            .any(|t| t.model.to_ascii_lowercase().contains("eva02")),
         default_size: WD_FILES.iter().map(|(_, _, s)| s).sum(),
-        taggers,
+        taggers: found.taggers,
+        unusable: found.unusable,
     }
 }
 
-/// Installs the tagger runtime and, when no EVA02 is found, downloads it into the first models folder.
+/// Installs the tagger runtime. With `download`, and only when no tagger is found at all,
+/// it also downloads WD v3 EVA02 into the first models folder: never pushed on anyone.
 #[tauri::command]
 pub async fn native_analysis_setup(
     engine: tauri::State<'_, crate::install::Engine>,
     models: Vec<String>,
+    download: Option<bool>,
 ) -> Result<Overview, String> {
     let roots = model_roots(&models);
-    let first = roots.first().cloned().ok_or(
-        "ANALYSIS_SETUP: No models folder is set. Choose one under Backend → Folders first.",
-    )?;
+    let first = roots.first().cloned();
+    if download == Some(true) && first.is_none() {
+        return Err(
+            "ANALYSIS_SETUP: No models folder is set. Choose one under Backend → Folders first."
+                .into(),
+        );
+    }
     let _permit = INSTALLING
         .try_acquire()
         .map_err(|_| "ANALYSIS_BUSY: Tagger setup is already running")?;
@@ -733,11 +659,10 @@ pub async fn native_analysis_setup(
     });
     let result = async {
         install_runtime(managed_uv).await?;
-        if !discover(&roots)
-            .iter()
-            .any(|t| t.model.to_ascii_lowercase().contains("eva02"))
-        {
-            download_default(&first).await?;
+        if let (Some(true), Some(first)) = (download, &first) {
+            if discover(&roots).taggers.is_empty() {
+                download_default(first).await?;
+            }
         }
         Ok::<(), String>(())
     }
@@ -792,6 +717,31 @@ pub fn native_analysis_stage(bytes: Vec<u8>, ext: String) -> Result<String, Stri
     Ok(path.to_string_lossy().into())
 }
 
+/// Choose…: a picture or a video from disk, by path (nothing copied); `None` on cancel.
+#[tauri::command]
+pub async fn native_analysis_pick(title: String) -> Result<Option<String>, String> {
+    if title.trim().is_empty() || title.len() > 240 || title.chars().any(char::is_control) {
+        return Err("ANALYSIS_PICK: Invalid dialog title".into());
+    }
+    let Some(file) = rfd::AsyncFileDialog::new()
+        .set_title(title)
+        .add_filter(
+            "Pictures and videos",
+            &["png", "jpg", "jpeg", "webp", "mp4", "mov", "m4v", "mkv", "webm"],
+        )
+        .add_filter("Pictures", &["png", "jpg", "jpeg", "webp"])
+        .add_filter("Videos", &["mp4", "mov", "m4v", "mkv", "webm"])
+        .pick_file()
+        .await
+    else {
+        return Ok(None);
+    };
+    file.path()
+        .to_str()
+        .map(|p| Some(p.to_string()))
+        .ok_or_else(|| "ANALYSIS_PICK: That file's name cannot be read".into())
+}
+
 #[tauri::command]
 pub fn native_analysis_cancel() {
     CANCEL.store(true, Ordering::Relaxed);
@@ -806,14 +756,21 @@ pub async fn native_analysis_tag(
     general: Option<f64>,
     character: Option<f64>,
 ) -> Result<TagResult, String> {
-    let found = discover(&model_roots(&models));
+    let found = discover(&model_roots(&models)).taggers;
     let image = PathBuf::from(image);
     if tagger == "all" {
         if found.is_empty() {
             return Err("ANALYSIS_RUN: No taggers found".into());
         }
         let mut results = vec![];
+        let mut seen = vec![];
         for t in &found {
+            // The same tagger in two folders is read once.
+            let same = (fs::metadata(&t.model).map(|m| m.len()).unwrap_or(0), t.tags);
+            if seen.contains(&same) {
+                continue;
+            }
+            seen.push(same);
             results.push(tag(t, &image, t.general_threshold, t.character_threshold).await?);
         }
         return Ok(merge(&results));
@@ -834,53 +791,6 @@ pub async fn native_analysis_tag(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn touch(path: &Path) {
-        fs::create_dir_all(path.parent().unwrap()).unwrap();
-        fs::write(path, b"x").unwrap();
-    }
-
-    #[test]
-    fn finds_taggers_where_people_keep_them_and_needs_their_tag_list() {
-        let tmp = tempfile::tempdir().unwrap();
-        let models = tmp.path().join("ComfyUI").join("models");
-        // DEAS's own download layout.
-        touch(&models.join("taggers/wd-eva02-large-tagger-v3/model.onnx"));
-        touch(&models.join("taggers/wd-eva02-large-tagger-v3/selected_tags.csv"));
-        // The WD14 Tagger node's flat layout.
-        let node = tmp
-            .path()
-            .join("ComfyUI/custom_nodes/comfyui-wd14-tagger/models");
-        touch(&node.join("wd-v1-4-moat-tagger-v2.onnx"));
-        touch(&node.join("wd-v1-4-moat-tagger-v2.csv"));
-        touch(&node.join("half-copied.onnx")); // no tag list: skipped
-                                               // animetimm: PyTorch-only is skipped, an ONNX copy is used.
-        touch(&models.join("animetimm/convnextv2_huge.dbv4-full/pytorch_model.bin"));
-        touch(&models.join("animetimm/convnextv2_huge.dbv4-full/selected_tags.csv"));
-        touch(&models.join("animetimm/caformer_s36.dbv4-full/model.onnx"));
-        touch(&models.join("animetimm/caformer_s36.dbv4-full/selected_tags.csv"));
-        let found = discover(&[models]);
-        let names: Vec<(&str, &str)> = found
-            .iter()
-            .map(|t| (t.name.as_str(), t.source.as_str()))
-            .collect();
-        assert_eq!(
-            names,
-            vec![
-                ("WD v3 EVA02-Large", "deas"),
-                ("WD v1.4 MOAT", "wd14-node"),
-                ("animetimm CAFormer-S36", "animetimm"),
-            ]
-        );
-        assert_eq!(
-            (found[0].general_threshold, found[0].character_threshold),
-            (0.35, 0.85)
-        );
-        assert_eq!(
-            (found[2].general_threshold, found[2].character_threshold),
-            (0.38, 0.51)
-        );
-    }
 
     #[test]
     fn worker_output_parses_and_all_taggers_merge_at_the_highest_score() {

@@ -23,6 +23,18 @@
       "bytes": 2044773,
       "upstreamPath": "data/seed/character_traits.sqlite",
       "upstreamSha256": "14ebf7966b792bc172bfd3a596f4fc259ec9ebafe47239e463b756870dc58c62"
+    },
+    "character_series.json": {
+      "sha256": "129de940858286e1b43f9f2b52c75eb3a0d0a81aafd058b8a290df2af4430819",
+      "bytes": 304502,
+      "upstreamPath": "data/seed/character_series.json",
+      "upstreamSha256": "50b140cd0a2811101c3fa0c449cefcb1fe394e5ebc033540fc4cbd2c69224f6c"
+    },
+    "analysis-describe.md": {
+      "sha256": "cee17350aa8f64ebc93dea47de4afd4867406ec518749dc66cd93eb26dc5dbb9",
+      "bytes": 739,
+      "upstreamPath": "prompts/analysis/describe.md",
+      "upstreamSha256": "c313e0721a129c367e9509fc3b2de601e3eab1183499da69da4362b656917164"
     }
   }
 }

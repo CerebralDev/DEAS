@@ -14,6 +14,7 @@ import { PromptForge } from './features/forge/PromptForge';
 import { Chat } from './features/chat/Chat';
 import { Analysis } from './features/analysis/Analysis';
 import type { MediaItem } from './lib/media';
+import type { MediaAction } from './features/media/MediaLibrary';
 import type { Folders } from './lib/settings';
 import type { ForgeCanvasContext, ForgeSendCanvas } from './lib/forgeCanvas';
 import { oneOf, usePref } from './lib/preferences';
@@ -70,6 +71,8 @@ export default function App(){
  // Media's "Open in Media Analysis" sends the picture here.
  const [toAnalyze,setToAnalyze]=useState<{item:MediaItem;n:number}>();
  const analyze=(item:MediaItem)=>{setToAnalyze(a=>({item,n:(a?.n??0)+1}));setTab('analysis');};
+ // The frame picker's sends are whatever Generate would do with a picture right now.
+ const frameActions=useRef<((item:MediaItem)=>MediaAction[])|undefined>(undefined);
  const tveOpened=useRef(false);if(tab==='tve')tveOpened.current=true;
  const monitorOpened=useRef(false);if(tab==='monitor')monitorOpened.current=true;
  const [forgeHost,setForgeHost]=useState<HTMLDivElement|null>(null);
@@ -109,8 +112,8 @@ export default function App(){
    <AiOSetup experience={experience} onExperience={setExperience} beginnerPage={beginnerPage} onBeginnerPage={setBeginnerPage} studioTab={tab} onStudioTab={setTab} onStudioActiveChange={setStudioActive} onConnectExisting={connectExisting} onEnvironment={setEnvironment} studio={<div id="studio-workspace" className="studio-workspace">
     <div className="studio-columns">
     <div className="studio-main">
-    <div className="studio-generate-host" hidden={tab==='forge'||tab==='chat'||tab==='analysis'||tab==='tve'||tab==='monitor'}><Workbench beginner={beginner} beginnerPage={beginnerPage} onBeginnerPage={setBeginnerPage} planVisible={tab==='map'} endpoint={endpoint} roots={roots} root={environment?.root} incoming={sent} onCanvasContext={setForgeCanvasContext} onOpenVideoPost={()=>setTab('tve')} forgeHost={forgeHost} forgeActive={studioActive&&tab==='forge'} onOpenPromptForge={()=>setTab('forge')} onH3ForgeAvailable={setH3ForgeAvailable} onAnalyze={analyze}/></div>
-    {analysisOpened.current&&<div className="studio-generate-host" hidden={tab!=='analysis'}><Analysis active={studioActive&&tab==='analysis'} roots={roots} root={environment?.root} incoming={toAnalyze} onSend={sendToGenerate}/></div>}
+    <div className="studio-generate-host" hidden={tab==='forge'||tab==='chat'||tab==='analysis'||tab==='tve'||tab==='monitor'}><Workbench beginner={beginner} beginnerPage={beginnerPage} onBeginnerPage={setBeginnerPage} planVisible={tab==='map'} endpoint={endpoint} roots={roots} root={environment?.root} incoming={sent} onCanvasContext={setForgeCanvasContext} onOpenVideoPost={()=>setTab('tve')} forgeHost={forgeHost} forgeActive={studioActive&&tab==='forge'} onOpenPromptForge={()=>setTab('forge')} onH3ForgeAvailable={setH3ForgeAvailable} onAnalyze={analyze} onFrameActions={fn=>{frameActions.current=fn;}}/></div>
+    {analysisOpened.current&&<div className="studio-generate-host" hidden={tab!=='analysis'}><Analysis active={studioActive&&tab==='analysis'} endpoint={endpoint} frameActions={item=>frameActions.current?.(item)??[]} roots={roots} root={environment?.root} incoming={toAnalyze} onSend={sendToGenerate}/></div>}
     {tveOpened.current&&<div className="studio-generate-host" hidden={tab!=='tve'}><TrueVideoEnhancer endpoint={endpoint} roots={roots}/></div>}
     {monitorOpened.current&&<div className="studio-generate-host" hidden={tab!=='monitor'}><Monitoring active={studioActive&&tab==='monitor'} root={environment?.root}/></div>}
     {forgeOpened.current&&<div className="studio-generate-host" hidden={tab!=='forge'}>{canvasSendError&&<p className="error-message" role="alert">{t(canvasSendError)}</p>}<div ref={setForgeHost} hidden={!h3ForgeAvailable}/><div hidden={h3ForgeAvailable}><PromptForge active={studioActive&&tab==='forge'&&!h3ForgeAvailable} endpoint={endpoint} root={environment?.root} inputDir={roots?.input} outputDir={roots?.output} onSend={sendToGenerate} canvasContext={forgeCanvasContext}/></div></div>}

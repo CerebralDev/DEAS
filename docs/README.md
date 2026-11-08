@@ -28,6 +28,7 @@ Top-level tabs: Studio · Library · Prompt Forge · Chat · TVE · Comfy on the
 | Native image-draft projects, autosave and managed PNG input (not job/result recovery) | [Projects](PROJECTS.md) |
 | Prompt Forge, hammer, MOSS Layout Studio, presets/wildcards and shared LLM settings | [Prompting](PROMPTING.md) · [Presets](PROMPTING.md#presets) · [Wildcards](PROMPTING.md#wildcards) |
 | Chat: conversation, prompt writing, model guides, tag lookups and optional web search | [Chat](CHAT.md) |
+| Media Analysis: tags, Describe, Open in ComfyUI and the video frame picker | [Media Analysis](MEDIA-ANALYSIS.md) |
 | Run Plan (Ablaufplan) and legacy Engine diagnostics | [Run Plan](STUDIO.md#run-plan-and-engine-diagnostics) |
 | Media dock, starred media, preview, playback and embedded metadata | [Media](MEDIA.md) |
 | Library → Catalog / Installed, Scan Files; Backend → Provider authorization | [Library and authorization](LIBRARY.md) |

@@ -14,6 +14,9 @@ pub fn bundled(name: &str) -> Option<&'static [u8]> {
         "character_traits.sqlite" => {
             Some(include_bytes!("../../forge-data/character_traits.sqlite"))
         }
+        // Media Analysis' Describe: who else is in a series, and its instructions.
+        "character_series.json" => Some(include_bytes!("../../forge-data/character_series.json")),
+        "analysis-describe.md" => Some(include_bytes!("../../forge-data/analysis-describe.md")),
         _ => None,
     }
 }

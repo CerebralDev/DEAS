@@ -90,7 +90,7 @@ describe('automatic-first installation — read-only mock IPC fixtures',()=>{
  });
  it('puts Backend/Logs after Comfy and directly exposes backend settings and provider authorization',()=>{
   mount();
-  expect([...document.querySelectorAll('.aio-tabs > [role="tab"]')].map(el=>el.textContent)).toEqual(['Studio','Library','Prompt Forge','Chat','TVE','Comfy','Monitoring','Run Plan','Backend','Logs']);
+  expect([...document.querySelectorAll('.aio-tabs > [role="tab"]')].map(el=>el.textContent)).toEqual(['Studio','Library','Prompt Forge','Chat','Media Analysis','TVE','Comfy','Monitoring','Run Plan','Backend','Logs']);
   fireEvent.click(screen.getByRole('tab',{name:'Backend'}));
   expect(screen.getByLabelText('Language')).toBeTruthy();
   expect(screen.getByRole('region',{name:'Provider authorization'})).toBeTruthy();
@@ -102,7 +102,7 @@ describe('automatic-first installation — read-only mock IPC fixtures',()=>{
   render(<I18nProvider><AiOSetup studio={<input aria-label="Studio draft" defaultValue="keep me"/>} onConnectExisting={vi.fn()}/></I18nProvider>);
   fireEvent.click(screen.getByRole('tab',{name:'Studio'}));
   const draft=screen.getByLabelText('Studio draft');
-  const tabs=screen.getAllByRole('tab');expect(tabs.map(x=>x.textContent)).toEqual(['Studio','Library','Prompt Forge','Chat','TVE','Comfy','Monitoring','Run Plan','Backend','Logs']);
+  const tabs=screen.getAllByRole('tab');expect(tabs.map(x=>x.textContent)).toEqual(['Studio','Library','Prompt Forge','Chat','Media Analysis','TVE','Comfy','Monitoring','Run Plan','Backend','Logs']);
   expect([...document.querySelectorAll('.aio-utility-tabs > [role="tab"]')].map(el=>el.textContent)).toEqual(['Monitoring','Run Plan','Backend','Logs']);
   fireEvent.click(screen.getByRole('tab',{name:'Comfy'}));
   expect(document.querySelector('.comfy-loading')?.textContent).toContain('Waiting for backend');
