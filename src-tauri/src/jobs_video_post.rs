@@ -108,6 +108,22 @@ pub(crate) fn multiplier(p: &Value) -> u64 {
     p["frameGeneration"]["multiplier"].as_u64().unwrap_or(1)
 }
 
+/// RTX refine/frame-generation drive the NVIDIA NGX SDK; the node pack registers those nodes even
+/// where nvvfx is missing, so the installed plan's backend is the only reliable vendor truth at
+/// admission (docs/PLAN.md 4.8). Model upscale and RIFE stay available on AMD/CPU plans.
+pub(crate) fn validate_rtx_hardware(
+    intent: &Value,
+    backend: Option<&crate::install::Backend>,
+) -> Result<(), String> {
+    let post = &intent["videoPost"];
+    let rtx = post.get("rtx").is_some_and(|r| !r.is_null())
+        || post["frameGeneration"]["engine"].as_str() == Some("rtx");
+    if rtx && !matches!(backend, Some(crate::install::Backend::Nvidia)) {
+        return Err("videoPost RTX refine/frame generation requires an owned backend installed on an NVIDIA GPU (RTX Video runs on the NVIDIA NGX SDK); AMD and CPU plans keep upscaleModel, RIFE frame interpolation and every other stage".into());
+    }
+    Ok(())
+}
+
 /// Emits the chain on `images` and returns the processed images link.
 pub(crate) fn chain(g: &mut Value, mut images: Value, p: &Value) -> Value {
     if let Some(model) = p.get("upscaleModel") {
@@ -243,6 +259,23 @@ mod tests {
         json!({"upscaleModel":"2x-AnimeSharpV4_RCAN.safetensors",
                "rtx":{"denoise":"High","upscale":{"mode":"VSR","quality":"Ultra","scale":1.5}},
                "frameGeneration":{"engine":"rife","multiplier":2,"model":"rife_v4.26.safetensors"}})
+    }
+
+    #[test]
+    fn rtx_stages_require_an_nvidia_installed_backend() {
+        use crate::install::Backend;
+        let with_rtx = json!({"recipeId": "video-enhance", "videoPost": post()});
+        assert!(validate_rtx_hardware(&with_rtx, Some(&Backend::Nvidia)).is_ok());
+        for backend in [Backend::Amd, Backend::Cpu] {
+            assert!(validate_rtx_hardware(&with_rtx, Some(&backend)).is_err());
+        }
+        assert!(validate_rtx_hardware(&with_rtx, None).is_err());
+        let rife_only = json!({"recipeId": "video-enhance",
+            "videoPost": {"upscaleModel":"2x.safetensors","frameGeneration":{"engine":"rife","multiplier":2,"model":"rife_v4.26.safetensors"}}});
+        assert!(validate_rtx_hardware(&rife_only, Some(&Backend::Amd)).is_ok());
+        let rtx_engine = json!({"recipeId": "video-enhance",
+            "videoPost": {"frameGeneration":{"engine":"rtx","multiplier":2,"mode":"HIGH"}}});
+        assert!(validate_rtx_hardware(&rtx_engine, Some(&Backend::Amd)).is_err());
     }
 
     #[test]

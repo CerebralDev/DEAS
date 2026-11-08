@@ -68,19 +68,30 @@ print(json.dumps({'coreImported':True,'selectedNodes':sorted(required),'generati
 "#;
 const MAX_LOGS: usize = 300;
 const FRAMEWORK_PROBE: &str = r#"import json,sys,os
-p=json.loads(sys.argv[2]); h=json.loads(sys.argv[3])
-if h: os.environ['CUDA_VISIBLE_DEVICES']=h['uuid']
+p=json.loads(sys.argv[2]); h=json.loads(sys.argv[3]); backend=sys.argv[4] if len(sys.argv)>4 else 'nvidia'
+if h and h['uuid'].startswith('GPU-'): os.environ['CUDA_VISIBLE_DEVICES']=h['uuid']
 import torch,torchvision,torchaudio
 assert sys.version_info[:2]==(3,12)
 assert sys.prefix!=sys.base_prefix
 assert os.path.normcase(os.path.commonpath([sys.base_prefix,sys.argv[1]]))==os.path.normcase(sys.argv[1])
 for module,spec in zip([torch,torchvision,torchaudio],p['packages']):
     expected=spec.split('==')[1]
-    expected += '+' + p['indexUrl'].rsplit('/',1)[1]
+    family=p['indexUrl'].rsplit('/',1)[-1]
+    if family: expected += '+' + family
     assert module.__version__==expected, (module.__version__,expected)
-assert not torch.version.hip
 metadata={'python':sys.version,'basePrefix':sys.base_prefix,'torch':torch.__version__,'torchvision':torchvision.__version__,'torchaudio':torchaudio.__version__,'cuda':torch.version.cuda,'generationReady':False}
-if h:
+if backend=='amd':
+    assert torch.version.hip, 'ROCm torch expected'
+    assert torch.cuda.is_available(), 'HIP unavailable; check amdgpu driver, /dev/kfd and render group membership'
+    props=torch.cuda.get_device_properties(0)
+    arch=getattr(props,'gcnArchName','').split(':')[0]
+    assert arch==h['computeCapability'], ('GPU target changed; re-plan', arch, h['computeCapability'])
+    x=torch.ones((2,2),device='cuda'); y=x@x
+    torch.cuda.synchronize()
+    assert bool(torch.isfinite(y).all().item() and (y==2).all().item())
+    metadata.update(gpu=props.name,uuid=h['uuid'],computeCapability=arch,hip=torch.version.hip,computed=True)
+elif h:
+    assert not torch.version.hip
     assert torch.version.cuda==p['cuda']
     assert torch.cuda.is_available(), 'CUDA unavailable; check driver and device access'
     props=torch.cuda.get_device_properties(0)
@@ -92,6 +103,7 @@ if h:
     assert bool(torch.isfinite(y).all().item() and (y==2).all().item())
     metadata.update(gpu=props.name,uuid=str(getattr(props,'uuid',h['uuid'])),computeCapability=f'{props.major}.{props.minor}',computed=True)
 else:
+    assert not torch.version.hip
     assert torch.version.cuda is None
     assert (torch.ones(2)+1).tolist()==[2,2]
 print(json.dumps(metadata))
@@ -539,17 +551,26 @@ impl Engine {
                 }
                 Err(error) => unsupported.push(error),
             },
-            Backend::Amd | Backend::Intel => {}
-        }
-        if matches!(request.backend, Backend::Amd | Backend::Intel) {
-            unsupported.push(format!(
-                "backend:{:?} (GPU provisioning/preflight not ported)",
-                request.backend
-            ));
+            Backend::Amd => {
+                if !cfg!(target_os = "linux") {
+                    unsupported.push("backend:Amd (ROCm provisioning is Linux-only until Windows AMD runtime acceptance exists; see docs/PLAN.md 4.8)".into());
+                } else {
+                    match crate::amd::probe_amd() {
+                        Ok(found) => {
+                            hardware = Some(found.clone());
+                            torch = Some(torch_profile::amd(&found.compute_capability));
+                        }
+                        Err(error) => unsupported.push(error),
+                    }
+                }
+            }
+            Backend::Intel => unsupported.push(
+                "backend:Intel (no verified Intel path; the reference installer has none either — see docs/PLAN.md 4.8)".into(),
+            ),
         }
         if !(cfg!(any(target_os = "linux", windows)) && cfg!(target_arch = "x86_64")) {
             unsupported.push(
-                "platform: only Linux/Windows x86_64 CPU/NVIDIA baseline is supported".into(),
+                "platform: only Linux/Windows x86_64 CPU/NVIDIA baseline plus Linux AMD is supported".into(),
             );
         }
         for (name, selected) in [
@@ -595,6 +616,16 @@ impl Engine {
         } else {
             "Create isolated target/venv"
         };
+        let torch_detail = torch.as_ref().map_or_else(
+            || "Torch profile unresolved; plan blocked".to_owned(),
+            |profile| {
+                format!(
+                    "Install {} from {}",
+                    profile.packages.join(" / "),
+                    profile.index_url
+                )
+            },
+        );
         for (id, detail) in [
             (
                 "uv",
@@ -606,10 +637,7 @@ impl Engine {
             ),
             ("comfy", comfy_detail),
             ("venv", venv_detail),
-            (
-                "torch",
-                "Install torch 2.8.0 / torchvision 0.23.0 / torchaudio 2.8.0 from official CPU wheel index",
-            ),
+            ("torch", torch_detail.as_str()),
             (
                 "requirements",
                 "Install ComfyUI requirements with Torch constraints",
@@ -772,7 +800,11 @@ impl Engine {
             enable_gguf_upgrade(&mut plan);
             enable_preview_upgrade(&mut plan);
             if let Some(recorded) = &plan.hardware {
-                plan.hardware = Some(refreshed_hardware(recorded, torch_profile::probe()?)?);
+                let probed = match plan.request.backend {
+                    Backend::Amd => crate::amd::probe_amd()?,
+                    _ => torch_profile::probe()?,
+                };
+                plan.hardware = Some(refreshed_hardware(recorded, probed, &plan.request.backend)?);
             }
         }
         let previous = g.approved.clone();
@@ -1652,6 +1684,11 @@ fn torch_target(
     plan: &Plan,
 ) -> Result<Option<(torch_profile::Torch, Option<torch_profile::Hardware>)>, String> {
     let current = plan.torch.as_ref().ok_or("Missing planned Torch profile")?;
+    if matches!(plan.request.backend, Backend::Amd) {
+        // shortcut: no newer ROCm profile is defined yet; an AMD Torch update needs
+        // its own installer-proven pins (docs/PLAN.md 4.8), never a pytorch.org profile.
+        return Ok(None);
+    }
     let hardware = match current.cuda {
         Some(_) => Some(torch_profile::probe()?),
         None => None,
@@ -1663,14 +1700,21 @@ fn torch_target(
 fn refreshed_hardware(
     recorded: &torch_profile::Hardware,
     probed: torch_profile::Hardware,
+    backend: &Backend,
 ) -> Result<torch_profile::Hardware, String> {
     if probed.compute_capability != recorded.compute_capability {
         return Err(format!(
-            "NVIDIA_GPU: compute capability changed ({} -> {}); the installed PyTorch profile may not support it, create a new installation plan",
-            recorded.compute_capability, probed.compute_capability
+            "{}_GPU: compute capability changed ({} -> {}); the installed PyTorch profile may not support it, create a new installation plan",
+            if matches!(backend, Backend::Amd) { "AMD" } else { "NVIDIA" },
+            recorded.compute_capability,
+            probed.compute_capability
         ));
     }
-    torch_profile::select(&probed)?;
+    if matches!(backend, Backend::Amd) {
+        crate::amd::amd_target(&probed.name)?;
+    } else {
+        torch_profile::select(&probed)?;
+    }
     Ok(probed)
 }
 /// Node packs DEAS does not install have unknown compatibility with another Torch.
@@ -1781,6 +1825,24 @@ fn nvidia_vfx_requirement(requirements: &str) -> Option<&str> {
         })
 }
 
+/// Constraints.txt lines: pytorch.org profiles append the index family
+/// (`torch==2.14.1+cu130`); AMD pins already carry their `+rocm…` build tag
+/// and must stay byte-exact, or node child installers would fight the venv.
+fn constraint_lines(profile: &torch_profile::Torch) -> Vec<String> {
+    let family = profile.index_url.rsplit('/').next().unwrap_or_default();
+    profile
+        .packages
+        .iter()
+        .map(|s| {
+            if s.contains('+') || family.is_empty() {
+                s.clone()
+            } else {
+                format!("{s}+{family}")
+            }
+        })
+        .collect()
+}
+
 // Match the reference installer's backend-specific llama wheels. Never silently
 // compile a CPU library for a CUDA plan or depend on a host CMake/toolchain.
 fn node_wheel_args(requirements: &str, profile: &torch_profile::Torch) -> Vec<String> {
@@ -1822,12 +1884,20 @@ async fn provision(
     cancel: &Arc<AtomicBool>,
 ) -> Result<(), String> {
     if let Some(expected) = &plan.hardware {
-        let actual = torch_profile::probe()?;
+        let amd = matches!(plan.request.backend, Backend::Amd);
+        let actual = if amd {
+            crate::amd::probe_amd()?
+        } else {
+            torch_profile::probe()?
+        };
         if actual.uuid != expected.uuid
             || actual.compute_capability != expected.compute_capability
             || actual.driver_version != expected.driver_version
         {
-            return Err("NVIDIA_GPU: hardware/driver changed since confirmation; create a new plan (target not touched)".into());
+            return Err(format!(
+                "{}_GPU: hardware/driver changed since confirmation; create a new plan (target not touched)",
+                if amd { "AMD" } else { "NVIDIA" }
+            ));
         }
     }
     let takeover = plan.request.takeover;
@@ -1986,38 +2056,41 @@ async fn packages(
     let py = python.to_str().ok_or("Python path must be UTF-8")?;
     let constraint = root.join("constraints.txt");
     let selected = plan.torch.as_ref().ok_or("Missing planned Torch profile")?;
-    let wheel_family = selected
-        .index_url
-        .rsplit('/')
-        .next()
-        .ok_or("Invalid planned index")?;
-    let constraints = selected
-        .packages
-        .iter()
-        .map(|s| format!("{s}+{wheel_family}"))
-        .collect::<Vec<_>>()
-        .join("\n");
-    std::fs::write(&constraint, constraints).map_err(|e| e.to_string())?;
+    std::fs::write(&constraint, constraint_lines(selected).join("\n")).map_err(|e| e.to_string())?;
     step(inner, "torch");
-    run(
-        uv,
-        &[
-            "pip",
-            "install",
-            "--python",
-            py,
-            "--index-url",
-            &selected.index_url,
-            &selected.packages[0],
-            &selected.packages[1],
-            &selected.packages[2],
-        ],
-        root,
-        root,
-        inner,
-        cancel,
-    )
-    .await?;
+    if matches!(plan.request.backend, Backend::Amd) {
+        // ROCm's meta-package is source-only (setuptools.build_meta): the build
+        // prereq precedes the Torch install and comes from PyPI, never AMD's index.
+        run(
+            uv,
+            &[
+                "pip",
+                "install",
+                "--python",
+                py,
+                "--only-binary",
+                "setuptools",
+                "--no-deps",
+                "setuptools>=70.2.0",
+            ],
+            root,
+            root,
+            inner,
+            cancel,
+        )
+        .await?;
+    }
+    let mut torch_args = vec!["pip", "install", "--python", py];
+    if matches!(plan.request.backend, Backend::Amd) {
+        // AMD's index replaces the default index only when passed via --index-url;
+        // keep PyPI default so source builds find build dependencies, and disable
+        // isolation so the prepared setuptools is visible (installer parity).
+        torch_args.extend(["--index", selected.index_url.as_str(), "--no-build-isolation"]);
+    } else {
+        torch_args.extend(["--index-url", selected.index_url.as_str()]);
+    }
+    torch_args.extend(selected.packages.iter().map(String::as_str));
+    run(uv, &torch_args, root, root, inner, cancel).await?;
     step(inner, "requirements");
     let mut args = vec![
         "pip",
@@ -2220,6 +2293,12 @@ async fn packages(
     step(inner, "verify");
     let profile_json = serde_json::to_string(selected).map_err(|e| e.to_string())?;
     let hardware_json = serde_json::to_string(&plan.hardware).map_err(|e| e.to_string())?;
+    let backend_id = match plan.request.backend {
+        Backend::Cpu => "cpu",
+        Backend::Nvidia => "nvidia",
+        Backend::Amd => "amd",
+        Backend::Intel => "intel",
+    };
     let versions = run(
         &python,
         &[
@@ -2231,6 +2310,7 @@ async fn packages(
                 .ok_or("Managed Python path must be UTF-8")?,
             &profile_json,
             &hardware_json,
+            backend_id,
         ],
         comfy,
         root,
@@ -2243,11 +2323,7 @@ async fn packages(
         &[
             "-c",
             COMFY_PROBE,
-            if selected.cuda.is_some() {
-                "nvidia"
-            } else {
-                "cpu"
-            },
+            backend_id,
             if node_revision.is_some() {
                 "nodes"
             } else {
@@ -2284,6 +2360,7 @@ async fn packages(
 #[cfg(test)]
 mod tests {
     use super::*;
+    include!("install_amd_tests.rs");
     include!("install_gguf_tests.rs");
     include!("install_preview_tests.rs");
     include!("install_update_tests.rs");

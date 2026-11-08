@@ -377,6 +377,12 @@ mod tests {
             preset("speed", Some(&plan("cpu", "12.0"))),
             Startup::default()
         );
+        // AMD plans never get --fast (fp16_accumulation is a no-op-but-harmful GEMM
+        // flag under ROCm, docs/PLAN.md 4.8 research) nor Comfy Kitchen INT8.
+        assert_eq!(
+            preset("speed", Some(&plan("amd", "gfx1100"))),
+            Startup::default()
+        );
         let root = tempfile::tempdir().unwrap();
         assert_eq!(
             args(root.path(), Some(&rtx)).unwrap(),
