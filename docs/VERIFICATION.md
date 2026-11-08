@@ -1,6 +1,12 @@
 # DEAS verification — native baseline, optional capabilities and languages
 
-## Local GGUF vision via paired mmproj projector (0.2.20, unreleased, issue #28)
+## Release 0.2.20 (published)
+
+- Published 2026-11-08 as `v0.2.20` (GitHub release, local unsigned fallback — Verify/Release workflows disabled on this account; tag push fired nothing). Source commit `1d2dd450349eb230cba1be90fa3059aebbd3101e` (tree `a2a62c58937b88258983878bef43fe189845ad3f`), tag at that commit pushed to the secondary Git remote and pinned on GitHub via `--target`.
+- Assets (four-asset fallback set): `deas-linux-amd64` SHA-256 `33480dc8af0a2025995bdcaae6fa5d333e4ccc0b32e089112039fa84e3fec111`; `deas.exe` SHA-256 `55f0f89695cf95f038dfe22badef5ff37d29601b53a0d75a597f4fa4f8f5bd5e`; plus `SHA256SUMS` and `BUILD-MANIFEST.json`. Re-downloaded after publish and `sha256sum -c SHA256SUMS` reported all OK (server-side digest proof). Both binaries embed `dist/assets/index-D-Gw7Zue.js`.
+- Fresh gates on the merged source (PR #29 merge `2ec5be8`; only docs changed to the tag commit): Rust `cargo test --lib -- --test-threads=1` 843 passed 0 failed (the 50 parallel-run `jobs::` failures are the known shared-fixture race); `cargo clippy --all-targets -- -D warnings` clean; `cargo fmt --check` clean; `cargo xwin check/clippy --locked --all-targets -D warnings` clean (Windows cross-compiled only — no Windows runtime acceptance; first real Windows launch is the acceptance test); full vitest 1618/1618; core gate 151/0; tsc clean. Linux `ldd` clean (0 not found), direct glibc floor 2.39; toolchain rustc 1.97.0, node v26.13.0.
+
+## Local GGUF vision via paired mmproj projector (0.2.20, issue #28)
 
 **Reporter symptom:** a Qwen3-VL GGUF loaded in their external server was never treated as vision-capable; Forge wrote "from the brief alone". Code evidence: with the GGUF present in DEAS's own `models/llm` folder, the picker entry is DEAS's **local** copy and the request ran on DEAS's built-in llama-cpp-python worker, which had no mmproj loading at all and blanket-refused picture rounds (`forge/chat.rs`, `forge/engine.rs`, worker `llm_worker.py`). The external server never saw the request.
 
