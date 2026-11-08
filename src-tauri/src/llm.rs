@@ -1215,7 +1215,12 @@ async fn forge_images(
     Ok(())
 }
 
-async fn forge(base_url: &str, root: &str, route: &str, mut body: Value) -> Result<Value, String> {
+pub(crate) async fn forge(
+    base_url: &str,
+    root: &str,
+    route: &str,
+    mut body: Value,
+) -> Result<Value, String> {
     let path = forge_route(route)?;
     if !body.is_object() {
         return Err("Invalid Prompt Forge request".into());

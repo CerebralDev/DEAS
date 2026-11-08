@@ -18,6 +18,13 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 pub(crate) const ROUND_TIMEOUT: Duration = Duration::from_secs(600);
+/// The most a write may run when no length was asked for: several times any real prompt.
+pub(crate) const WRITE_CEILING: u32 = 8192;
+
+/// A write that hit the ceiling without a length asked for did not stop on its own.
+fn runaway() -> String {
+    format!("The writer did not stop: it ran past {WRITE_CEILING} tokens without finishing, which usually means the model got stuck repeating itself. Nothing was kept. Try again, or pick a bigger model.")
+}
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -126,6 +133,8 @@ struct Prepared<'a> {
     temperature: Option<f64>,
     top_p: Option<f64>,
     max_tokens: Option<u32>,
+    /// No length was asked for: `max_tokens` is only the runaway ceiling.
+    ceiling_only: bool,
 }
 
 /// What the reference pictures contribute to the user turn.
@@ -165,7 +174,13 @@ fn prepare<'a>(
     }
     let controls = &filled;
     let tag_style = model.tag_style();
-    let max_tokens = message::token_budget(controls)?;
+    // Without a length asked for, a write still gets a ceiling (8 Nov 2026: an 8B wrote
+    // 131,772 characters, filling its whole context over six minutes). Real prompts,
+    // MOSS Detail 10 included, stay far below it; PromptForge's own safety net is a
+    // two-minute generation limit, which this replaces with a token count.
+    let asked = message::token_budget(controls)?;
+    let ceiling_only = asked.is_none();
+    let max_tokens = Some(asked.unwrap_or(WRITE_CEILING));
 
     // The contract for this request, minus what is switched off.
     let expected = model.expected(mode.as_deref());
@@ -292,6 +307,7 @@ fn prepare<'a>(
         temperature,
         top_p,
         max_tokens,
+        ceiling_only,
         controls: filled,
     })
 }
@@ -319,6 +335,7 @@ pub async fn write(
         temperature,
         top_p,
         max_tokens,
+        ceiling_only,
     } = prepare(data, req, &refs_state)?;
     let controls = &controls;
     let tag_style = model.tag_style();
@@ -410,6 +427,9 @@ pub async fn write(
         }
     };
 
+    if reply.truncated && ceiling_only {
+        return Err(runaway());
+    }
     let wanted_refs: Vec<&str> = wanted.iter().map(String::as_str).collect();
     let discard_refs: Vec<&str> = discard.iter().map(String::as_str).collect();
     let (mut segs, refused) = segments::parse(&reply.content, &wanted_refs, &discard_refs)
@@ -537,6 +557,9 @@ pub async fn revise(
         timeout: ROUND_TIMEOUT,
     })
     .await?;
+    if reply.truncated && p.ceiling_only {
+        return Err(runaway());
+    }
     let given: Vec<&str> = req.segments.iter().map(|s| s.label.as_str()).collect();
     let discard: Vec<&str> = p.discard.iter().map(String::as_str).collect();
     let (parsed, refused) = segments::parse(&reply.content, &given, &discard).map_err(|e| {
@@ -1561,6 +1584,81 @@ mod tests {
             println!("--- {}\n{}", s.label, s.body);
         }
         assert!(out.reference_analysis.is_some());
+    }
+
+    fn ceiling_data() -> Data {
+        Data {
+            pack: serde_json::from_value(json!({
+                "source": {}, "config": {}, "defaults": {}, "shared": {},
+                "models": { "anima": {"entry": {"label": "Anima", "segments": ["Positive prompt"]}, "system": "Anima instructions"} }
+            }))
+            .unwrap(),
+            tags: None,
+            canon: None,
+        }
+    }
+
+    fn ceiling_req(max_length: Option<message::MaxLength>) -> WriteRequest {
+        WriteRequest {
+            target: "anima".into(),
+            brief: "a fox in snow".into(),
+            model: "fixture".into(),
+            mode: None,
+            segments_on: None,
+            controls: Controls {
+                max_length,
+                ..Default::default()
+            },
+        }
+    }
+
+    #[test]
+    fn every_write_has_a_ceiling_and_an_asked_length_still_wins() {
+        let data = ceiling_data();
+        let p = prepare(&data, &ceiling_req(None), &RefState::default()).unwrap();
+        assert_eq!(p.max_tokens, Some(WRITE_CEILING));
+        assert!(p.ceiling_only);
+        let asked = message::MaxLength {
+            unit: "tokens".into(),
+            value: 300,
+        };
+        let p = prepare(&data, &ceiling_req(Some(asked)), &RefState::default()).unwrap();
+        assert_eq!(p.max_tokens, Some(300));
+        assert!(!p.ceiling_only);
+    }
+
+    #[tokio::test]
+    async fn a_write_that_never_stops_is_refused_but_an_asked_limit_still_cuts() {
+        use chat::tests::{complete, fixture};
+        let cut = || {
+            complete(&json!({"choices":[{"message":{"content":"===SEGMENT: Positive prompt===\na fox, a fox, a fox"},"finish_reason":"length"}]}).to_string())
+        };
+        let config = |base_url| LlmConfig {
+            provider: Provider::Openai,
+            base_url,
+            api_key: String::new(),
+        };
+        let data = ceiling_data();
+
+        // No length asked: hitting the ceiling means it ran away. Nothing is kept.
+        let (url, _rx, server) = fixture(vec![cut()]).await;
+        let err = write(&data, &config(url), &ceiling_req(None))
+            .await
+            .unwrap_err();
+        server.await.unwrap();
+        assert!(err.starts_with("The writer did not stop"), "{err}");
+
+        // The person asked for 300 tokens: their cut-off is honoured as before.
+        let asked = message::MaxLength {
+            unit: "tokens".into(),
+            value: 300,
+        };
+        let (url, _rx, server) = fixture(vec![cut()]).await;
+        let out = write(&data, &config(url), &ceiling_req(Some(asked)))
+            .await
+            .unwrap();
+        server.await.unwrap();
+        assert!(out.prompt.contains("a fox"));
     }
 
     #[test]

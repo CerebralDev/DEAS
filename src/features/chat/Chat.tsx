@@ -1,7 +1,9 @@
 import { Fragment, useEffect, useRef, useState, type ClipboardEvent, type ReactNode } from 'react';
 import { useI18n } from '../../i18n/I18nProvider';
 import { PromptTextarea } from '../studio/PromptTextarea';
-import { cancelChat, chatSettings, deleteChat, getChat, listChats, renameChat, saveChatSettings, sendChat, workingContext, type ChatEvent, type ChatHit, type ChatMessage, type ChatSettings, type ChatSummary, type WrittenPrompt } from '../../lib/chat';
+import { convertFileSrc } from '@tauri-apps/api/core';
+import { cancelChat, chatSettings, deleteChat, freeChatLlm, getChat, listChats, pinChat, recordRender, renameChat, saveChatSettings, sendChat, workingContext, type ChatEvent, type ChatHit, type ChatMessage, type ChatRenderOutcome, type ChatRenderRequest, type ChatSettings, type ChatStudio, type ChatSummary, type RenderResult, type WrittenPrompt } from '../../lib/chat';
+import { pollWorkbench, stopWorkbenchJob, type JobStatus } from '../../lib/jobs';
 import { forgeError, nativeModelId } from '../../lib/forge';
 import { isBoolean, isString, usePref } from '../../lib/preferences';
 import { ModelSelect, useForgeModels } from '../forge/ForgeButton';
@@ -46,7 +48,29 @@ function Rich({ text, citations }: { text: string; citations: ChatHit[] }) {
   return <div className="chat-rich">{blocks}</div>;
 }
 
-function PromptCard({ prompt, onSend }: { prompt: WrittenPrompt; onSend: (positive: string, negative: string) => void }) {
+/** A chat render in progress, shown on its prompt card. */
+interface Draw { state: 'room' | 'starting' | 'queued' | 'running'; value?: number; max?: number; preview?: string }
+
+/** The picture a render made (or why it did not), and its live progress while it draws. */
+function Picture({ prompt, draw, onRedraw }: { prompt: WrittenPrompt; draw?: Draw; onRedraw?: () => void }) {
+  const { t } = useI18n();
+  const pic = prompt.picture;
+  if (draw) return <div className="chat-drawing" data-chat-drawing={draw.state}>
+    {draw.preview && <img src={draw.preview} alt=""/>}
+    <span className="chat-status">{draw.state === 'running' && draw.max ? t('chat.render.progress', { value: String(draw.value ?? 0), max: String(draw.max) }) : t(`chat.render.${draw.state}`)}</span>
+  </div>;
+  if (!prompt.render) return null;
+  return <>
+    {pic?.path && <figure className="chat-picture" data-chat-picture-done>
+      <img src={convertFileSrc(pic.path)} alt={prompt.prompt.slice(0, 160)}/>
+      <figcaption>{[`${pic.width}×${pic.height}`, pic.checkpoint.replace(/\.(safetensors|gguf|ckpt)$/i, ''), pic.seed != null ? t('chat.render.seed', { seed: String(pic.seed) }) : '', pic.ms ? `${(pic.ms / 1000).toFixed(1)} s` : ''].filter(Boolean).join(' · ')}</figcaption>
+    </figure>}
+    {pic?.error && <p className="forge-note chat-render-error" data-chat-render-error>{t('chat.render.notDrawn', { error: pic.error })}</p>}
+    {onRedraw && pic && <button type="button" className="forge-ghost" data-chat-redraw onClick={onRedraw}>{t('chat.render.again')}</button>}
+  </>;
+}
+
+function PromptCard({ prompt, onSend, draw, onRedraw }: { prompt: WrittenPrompt; onSend: (positive: string, negative: string) => void; draw?: Draw; onRedraw?: () => void }) {
   const { t } = useI18n();
   const [copied, setCopied] = useState(false);
   const copy = async () => { try { await navigator.clipboard.writeText(prompt.negative ? `${prompt.prompt}\n\n${t('forge.negativeShort')}: ${prompt.negative}` : prompt.prompt); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* the text is on screen to copy by hand */ } };
@@ -59,11 +83,12 @@ function PromptCard({ prompt, onSend }: { prompt: WrittenPrompt; onSend: (positi
     </div>
     <pre>{prompt.prompt}</pre>
     {prompt.negative && <><span className="forge-note">{t('forge.negativeShort')}</span><pre className="chat-prompt-neg">{prompt.negative}</pre></>}
+    <Picture prompt={prompt} draw={draw} onRedraw={onRedraw}/>
   </div>;
 }
 
 /** A finished message: prompts as cards (their text is already in the reply), citations, what it looked at. */
-function Bubble({ m, onSend }: { m: ChatMessage; onSend: (p: string, n: string) => void }) {
+function Bubble({ m, onSend, draws = {}, onRedraw }: { m: ChatMessage; onSend: (p: string, n: string) => void; draws?: Record<string, Draw>; onRedraw?: (i: number) => void }) {
   const { t } = useI18n();
   // The reply carries the prompt text for the model's history; the card shows it, so the body drops it.
   const body = m.prompts.reduce((text, p) => {
@@ -73,7 +98,7 @@ function Bubble({ m, onSend }: { m: ChatMessage; onSend: (p: string, n: string) 
   return <div className={`chat-msg ${m.role}`} data-chat-msg={m.role}>
     {m.pictures > 0 && <span className="forge-note">{t('chat.picturesSent', { count: String(m.pictures) })}</span>}
     {body && (m.role === 'assistant' ? <Rich text={body} citations={m.citations}/> : <p className="chat-user-text">{body}</p>)}
-    {m.prompts.map((p, i) => <PromptCard key={i} prompt={p} onSend={onSend}/>)}
+    {m.prompts.map((p, i) => <PromptCard key={i} prompt={p} onSend={onSend} draw={draws[`${m.at}:${i}`]} onRedraw={onRedraw && (() => onRedraw(i))}/>)}
     {m.citations.length > 0 && <ol className="chat-sources">{m.citations.map(c => <li key={c.n}><a href={c.url} target="_blank" rel="noreferrer">{c.title}</a> <span>{c.domain}</span></li>)}</ol>}
     {m.tools.length > 0 && <p className="chat-tools">{m.tools.join(' · ')}</p>}
   </div>;
@@ -83,7 +108,7 @@ function Bubble({ m, onSend }: { m: ChatMessage; onSend: (p: string, n: string) 
  * Chat: PromptForge's chat, natively. A streamed conversation with the LLM that can write prompts with the image
  * models' own writers, read how any model (or DEAS) works, look tags up, and search the web when switched on.
  */
-export function Chat({ endpoint, root, active = true, onSend }: { endpoint: string; root?: string; active?: boolean; onSend: (positive: string, negative: string) => void }) {
+export function Chat({ endpoint, root, active = true, onSend, studio, onRender }: { endpoint: string; root?: string; active?: boolean; onSend: (positive: string, negative: string) => void; /** What Generate can draw with; absent = chat cannot render. */ studio?: ChatStudio; /** Draws a prompt with Generate's settings. */ onRender?: (ask: ChatRenderRequest) => Promise<ChatRenderOutcome> }) {
   const { t } = useI18n();
   const forge = useForgeModels(endpoint, root, active);
   const [chats, setChats] = useState<ChatSummary[]>([]);
@@ -108,6 +133,60 @@ export function Chat({ endpoint, root, active = true, onSend }: { endpoint: stri
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const thread = useRef<HTMLDivElement>(null);
   const current = useRef<string | undefined>(undefined);
+  const [draws, setDraws] = useState<Record<string, Draw>>({});
+  /** The Generate job a chat render is waiting on, so Stop stops it. */
+  const drawing = useRef<JobStatus | null>(null);
+  const stopDrawing = useRef(false);
+
+  /** Draws one render prompt with Generate, follows the job, and records the picture (or why not) on the message. */
+  const draw = async (chatId: string, m: ChatMessage, i: number, valid: () => boolean) => {
+    const p = m.prompts[i];
+    if (!p?.render || !onRender || !root) return;
+    const key = `${m.at}:${i}`;
+    const show = (d?: Draw) => { if (valid()) setDraws(all => { const next = { ...all }; if (d) next[key] = d; else delete next[key]; return next; }); };
+    const started = Date.now();
+    const fail = (error: string): RenderResult => ({ width: 0, height: 0, checkpoint: studio?.checkpoint ?? '', error });
+    // One GPU: the chat LLM steps aside for the picture; the next message loads it again.
+    show({ state: 'room' });
+    await freeChatLlm(root);
+    show({ state: 'starting' });
+    let result: RenderResult;
+    try {
+      const outcome = await onRender({ id: crypto.randomUUID(), positive: p.prompt, negative: p.negative ?? '', aspect: p.render.aspect, resolution: p.render.resolution });
+      if ('error' in outcome) result = fail(outcome.error);
+      else {
+        let job = outcome.job;
+        drawing.current = job;
+        if (stopDrawing.current) job = await stopWorkbenchJob(job).catch(() => job);
+        // Generate's own poller watches the same job; this one only reads it. Bounded so a lost job cannot spin forever.
+        while (['queued', 'running', 'unknown'].includes(job.state) && Date.now() - started < 30 * 60_000) {
+          show({ state: job.state === 'running' ? 'running' : 'queued', value: job.progress?.value, max: job.progress?.max, preview: job.preview });
+          await new Promise(r => setTimeout(r, 750));
+          const found = (await pollWorkbench()).jobs.find(j => j.id === job.id);
+          if (!found) { job = { ...job, state: 'failed', error: t('chat.render.lost') }; break; }
+          job = found; drawing.current = job;
+        }
+        const out = job.outputs.find(o => !o.format?.startsWith('video/'));
+        if (job.state === 'succeeded' && out && job.outputRoot) {
+          const sep = job.outputRoot.includes('\\') ? '\\' : '/';
+          const path = [job.outputRoot.replace(/[\\/]+$/, ''), ...out.subfolder.split(/[\\/]/).filter(Boolean), out.filename].join(sep);
+          result = { path, width: outcome.width, height: outcome.height, seed: outcome.seed, checkpoint: outcome.checkpoint, ms: job.metadata?.generationMs ?? Date.now() - started };
+        } else result = fail(job.state === 'cancelled' ? t('chat.render.stopped') : job.state === 'succeeded' ? t('chat.render.noFile') : job.error || (['queued', 'running', 'unknown'].includes(job.state) ? t('chat.render.timeout') : t('chat.render.failed')));
+      }
+    } catch (e) { result = fail(e instanceof Error ? e.message : String(e)); }
+    finally { drawing.current = null; }
+    try { const saved = await recordRender(root, chatId, m.at, i, result); if (valid()) setMessages(ms => ms.map(x => x.role === 'assistant' && x.at === m.at ? saved : x)); }
+    catch (e) { if (valid()) setError(forgeError(e)); }
+    show(undefined);
+  };
+  const redraw = (m: ChatMessage, i: number) => {
+    const chatId = current.current;
+    if (!chatId || sending.current) return;
+    const request = revision.current;
+    const valid = () => revision.current === request && latestRoot.current === root;
+    sending.current = true; stopDrawing.current = false; setBusy(true); setError('');
+    void draw(chatId, m, i, valid).finally(() => { if (valid()) { sending.current = false; setBusy(false); } });
+  };
 
   const rootRevision = useRef(0);
   useEffect(() => {
@@ -152,7 +231,7 @@ export function Chat({ endpoint, root, active = true, onSend }: { endpoint: stri
     if (!root || !forge.model || sending.current || pending.current || (!text && !pictures.length)) return;
     const request = revision.current;
     const valid = () => revision.current === request && latestRoot.current === root;
-    sending.current = true;
+    sending.current = true; stopDrawing.current = false;
     const mine: ChatMessage = { role: 'user', content: text, pictures: pictures.length, prompts: [], citations: [], tools: [], at: Date.now() };
     setMessages(m => [...m, mine]); setDraft(''); setError(''); setBusy(true);
     const sentPictures = pictures; setPictures([]);
@@ -166,8 +245,15 @@ export function Chat({ endpoint, root, active = true, onSend }: { endpoint: stri
       else if (e.event === 'searched') setLive(l => l && { ...l, searched: e.results, searchDetail: e.detail });
     };
     try {
-      const done = await sendChat(root, { id: current.current, message: text, model: nativeModelId(forge.model), pictures: sentPictures, context: includeWork ? workingContext() || undefined : undefined, search: searchOn && search }, onEvent);
+      const done = await sendChat(root, { id: current.current, message: text, model: nativeModelId(forge.model), pictures: sentPictures, context: includeWork ? workingContext() || undefined : undefined, search: searchOn && search,
+        ...(studio && onRender ? { studio: { ...studio, endpoint, writerModel: forge.model } } : {}) }, onEvent);
       if (valid()) setMessages(m => [...m, done]);
+      // A render_picture answer is drawn now, by Generate; the turn stays busy (and Stop stops it) until it is done.
+      const chatId = current.current;
+      if (chatId && valid()) {
+        setLive(null);
+        for (let i = 0; i < done.prompts.length; i++) if (done.prompts[i].render && !stopDrawing.current) await draw(chatId, done, i, valid);
+      }
     } catch (e) {
       if (!valid()) return;
       setError(forgeError(e));
@@ -178,7 +264,11 @@ export function Chat({ endpoint, root, active = true, onSend }: { endpoint: stri
       }
     } finally { if (valid()) { sending.current = false; setBusy(false); setLive(null); refresh(); } }
   };
-  const stop = () => { if (current.current) void cancelChat(current.current); };
+  const stop = () => {
+    stopDrawing.current = true;
+    if (drawing.current) { void stopWorkbenchJob(drawing.current).catch(e => setError(forgeError(e))); return; }
+    if (current.current) void cancelChat(current.current);
+  };
 
   const addPictures = async (files: File[]) => {
     const room = MAX_PICTURES - pictures.length;
@@ -192,19 +282,34 @@ export function Chat({ endpoint, root, active = true, onSend }: { endpoint: stri
     if (files.length) { e.preventDefault(); void addPictures(files); }
   };
   const statusText = (s: string, d: string | null) => t(`chat.status.${s}`, { detail: d ?? '' });
+  // PromptForge's conversation menu: right-click a row for Rename, Pin to top and Delete.
+  const [menu, setMenu] = useState<{ chat: ChatSummary; x: number; y: number } | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!menu) return;
+    menuRef.current?.querySelector('button')?.focus();
+    const close = (e: Event) => { if (!(e.target instanceof Node && menuRef.current?.contains(e.target))) setMenu(null); };
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenu(null); };
+    window.addEventListener('pointerdown', close, true);
+    window.addEventListener('keydown', key);
+    window.addEventListener('blur', close);
+    return () => { window.removeEventListener('pointerdown', close, true); window.removeEventListener('keydown', key); window.removeEventListener('blur', close); };
+  }, [menu]);
+  const pin = (c: ChatSummary) => { if (root) void pinChat(root, c.id, !c.pinned).then(refresh, err => setError(forgeError(err))); };
 
   if (!root) return <section className="chat-tab"><p className="field-help">{t('forge.noBackend')}</p></section>;
   return <section className="chat-tab" aria-label={t('studio.tab.chat')}>
     <aside className="forge-card chat-side">
       <button type="button" className="action-button" data-chat-new disabled={busy} onClick={() => void open(undefined)}>{t('chat.new')}</button>
       <nav className="chat-list" aria-label={t('chat.history')}>
-        {chats.map(c => <div key={c.id} className={`chat-row${c.id === id ? ' on' : ''}`} data-chat-row={c.id}>
+        {chats.map(c => <div key={c.id} className={`chat-row${c.id === id ? ' on' : ''}${c.pinned ? ' pinned' : ''}`} data-chat-row={c.id} data-chat-pinned={c.pinned || undefined}
+          onContextMenu={e => { e.preventDefault(); setConfirmDelete(null); setMenu({ chat: c, x: e.clientX, y: e.clientY }); }}>
           {renaming?.id === c.id
             ? <input type="text" autoFocus aria-label={t('chat.rename')} value={renaming.title} maxLength={120}
               onChange={e => setRenaming({ id: c.id, title: e.target.value })}
               onKeyDown={e => { if (e.key === 'Enter') { void renameChat(root, c.id, renaming.title).then(refresh, err => setError(forgeError(err))); setRenaming(null); } else if (e.key === 'Escape') setRenaming(null); }}
               onBlur={() => setRenaming(null)}/>
-            : <button type="button" className="chat-row-open" disabled={busy} onClick={() => void open(c.id)}>{c.title}</button>}
+            : <button type="button" className="chat-row-open" disabled={busy} onClick={() => void open(c.id)}>{c.pinned && <span className="chat-row-pin" aria-label={t('chat.pinned')} title={t('chat.pinned')}>📌 </span>}{c.title}</button>}
           <div className="chat-row-actions">
             <button type="button" className="forge-ghost" aria-label={t('chat.rename')} title={t('chat.rename')} onClick={() => setRenaming({ id: c.id, title: c.title })}>✎</button>
             {confirmDelete === c.id
@@ -214,6 +319,11 @@ export function Chat({ endpoint, root, active = true, onSend }: { endpoint: stri
         </div>)}
         {!chats.length && <p className="forge-note">{t('chat.noHistory')}</p>}
       </nav>
+      {menu && <div ref={menuRef} className="chat-menu" role="menu" data-chat-menu style={{ left: Math.min(menu.x, window.innerWidth - 180), top: Math.min(menu.y, window.innerHeight - 130) }}>
+        <button type="button" role="menuitem" data-chat-menu-rename onClick={() => { setRenaming({ id: menu.chat.id, title: menu.chat.title }); setMenu(null); }}>{t('chat.rename')}</button>
+        <button type="button" role="menuitem" data-chat-menu-pin onClick={() => { pin(menu.chat); setMenu(null); }}>{t(menu.chat.pinned ? 'chat.unpin' : 'chat.pin')}</button>
+        <button type="button" role="menuitem" className="danger" data-chat-menu-delete disabled={busy && menu.chat.id === id} onClick={() => { setConfirmDelete(menu.chat.id); setMenu(null); }}>{t('chat.delete')}</button>
+      </div>}
     </aside>
     <div className="forge-card chat-main">
       <div className="forge-card-head chat-head">
@@ -224,7 +334,7 @@ export function Chat({ endpoint, root, active = true, onSend }: { endpoint: stri
       {showSettings && settings && <SearchSettings root={root} settings={settings} onSaved={s => { setSettings(s); setShowSettings(false); }}/>}
       <div className="chat-thread" ref={thread} data-chat-thread>
         {!messages.length && !live && <div className="forge-empty"><strong>{t('chat.emptyTitle')}</strong><span>{t('chat.emptyBody')}</span></div>}
-        {messages.map((m, i) => <Bubble key={i} m={m} onSend={onSend}/>)}
+        {messages.map((m, i) => <Bubble key={i} m={m} onSend={onSend} draws={draws} onRedraw={onRender && !busy && !studio?.blocked ? k => redraw(m, k) : undefined}/>)}
         {live && <div className="chat-msg assistant live" aria-live="polite" data-chat-live>
           {live.searched && <p className="forge-note">{live.searched.length ? t('chat.searchedCount', { count: String(live.searched.length) }) : live.searchDetail}</p>}
           {live.text ? <Rich text={live.text} citations={live.searched ?? []}/> : null}

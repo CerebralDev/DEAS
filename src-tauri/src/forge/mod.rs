@@ -12,6 +12,7 @@ pub mod chat;
 pub mod clean;
 mod data;
 pub mod engine;
+pub mod gpu_swap;
 pub mod message;
 pub mod pack;
 pub mod picker;

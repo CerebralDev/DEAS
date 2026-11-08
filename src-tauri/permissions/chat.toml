@@ -1,4 +1,4 @@
 [[permission]]
 identifier = "allow-native-chat"
 description = "Studio Chat: send a message and stream its answer, stop it, list/read/rename/delete saved conversations in the environment, and read/write the chat web-search setting."
-commands.allow = ["native_chat_send", "native_chat_cancel", "native_chat_list", "native_chat_get", "native_chat_rename", "native_chat_delete", "native_chat_settings", "native_chat_settings_write"]
+commands.allow = ["native_chat_send", "native_chat_cancel", "native_chat_list", "native_chat_get", "native_chat_rename", "native_chat_delete", "native_chat_settings", "native_chat_settings_write", "native_chat_render_result", "native_chat_free_llm", "native_chat_pin"]
