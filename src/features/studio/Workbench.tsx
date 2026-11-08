@@ -56,6 +56,7 @@ import { createPortal } from 'react-dom';
 import { ForgeButton, HammerIcon } from '../forge/ForgeButton';
 import { applyRefPrefill, nextShot, promptStructure, refPrefill } from '../../lib/h3Prompt';
 import { dialectOf, labelCharacters, nativeTarget } from '../../lib/forge';
+import { chatRenderSize, type ChatRenderOutcome, type ChatRenderRequest, type ChatStudio } from '../../lib/chat';
 import { PresetPanel } from '../presets/PresetPanel';
 import { WildcardPanel } from '../wildcards/WildcardPanel';
 import { defaultWildcard, isWildcardRules, wildcardNode, parseWildcardLibrary, flattenCategories, mergeVariableLibrary, parsePins, parseVariableLibrary, prunePins, scanVariables, variablePick, type WildcardLibrary } from '../../lib/wildcard';
@@ -120,13 +121,13 @@ const isMusicGeneration=inBounds<MusicGenerationSettings>(musicBounds.generation
 const isMusicDuration=(v:unknown):v is {t2m:number;cover:number}=>!!v&&typeof v==='object'&&(['t2m','cover'] as const).every(k=>{const n=(v as Record<string,unknown>)[k];return typeof n==='number'&&n>=musicMaxDuration.step&&n<=musicMaxDuration.limit;});
 /** Edits of the shown image: plain image-to-image (`resample`) or inpaint; refine/upscale live in the Post-Processing tab. */
 const editModes=['resample','inpaint'] as const;
-export interface WorkbenchProps { beginner?:boolean; beginnerPage?:BeginnerPage; onBeginnerPage?:(page:BeginnerPage)=>void; endpoint:string; planVisible?:boolean; forgeHost?:HTMLElement|null; forgeActive?:boolean; onOpenPromptForge?:()=>void; onH3ForgeAvailable?:(available:boolean)=>void; onOpenVideoPost?:()=>void; /** Environment folders: models are listed directly from disk (without it the running backend is asked), output enables direct previews of finished files. `extraModels` are additional model roots on other drives. */ roots?:MediaRoots&{models?:string;extraModels?:string[]}; /** Environment root for Prompt Forge (its saved LLM endpoint). */ root?:string; /** Prompts sent from the Prompt Forge tab; `n` changes per send. */ incoming?:{positive:string;negative:string;n:number;canvas?:ForgeSendCanvas}; onCanvasContext?:(context:ForgeCanvasContext|undefined)=>void }
+export interface WorkbenchProps { beginner?:boolean; beginnerPage?:BeginnerPage; onBeginnerPage?:(page:BeginnerPage)=>void; endpoint:string; planVisible?:boolean; forgeHost?:HTMLElement|null; forgeActive?:boolean; onOpenPromptForge?:()=>void; onH3ForgeAvailable?:(available:boolean)=>void; onOpenVideoPost?:()=>void; /** Environment folders: models are listed directly from disk (without it the running backend is asked), output enables direct previews of finished files. `extraModels` are additional model roots on other drives. */ roots?:MediaRoots&{models?:string;extraModels?:string[]}; /** Environment root for Prompt Forge (its saved LLM endpoint). */ root?:string; /** Prompts sent from the Prompt Forge tab; `n` changes per send. */ incoming?:{positive:string;negative:string;n:number;canvas?:ForgeSendCanvas}; onCanvasContext?:(context:ForgeCanvasContext|undefined)=>void; /** A picture Chat asks Generate to draw with its current settings; `id` changes per ask. */ chatRender?:ChatRenderRequest; onChatRender?:(id:string,outcome:ChatRenderOutcome)=>void; /** What Chat can draw with right now. */ onChatStudio?:(studio:ChatStudio)=>void }
 /** Text-to-image workbench: settings left, preview over the prompts, queue right, bottom dock with Media · Models · LoRAs tabs. */
 export function Workbench(props:WorkbenchProps){
  const [project,setProject]=useState<ProjectSnapshot|null>(null);
  return <PreferencePersistenceContext.Provider value={!project&&!props.beginner}><WorkbenchContent {...props} project={project} onProject={setProject}/></PreferencePersistenceContext.Provider>;
 }
-function WorkbenchContent({beginner=false,beginnerPage='generate',onBeginnerPage,endpoint,roots={},root,incoming,onCanvasContext,onOpenVideoPost,forgeHost,forgeActive=true,onOpenPromptForge,onH3ForgeAvailable,planVisible=false,project,onProject}:WorkbenchProps&{project:ProjectSnapshot|null;onProject:(project:ProjectSnapshot|null)=>void}){
+function WorkbenchContent({beginner=false,beginnerPage='generate',onBeginnerPage,endpoint,roots={},root,incoming,onCanvasContext,chatRender,onChatRender,onChatStudio,onOpenVideoPost,forgeHost,forgeActive=true,onOpenPromptForge,onH3ForgeAvailable,planVisible=false,project,onProject}:WorkbenchProps&{project:ProjectSnapshot|null;onProject:(project:ProjectSnapshot|null)=>void}){
  const {t,locale}=useI18n();const native=isTauri();const linuxVideo=nativeVideo();const modelsDir=roots.models;const outputDir=roots.output;const extraModelsKey=(roots.extraModels??[]).join('\n');
  const [media,setMedia]=useState<MediaItem|null>(null);
  const [browsed,setBrowsed]=useState<MediaItem|null>(null);
@@ -153,7 +154,7 @@ function WorkbenchContent({beginner=false,beginnerPage='generate',onBeginnerPage
  const [query,setQuery]=useState('');
  const [models,setModels]=useState<LocalModel[]|null>(null);
  useModelMetadataUpdates(setModels);
- const [working,setBusy]=useState(false);const [scanning,setScanning]=useState(false);const busy=working||scanning;const [error,setError]=useState('');
+ const [working,setBusy]=useState(false);const [scanning,setScanning]=useState(false);const busy=working||scanning;const [error,setErrorState]=useState('');const lastError=useRef('');const setError=(message:string)=>{lastError.current=message;setErrorState(message);};
  const [positive,setPositive]=usePref('studio.run.positive','',isString);
  const [negative,setNegative]=usePref('studio.run.negative','',isString);
  // YuE2 music authoring is separate state: never relabel image prompts, never serialize into image projects.
@@ -654,6 +655,28 @@ const loadChoices=()=>{if(native&&!choices&&endpoint.trim())void refreshChoices(
   setPositive(incoming.positive);if(incoming.negative.trim())setNegative(incoming.negative);
   if(incoming.canvas){setWidth(incoming.canvas.canvas.width);setHeight(incoming.canvas.canvas.height);setResolution('fixed');}
  },[incoming?.n]); // eslint-disable-line react-hooks/exhaustive-deps
+ // Chat: what it can draw with right now, and drawing what it asks for with Generate's own settings.
+ const chatDialect=family?dialectOf(family.id):undefined;
+ const chatBlocked=!native?t('chat.render.desktopOnly')
+  :backendPending||!endpoint.trim()?t('chat.render.noBackend')
+  :!checkpoint?t('chat.render.noCheckpoint')
+  :isVideo||isMusic||pipeline!=='t2i'?t('chat.render.notTextToImage')
+  :unavailable.length?t('chat.render.missing',{names:unavailable.join(', ')})
+  :historyProblems.length?t('chat.render.history'):'';
+ useEffect(()=>{onChatStudio?.({checkpoint,...(chatDialect?{dialect:chatDialect}:{}),...(chatBlocked?{blocked:chatBlocked}:{})});},[checkpoint,chatDialect,chatBlocked,onChatStudio]);
+ useEffect(()=>{
+  if(!chatRender)return;
+  const ask=chatRender;
+  const fail=(error:string)=>onChatRender?.(ask.id,{error});
+  if(chatBlocked){fail(chatBlocked);return;}
+  const size=chatRenderSize(ask,modelSize,outputSize,grid);
+  if(size===null){fail(t('chat.render.badSize',{aspect:ask.aspect??'',resolution:ask.resolution??''}));return;}
+  lastError.current='';
+  void run(undefined,undefined,{positive:ask.positive,negative:ask.negative,...(size?{size}:{})}).then(started=>{
+   if(started)onChatRender?.(ask.id,{job:started.job,width:started.intent.width,height:started.intent.height,seed:started.intent.seed,checkpoint:started.intent.checkpoint});
+   else fail(lastError.current||t('chat.render.notStarted'));
+  },e=>fail(e instanceof Error?e.message:String(e)));
+ },[chatRender?.id]); // eslint-disable-line react-hooks/exhaustive-deps
  const ratio=aspect==='auto'?(source?source.width/source.height:1):aspect==='custom'?aspectWidth/aspectHeight:Number(aspect.split(':')[0])/Number(aspect.split(':')[1]);
  const swatchRatio=Number.isFinite(ratio)&&ratio>0?ratio:1;
  const readMediaSize=(width:number,height:number)=>{if(media&&width>0&&height>0)setMediaSize({src:media.src,width,height});};
@@ -680,13 +703,13 @@ const loadChoices=()=>{if(native&&!choices&&endpoint.trim())void refreshChoices(
  }
  /** `only` = Post-process: the refine/upscale pass alone on that image (an image-to-image job), without a first generation. */
  /** `step` = a continuity planner step (H3): its seconds and action replace the controls, and the finished job's clip is pinned to it. */
- async function run(only?:{image:string;size:Size;src:string;item:MediaItem;upscaleOnly?:boolean},step?:{index:number;all:boolean}){
+ async function run(only?:{image:string;size:Size;src:string;item:MediaItem;upscaleOnly?:boolean},step?:{index:number;all:boolean},chat?:{positive:string;negative:string;size?:Size}):Promise<{job:JobStatus;intent:DiagnosticImageIntentV1}|undefined>{
   if(!native||stopLock.current||admissionBlocked||samBusy||nativeRefining||scanning||((step||autoPlan||planRun.current||resolving)&&(!step||serialBlocked))||(moss&&only))return;
   if(step&&!continuityOn)return;
   if(!checkpoint){setError(t('studio.run.noModels'));return;}
   if(backendPending||unavailable.length||musicNeedsStyle||historyProblems.length)return; // The overlay derives dependency warnings from the current selections.
   const editing=!only&&inpaint;
-  if(!only&&(step?continuitySizeError:sizeError)){setError(t(step?continuitySizeError:sizeError,{multiple:String(grid)}));return;}
+  if(!only&&!chat?.size&&(step?continuitySizeError:sizeError)){setError(t(step?continuitySizeError:sizeError,{multiple:String(grid)}));return;}
   if(editing&&!masked){setError(t('studio.run.edit.needsMask'));return;}
   const target=up(only?only.size:outputSize);
   const refinePass=post&&!h3Image&&!isVideo;
@@ -701,12 +724,16 @@ const loadChoices=()=>{if(native&&!choices&&endpoint.trim())void refreshChoices(
   const layerSnapshot=layers.filter(l=>l.visible).map(l=>({...l}));const inputLayers=visibleImages(layerSnapshot);
   const refSnap=imageRefs.map(r=>({path:r.item.path!,strength:r.strength}));
   const methodSnapshot=referenceMethod,visionSnapshot=refVision;
-  const intent={...structuredClone(buildImageIntent(naming,out,only)),seed:capturedSeed};
+  const base=structuredClone(buildImageIntent(naming,out,only));
+  // Chat draws its own prompt (and size) with Generate's settings; Generate's own fields stay as they are.
+  const scale=(n:number,to:number,from:number)=>Math.max(8,Math.round(n*to/from/8)*8);
+  const built:DiagnosticImageIntentV1=chat?{...base,positivePrompt:chat.positive,...(chat.negative.trim()?{negativePrompt:chat.negative}:{}),...(chat.size?{width:chat.size.width,height:chat.size.height,...(base.refine?{refine:{...base.refine,width:scale(base.refine.width,chat.size.width,base.width),height:scale(base.refine.height,chat.size.height,base.height)}}:{})}:{})}:base;
+  const intent={...built,seed:capturedSeed};
   const automaticSam=!only&&!beginner&&samEnabled?structuredClone(samSettings()):null;
   if(automaticSam&&(samUnavailable||!automaticSam.targets.length)){setError(samUnavailable||t('studio.sam.needsTargets'));return;}
   const from=only?.item??(pipeline==='i2i'?media:null);
   observation.current++;setObservationRetry(n=>n+1);const ticket=beginRun();
-  let admitted=false;
+  let admitted=false;let started:JobStatus|undefined;
   try{
    // Canvas paint is mutable and cannot be structured-cloned.
    for(const layer of layerSnapshot){
@@ -740,10 +767,12 @@ const loadChoices=()=>{if(native&&!choices&&endpoint.trim())void refreshChoices(
    if(!activeRun(ticket))return;
    admitted=true;
    const job=await runWorkbenchJob(endpoint,Object.freeze(inputMask?{...withLayers,inputMask,...(maskBlur?{maskBlur}:{}),...(inpaintCrop?{inpaintCrop}:{})}:withLayers),ticket.admissionEpoch);
+   started=job;
    if(activeRun(ticket)){setJobs(list=>[job,...list.filter(j=>j.id!==job.id)]);setBrowsed(null);setSelectedOutput(0);setSelectedJob(job.id);if(from)setSources(s=>({...s,[job.id]:from}));setRecentSeeds(list=>[intent.seed,...list.filter(s=>s!==intent.seed)].slice(0,10));}
    if(automaticSam&&activeRun(ticket)){setSamBusy(true);const result=await autoRefine(endpoint,intent,automaticSam,ticket.admissionEpoch,job.id);if(activeRun(ticket)){if(result.job){setJobs(list=>[result.job!,...list.filter(j=>j.id!==result.job!.id)]);setSelectedJob(result.job.id);setSelectedOutput(0);}setSamStatus(t('studio.sam.done',{skipped:String(result.skipped)}));setOutputRevision(r=>r+1);}}
   }catch(e){if(activeRun(ticket))setError(e instanceof Error?e.message:String(e));}
   finally{if(activeRun(ticket))setSamBusy(false);finishRun(ticket,admitted);}
+  return started&&{job:started,intent};
  }
  async function maskWithSam(selection?:Pick<Sam3MaskIntentV1,'positivePoints'|'negativePoints'|'box'>){
   if(samUnavailable||serialBlocked||admissionBlocked||!inpaint||!editorRef.current||!editableSource)return;

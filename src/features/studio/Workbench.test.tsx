@@ -5378,3 +5378,33 @@ test('ACE authoring missing actual conditioning node blocks Run without YuE2 req
  await mountAce('checkpoints',['TextEncodeAceStepAudio1.5']);changeAceModel('ace-step-1-5-turbo');fireEvent.change(music().style,{target:{value:'lofi'}});
  expect(screen.getByRole('button',{name:'Run'})).toHaveProperty('disabled',true);expect(document.body.textContent).toContain('TextEncodeAceStepAudio1.5');expect(document.body.textContent).not.toContain('YuE2GenerateMusic');
 });
+test('Chat renders draw its own prompt and size with Generate settings and leave the Studio fields alone',async()=>{
+ localStorage.setItem('deas.pref.studio.run.positive',JSON.stringify('my own studio prompt'));
+ vi.mocked(checkRecipePrerequisites).mockResolvedValue(evidence);
+ vi.mocked(scanModels).mockResolvedValue([{category:'checkpoints',name:'a.safetensors',path:'/m/a',family:'sdxl',size:1,info:null}]);
+ const job:JobStatus={id:'chat-job',baseUrl:evidence.baseUrl,promptId:'prompt',state:'queued',outputs:[],error:null,generationReady:false};
+ vi.mocked(runWorkbenchJob).mockResolvedValue(job);
+ const onChatStudio=vi.fn(),onChatRender=vi.fn();
+ const props={endpoint:evidence.baseUrl,roots:{models:'/m'},onChatStudio,onChatRender};
+ const view=render(<I18nProvider><Workbench {...props}/></I18nProvider>);
+ await waitFor(()=>expect(screen.getByRole('button',{name:'Run'})).toHaveProperty('disabled',false));
+ // Chat learns what draws: the checkpoint and its Forge dialect, not blocked.
+ await waitFor(()=>expect(onChatStudio).toHaveBeenLastCalledWith({checkpoint:'a.safetensors',dialect:'Illustrious'}));
+ view.rerender(<I18nProvider><Workbench {...props} chatRender={{id:'r1',positive:'1girl, fox ears, snow',negative:'lowres',aspect:'1:1',resolution:'1080p'}}/></I18nProvider>);
+ await waitFor(()=>expect(onChatRender).toHaveBeenCalledWith('r1',expect.objectContaining({job,width:1088,height:1088,checkpoint:'a.safetensors'})));
+ const intent=vi.mocked(runWorkbenchJob).mock.calls[0][1] as {positivePrompt:string;negativePrompt:string;width:number;height:number};
+ expect(intent).toMatchObject({positivePrompt:'1girl, fox ears, snow',negativePrompt:'lowres',width:1088,height:1088});
+ expect(JSON.parse(localStorage.getItem('deas.pref.studio.run.positive')!)).toBe('my own studio prompt');
+ // A size it cannot read is refused with a reason, and nothing runs.
+ view.rerender(<I18nProvider><Workbench {...props} chatRender={{id:'r2',positive:'x',negative:'',aspect:'cinematic'}}/></I18nProvider>);
+ await waitFor(()=>expect(onChatRender).toHaveBeenCalledWith('r2',{error:expect.stringContaining('That size could not be used')}));
+ expect(runWorkbenchJob).toHaveBeenCalledTimes(1);
+});
+test('Chat cannot render while Generate is not on text-to-image, and says what to change',async()=>{
+ localStorage.setItem('deas.pref.studio.run.pipeline',JSON.stringify('i2i'));
+ vi.mocked(checkRecipePrerequisites).mockResolvedValue(evidence);
+ vi.mocked(scanModels).mockResolvedValue([{category:'checkpoints',name:'a.safetensors',path:'/m/a',family:'sdxl',size:1,info:null}]);
+ const onChatStudio=vi.fn();
+ render(<I18nProvider><Workbench endpoint={evidence.baseUrl} roots={{models:'/m'}} onChatStudio={onChatStudio}/></I18nProvider>);
+ await waitFor(()=>expect(onChatStudio).toHaveBeenLastCalledWith(expect.objectContaining({checkpoint:'a.safetensors',blocked:expect.stringContaining('Switch its pipeline to text-to-image')})));
+});
