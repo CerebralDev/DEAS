@@ -1,3 +1,4 @@
+pub(crate) mod amd;
 pub mod audio_enhance;
 mod audio_runtime;
 mod resources;

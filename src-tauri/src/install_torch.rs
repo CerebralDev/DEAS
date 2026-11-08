@@ -11,8 +11,11 @@ use std::{
 pub struct Hardware {
     pub vendor: String,
     pub name: String,
+    /// NVIDIA: the `GPU-…` UUID from nvidia-smi. AMD: `AMD-<pci id>` from lspci.
     pub uuid: String,
     pub driver_version: String,
+    /// NVIDIA: `major.minor` compute capability. AMD: the gfx target (gfx1030…
+    /// gfx1201) resolved by `amd::amd_target`; reused so old plans keep serde shape.
     pub compute_capability: String,
 }
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -38,6 +41,20 @@ fn profile(versions: [&str; 3], index: &str, cuda: Option<&str>) -> Torch {
 pub fn cpu() -> Torch {
     // Deliberate existing CPU baseline, not Go's unpinned default profile.
     profile(["2.8.0", "0.23.0", "2.8.0"], "cpu", None)
+}
+/// Installer-proven ROCm pins (dasiwa-comfyui-installer amd.go); the pins carry
+/// their `+rocm` build tag, so no index-family suffix is appended anywhere.
+/// `cuda: None` also routes node wheels to the cpu llama-cpp family.
+pub fn amd(target: &str) -> Torch {
+    Torch {
+        packages: [
+            format!("torch[device-{target}]==2.13.0+rocm10.0.0"),
+            format!("torchvision[device-{target}]==0.28.0+rocm10.0.0"),
+            "torchaudio==2.11.0.2+rocm10.0.0".into(),
+        ],
+        index_url: crate::amd::AMD_INDEX_URL.into(),
+        cuda: None,
+    }
 }
 pub fn select(h: &Hardware) -> Result<Torch, String> {
     let name = h.name.to_ascii_uppercase();
