@@ -84,7 +84,7 @@
   "setup.backend.nvidia.label": "NVIDIA / CUDA",
   "setup.backend.nvidia.description": "NVIDIA desteği isteyin; yerel uyumluluk kontrolleri uygulanır.",
   "setup.backend.amd.label": "AMD / ROCm",
-  "setup.backend.amd.description": "AMD desteği isteyin; yerel uyumluluk kontrolleri uygulanır.",
+  "setup.backend.amd.description": "RDNA2–RDNA4 Radeon kartları için Linux ROCm arka ucu; RTX Video aşamaları yalnızca NVIDIA'ya özeldir.",
   "setup.backend.intel.label": "Intel / XPU",
   "setup.backend.intel.description": "Intel desteği isteyin; yerel uyumluluk kontrolleri uygulanır.",
   "setup.execution.idle": "Beklemede",

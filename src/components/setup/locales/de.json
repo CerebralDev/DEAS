@@ -84,7 +84,7 @@
   "setup.backend.nvidia.label": "NVIDIA / CUDA",
   "setup.backend.nvidia.description": "NVIDIA-Unterstützung anfordern; native Kompatibilitätsprüfung erforderlich.",
   "setup.backend.amd.label": "AMD / ROCm",
-  "setup.backend.amd.description": "AMD-Unterstützung anfordern; native Kompatibilitätsprüfung erforderlich.",
+  "setup.backend.amd.description": "Linux-ROCm-Backend für Radeon RDNA2–RDNA4; RTX-Video-Stufen bleiben NVIDIA vorbehalten.",
   "setup.backend.intel.label": "Intel / XPU",
   "setup.backend.intel.description": "Intel-Unterstützung anfordern; native Kompatibilitätsprüfung erforderlich.",
   "setup.execution.idle": "Inaktiv",

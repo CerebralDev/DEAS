@@ -12,7 +12,7 @@ A Rust/Tauri desktop workstation for ComfyUI and DaSiWa tools: generation, model
 | **Chat** | Talks ideas through, searches the web, and on request *draws the picture* with your selected settings; on one GPU the chat model and ComfyUI step aside for each other |
 | **Library** | Finds and downloads models and LoRAs from Hugging Face and Civitai |
 | **TVE** | Upscales and remasters your videos on your own card — upscale model, NVIDIA RTX refine, frame generation |
-| **Backend** | Installs and runs the entire ComfyUI environment for you — CPU or NVIDIA |
+| **Backend** | Installs and runs the entire ComfyUI environment for you — CPU, NVIDIA, or AMD (Linux) |
 | **Media & Monitoring** | Every result kept with its full generation metadata for one-click reuse; live CPU/RAM/GPU telemetry |
 | **Comfy** | The original workflow editor, one tab away when you need it |
 

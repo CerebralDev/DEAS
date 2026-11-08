@@ -84,7 +84,7 @@
   "setup.backend.nvidia.label": "NVIDIA / CUDA",
   "setup.backend.nvidia.description": "Demandez la prise en charge NVIDIA ; les contrôles natifs de compatibilité s’appliquent.",
   "setup.backend.amd.label": "AMD / ROCm",
-  "setup.backend.amd.description": "Demandez la prise en charge AMD ; les contrôles natifs de compatibilité s’appliquent.",
+  "setup.backend.amd.description": "Backend ROCm Linux pour cartes Radeon RDNA2–RDNA4 ; les étapes RTX Video restent réservées à NVIDIA.",
   "setup.backend.intel.label": "Intel / XPU",
   "setup.backend.intel.description": "Demandez la prise en charge Intel ; les contrôles natifs de compatibilité s’appliquent.",
   "setup.execution.idle": "En attente",
