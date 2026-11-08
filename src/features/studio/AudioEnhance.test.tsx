@@ -153,6 +153,29 @@ test('installation needs explicit consent and never reports readiness before a s
   consent.mockRestore();
 });
 
+test('running install reports the real localized stage and stays honest without byte totals', async () => {
+  const consent = vi.spyOn(window, 'confirm').mockReturnValue(true);
+  let status = { running: true, mode: 'stems', stage: 'python-environment', downloaded: 0, total: 0 };
+  vi.mocked(invoke).mockImplementation(async command => {
+    if (command === 'native_audio_enhance_install_status') return status;
+    if (command === 'native_audio_enhance_capabilities') return { clean: true, deep: true, stems: false };
+    if (command === 'native_audio_enhance_install') return new Promise(() => {}); // the install stays in flight for this test
+    return null;
+  });
+  await mount({ sourceId: 'retained' });
+  const line = () => document.querySelector('[data-audio-enhance-install-status]')!.textContent!;
+  await act(async () => { fireEvent.click(document.querySelector('[data-audio-enhance-install="stems"]') as HTMLButtonElement); });
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 900)); }); // one 750 ms poll tick
+  expect(line()).toContain('Creating the Python environment');
+  expect(line()).not.toContain('bytes');
+  status = { running: true, mode: 'stems', stage: 'packages', downloaded: 2048, total: 4096 };
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 900)); });
+  expect(line()).toContain('Installing packages');
+  expect(line()).toContain('2048 / 4096');
+  expect((document.querySelector('[data-audio-enhance-install-cancel]') as HTMLButtonElement).disabled).toBe(false);
+  consent.mockRestore();
+});
+
 test('failed install remains unavailable and can be retried with fresh consent', async () => {
   const consent = vi.spyOn(window, 'confirm').mockReturnValue(true);
   vi.mocked(invoke).mockImplementation(async command => {

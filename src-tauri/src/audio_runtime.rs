@@ -540,15 +540,20 @@ async fn install(mode: &str, preferred_uv: Option<PathBuf>) -> Result<(), String
             40_000_000,
         )
         .await?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(&path, fs::Permissions::from_mode(0o700))
-                .map_err(|_| "AUDIO_INSTALL: Cannot mark executable")?;
-        }
-        let mut cmd = Command::new(path);
-        cmd.arg("--version");
-        run(cmd, &CANCEL)?;
+        // run() sleep-polls; keep it off the async runtime workers like the stems block.
+        tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                fs::set_permissions(&path, fs::Permissions::from_mode(0o700))
+                    .map_err(|_| "AUDIO_INSTALL: Cannot mark executable")?;
+            }
+            let mut cmd = Command::new(&path);
+            cmd.arg("--version");
+            run(cmd, &CANCEL)
+        })
+        .await
+        .map_err(|_| "AUDIO_INSTALL: Verify worker failed")??;
     } else {
         let repo = snapshot(stage.path());
         fs::create_dir_all(&repo).map_err(|_| "AUDIO_INSTALL: Cannot create model repo")?;
@@ -599,6 +604,7 @@ async fn install(mode: &str, preferred_uv: Option<PathBuf>) -> Result<(), String
             ])
             .arg(dir.join("venv"));
             run(cmd, &CANCEL)?;
+            status("stems", "packages", 0, 0); // The hash-locked package install is the longest silent stage; name it.
             let mut cmd = Command::new(&uv);
             cmd.args([
                 "--no-config",

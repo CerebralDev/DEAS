@@ -6,6 +6,14 @@ import { cancelAudioEnhance, exportEnhancedAudio, type AudioEnhanceMode, type Au
 
 /** Explicit post-processing of a retained source/result. The original is never replaced. */
 type Props = { source?: AudioEnhanceSource; name?: string; scope: 'post' | 'tve'; disabled?: boolean; automatic?: boolean };
+// Native install stages, localized; unknown stages fall back to the raw stage name.
+const STAGE_KEYS: Record<string, string> = { starting: 'studio.audioEnhance.stage.starting', downloading: 'studio.audioEnhance.stage.downloading', 'python-environment': 'studio.audioEnhance.stage.pythonEnvironment', packages: 'studio.audioEnhance.stage.packages', 'inference-check': 'studio.audioEnhance.stage.inferenceCheck', 'gpu-optional': 'studio.audioEnhance.stage.gpuOptional' };
+function installStageText(t: (key: string, params?: Record<string, string | number>) => string, status: { stage: string; downloaded: number; total: number }) {
+  const key = STAGE_KEYS[status.stage];
+  const stage = key ? t(key) : status.stage;
+  // shortcut: only downloads carry byte totals; other stages stay honestly indeterminate until a total source exists, then widen installProgress.
+  return status.total > 0 ? t('studio.audioEnhance.installProgress', { stage, downloaded: status.downloaded, total: status.total }) : t('studio.audioEnhance.installStage', { stage });
+}
 export function AudioEnhance(props: Props & { settings?: AudioEnhanceSettings }) {
   return props.settings ? <AudioEnhanceControls {...props} settings={props.settings}/> : <StandaloneAudioEnhance {...props}/>;
 }
@@ -59,7 +67,7 @@ function AudioEnhanceControls({ source, name, scope, disabled = false, automatic
       <div className="wb-option" data-audio-enhance-engines role="group" aria-label={t('studio.audioEnhance.engines')}><span>{t('studio.audioEnhance.engines')}</span>
       {(['deep', 'stems'] as const).map(value => <button key={value} type="button" className="wb-dock-action" data-audio-enhance-install={value} disabled={!!capabilities?.[value] || busy || !!installing || checking || !isTauri()} onClick={() => { if (window.confirm(t(value === 'stems' ? 'studio.audioEnhance.stemsInstallConsent' : 'studio.audioEnhance.installConsent', { mode: t(`studio.audioEnhance.${value}`) }))) void settings.install(value); }}>{t('studio.audioEnhance.install', { mode: t(`studio.audioEnhance.${value}`) })}</button>)}
       </div>
-      {installing && <><small role="status" data-audio-enhance-install-status>{t('studio.audioEnhance.installing', { mode: t(`studio.audioEnhance.${installing}`) })}{settings.installStatus?.running && <> · {t('studio.audioEnhance.installProgress', { stage: settings.installStatus.stage, downloaded: settings.installStatus.downloaded, total: settings.installStatus.total || '—' })}</>}</small><button type="button" className="wb-dock-action" data-audio-enhance-install-cancel onClick={() => void settings.cancelInstall()}>{t('studio.audioEnhance.installCancel')}</button></>}
+      {installing && <><small role="status" data-audio-enhance-install-status>{t('studio.audioEnhance.installing', { mode: t(`studio.audioEnhance.${installing}`) })}{settings.installStatus?.running && <> · {installStageText(t, settings.installStatus)}</>}</small><button type="button" className="wb-dock-action" data-audio-enhance-install-cancel onClick={() => void settings.cancelInstall()}>{t('studio.audioEnhance.installCancel')}</button></>}
       {settings.error && <small role="alert">{settings.error}</small>}
       {checking && <small role="status">{t('studio.audioEnhance.checking')}</small>}
       {busy && <small role="status">{t('studio.audioEnhance.processingSource', { name: operationName })}</small>}
