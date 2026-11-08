@@ -658,7 +658,10 @@ async fn read_references(
             images,
         );
     };
-    if chat::is_local(&req.model) {
+    if chat::is_local(&req.model) && !chat::local_has_vision(&req.model) {
+        // No projector paired next to the GGUF: keep writing from the brief
+        // rather than failing the whole Forge write; with a paired mmproj the
+        // pictures ride the rounds like on any server model.
         warnings.push(
             "The local GGUF runner cannot read pictures, so this was written from the brief alone."
                 .into(),

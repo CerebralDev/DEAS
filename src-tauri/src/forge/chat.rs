@@ -24,6 +24,15 @@ pub fn is_local(model: &str) -> bool {
     model.starts_with(LOCAL_PREFIX)
 }
 
+/// Whether a `local:` model's GGUF has a vision projector beside it (Prompt Forge
+/// degrades to brief-only writing without one instead of failing the whole write).
+pub fn local_has_vision(model: &str) -> bool {
+    is_local(model)
+        && RUNNER
+            .try_with(|runner| runner.has_vision(&model[LOCAL_PREFIX.len()..]))
+            .unwrap_or(false)
+}
+
 const MAX_RESPONSE: usize = 4 * 1024 * 1024;
 const MAX_TOOL_CALLS: usize = 128;
 /// Ollama loads context at request time; PromptForge runs prompts at 32k.
@@ -247,9 +256,8 @@ fn local_reply(text: &str, finish: Option<&str>) -> Reply {
 
 async fn local_round(r: &Round<'_>) -> Result<Reply, String> {
     let model = &r.model[LOCAL_PREFIX.len()..];
-    if r.messages.iter().any(|m| m["content"].is_array()) {
-        return Err("The local GGUF runner cannot read pictures.".into());
-    }
+    // Picture rounds load the paired mmproj projector; without one the worker
+    // answers `no_vision` with the actionable reason instead of misreading.
     let runner = RUNNER
         .try_with(Arc::clone)
         .map_err(|_| "Local GGUF models are not available here")?;
@@ -670,7 +678,7 @@ pub(super) mod tests {
     }
 
     #[tokio::test]
-    async fn local_rounds_need_a_runner_and_refuse_pictures() {
+    async fn local_rounds_need_a_runner_and_pair_pictures_via_mmproj() {
         let config = &LlmConfig::default();
         let round = |messages: Vec<Value>| async move {
             let r = Round {
@@ -685,13 +693,20 @@ pub(super) mod tests {
             };
             local_round(&r).await.map(|_| ())
         };
+        // Outside a runner scope both rounds fail the same way; the worker itself
+        // answers `no_vision` for unpaired picture rounds (see llm_worker).
         let picture = user_with_images("look", &["data:image/png;base64,AA".into()], false);
-        assert!(round(vec![picture]).await.unwrap_err().contains("pictures"));
+        assert!(round(vec![picture])
+            .await
+            .unwrap_err()
+            .contains("not available"));
         let text = json!({ "role": "user", "content": "write" });
         assert!(round(vec![text])
             .await
             .unwrap_err()
             .contains("not available"));
+        assert!(!local_has_vision("local:model.gguf"));
+        assert!(!local_has_vision("server:model"));
     }
 
     #[tokio::test]

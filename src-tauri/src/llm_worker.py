@@ -55,13 +55,14 @@ def fitting_contexts(path):
     return fits
 
 
-def open_model(llama_cpp, path):
+def open_model(llama_cpp, path, mmproj=None):
     """The largest context that fits: a smaller card still gets a working, shorter one."""
     layers = -1 if llama_cpp.llama_supports_gpu_offload() else 0
     contexts = fitting_contexts(path) if layers else SESSION_CONTEXTS
     for n_ctx in contexts:
         try:
-            model = llama_cpp.Llama(model_path=path, n_ctx=n_ctx, n_gpu_layers=layers, verbose=False)
+            kwargs = {"mmproj": mmproj} if mmproj else {}
+            model = llama_cpp.Llama(model_path=path, n_ctx=n_ctx, n_gpu_layers=layers, verbose=False, **kwargs)
             break
         except Exception:
             if n_ctx == contexts[-1]:
@@ -89,12 +90,22 @@ def session_round(model, request):
     return {"text": result["message"].get("content") or "", "finish": result.get("finish_reason")}
 
 
+def wants_pictures(messages):
+    """True when any message carries image content parts (the OpenAI wire shape)."""
+    return isinstance(messages, list) and any(
+        isinstance(message.get("content"), list)
+        and any(isinstance(p, dict) and p.get("type") == "image_url" for p in message["content"])
+        for message in messages
+    )
+
+
 def serve():
     """One JSON line in, one out, until stdin closes. The first line names the model."""
     protocol = os.fdopen(os.dup(1), "wb")
     # Native libraries may print to fd 1 even with verbose=False; reserve stdout for JSON.
     os.dup2(2, 1)
     model = None
+    vision = False
     try:
         while True:
             line = sys.stdin.buffer.readline(SESSION_INPUT + 1)
@@ -103,22 +114,29 @@ def serve():
             if len(line) > SESSION_INPUT:
                 raise ValueError("Request too large")
             request = json.loads(line)
+            stage = "model"
             try:
                 if model is None:
                     path = request["modelPath"]
                     if not isinstance(path, str) or not os.path.isabs(path) or not path.lower().endswith(".gguf") or not os.path.isfile(path):
                         raise ValueError("Invalid model")
+                    mmproj = request.get("mmproj")
+                    if mmproj is not None and (not isinstance(mmproj, str) or not os.path.isabs(mmproj) or not mmproj.lower().endswith(".gguf") or not os.path.isfile(mmproj)):
+                        raise ValueError("Invalid projector")
                     stage = "runtime"
                     llama_cpp = load_llama()
                     stage = "load"
-                    model = open_model(llama_cpp, path)
+                    model = open_model(llama_cpp, path, mmproj)
+                    vision = mmproj is not None
                     reply = {"ready": True}
                 else:
                     stage = "failed"
+                    if wants_pictures(request.get("messages")) and not vision:
+                        raise ValueError("no_vision")
                     reply = session_round(model, request)
             except Exception as error:
                 # Never expose exception text: tokenizer/model errors can contain the user's prompt.
-                reply = {"error": "memory" if isinstance(error, MemoryError) else "context" if "exceed context" in str(error) else stage}
+                reply = {"error": "memory" if isinstance(error, MemoryError) else "context" if "exceed context" in str(error) else "no_vision" if "no_vision" in str(error) else stage}
             protocol.write(json.dumps(reply, ensure_ascii=True).encode("utf-8") + b"\n")
             protocol.flush()
     finally:
