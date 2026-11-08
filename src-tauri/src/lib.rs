@@ -1,3 +1,4 @@
+pub mod analysis;
 pub mod audio_enhance;
 mod audio_runtime;
 mod resources;

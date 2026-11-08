@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-native-analysis"
+description = "Media Analysis: list the image taggers in the models folders, install the private tagger runtime and default tagger, cancel that install, and tag one picture."
+commands.allow = ["native_analysis_overview", "native_analysis_setup", "native_analysis_cancel", "native_analysis_stage", "native_analysis_tag"]

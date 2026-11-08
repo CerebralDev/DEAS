@@ -3,7 +3,7 @@
  * Search only reads; navigation is the tab band's own switch (no setting is written, nothing is submitted).
  */
 export type SearchView = 'studio' | 'downloads' | 'comfy' | 'backend' | 'logs';
-export type SearchStudioTab = 'generate' | 'forge' | 'chat' | 'tve' | 'monitor' | 'map';
+export type SearchStudioTab = 'generate' | 'forge' | 'chat' | 'analysis' | 'tve' | 'monitor' | 'map';
 export type SearchPanel = 'startup' | 'llm' | 'auth';
 
 export interface SearchEntry {
