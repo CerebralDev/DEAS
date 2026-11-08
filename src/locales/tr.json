@@ -1,5 +1,7 @@
 {
   "app.home": "DEAS ana sayfası",
+  "app.confirm": "Onayla",
+  "app.cancel": "İptal",
   "app.brand": "DEAS",
   "app.brandCaption": "Dark Engine AI Studio",
   "app.language": "Dil",

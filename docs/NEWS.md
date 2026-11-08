@@ -1,5 +1,13 @@
 # News
 
+## 0.2.21 BETA
+
+- **AMD Radeon (Linux) can run the owned ComfyUI backend** — setup detects RDNA2–RDNA4 cards, installs the pinned ROCm environment and verifies with a real computation; RTX Video refine and RTX frame generation stay NVIDIA-only and are refused at submit with a named reason. First real RDNA hardware is still the acceptance gate. [Backend](BACKEND.md).
+- **MiniMax H3 auto-picks the clean video VAE.** Installing the fast `minimax_h3_sol_vae_*` no longer silently makes it the default and repaints every frame with 128/256-pixel seam lines; the proven blending VAE is chosen per family order and the Sol decoder stays selectable by hand.
+- **The enhanced video preview plays as a video again.** The companion's fragmented-MP4 animated previews are accepted by the preview guard and fed to the looping player instead of silently falling back to a still image.
+- **Consent popups now sit on top of the video preview.** Install confirmations and other asks use a real in-app dialog — no more half-unreadable confirmations blended behind the preview pixels; the preview steps aside while a dialog is open.
+- **Comparing models in the same family keeps your settings.** Switching between two H3 (or other same-family) checkpoints no longer resets steps/CFG/sampler/scheduler/size; each model's own remembered draft still wins, and family switches still apply that family's defaults.
+
 ## 0.2.20 BETA
 
 - **Local GGUF models can now see your reference pictures (#28).** Put the matching `*.mmproj*.gguf` projector file next to the model in DEAS's LLM folder and Prompt Forge sends pictures through DEAS's built-in runner; a model without one says so honestly instead of guessing.

@@ -2056,7 +2056,8 @@ async fn packages(
     let py = python.to_str().ok_or("Python path must be UTF-8")?;
     let constraint = root.join("constraints.txt");
     let selected = plan.torch.as_ref().ok_or("Missing planned Torch profile")?;
-    std::fs::write(&constraint, constraint_lines(selected).join("\n")).map_err(|e| e.to_string())?;
+    std::fs::write(&constraint, constraint_lines(selected).join("\n"))
+        .map_err(|e| e.to_string())?;
     step(inner, "torch");
     if matches!(plan.request.backend, Backend::Amd) {
         // ROCm's meta-package is source-only (setuptools.build_meta): the build
@@ -2085,7 +2086,11 @@ async fn packages(
         // AMD's index replaces the default index only when passed via --index-url;
         // keep PyPI default so source builds find build dependencies, and disable
         // isolation so the prepared setuptools is visible (installer parity).
-        torch_args.extend(["--index", selected.index_url.as_str(), "--no-build-isolation"]);
+        torch_args.extend([
+            "--index",
+            selected.index_url.as_str(),
+            "--no-build-isolation",
+        ]);
     } else {
         torch_args.extend(["--index-url", selected.index_url.as_str()]);
     }

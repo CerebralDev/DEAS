@@ -177,6 +177,7 @@ pub fn amd_target(name: &str) -> Result<String, String> {
 /// Pure parser for `lspci -nn` output; `driver_version` is injected so tests
 /// need no kernel state. shortcut: assumes one display device; multi-GPU
 /// selection is an open PLAN.md item and the NVIDIA probe refuses it too.
+#[cfg(any(target_os = "linux", test))]
 pub fn parse_amd_lspci(output: &str, driver_version: &str) -> Result<Hardware, String> {
     let mut found: Option<(String, String)> = None;
     for line in output.lines() {
@@ -220,6 +221,7 @@ pub fn parse_amd_lspci(output: &str, driver_version: &str) -> Result<Hardware, S
 }
 
 /// Last `[hhhh:hhhh]` bracket in an lspci description tail.
+#[cfg(any(target_os = "linux", test))]
 fn bracket_pci_id(tail: &str) -> Option<&str> {
     let (_, rest) = tail.rsplit_once("[")?;
     let id = rest.split_once(']')?.0;
@@ -252,6 +254,13 @@ pub fn probe_amd() -> Result<Hardware, String> {
         ));
     }
     parse_amd_lspci(&String::from_utf8_lossy(&output.stdout), &driver_version)
+}
+
+/// Cross-platform compile stub: plan() never requests an AMD backend off Linux,
+/// so this only answers honestly if a stale or hand-crafted request arrives.
+#[cfg(not(target_os = "linux"))]
+pub fn probe_amd() -> Result<Hardware, String> {
+    Err("AMD_BACKEND: AMD backends are only offered on Linux".into())
 }
 
 #[cfg(test)]

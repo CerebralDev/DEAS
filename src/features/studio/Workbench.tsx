@@ -21,6 +21,7 @@ import { defaultPlan, isContinuityPlan, nextStep, resolveClip, continuitySource,
 import { checkRecipePrerequisites } from '../../lib/recipePrerequisites';
 import { scanModels, type LocalModel } from '../../lib/models';
 import { ModelMetadataTarget, ModelDeclaredBadge, useModelMetadataUpdates } from '../../components/models/ModelMetadataEditor';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { componentFiles, componentFilesNamed, defaultComponentOverrides, isComponentOverrides, type ComponentFamily, type ComponentSlot } from '../../lib/modelComponents';
 import { ComponentPicker } from './ComponentPicker';
 import { AudioEnhance } from './AudioEnhance';
@@ -316,6 +317,8 @@ function WorkbenchContent({beginner=false,beginnerPage='generate',onBeginnerPage
  const live=useRef(false);const lock=useRef(false);const epoch=useRef(0);
  const preparationGeneration=useRef(0);const localPreparations=useRef(0);const stopLock=useRef(false);const stopped=useRef(new Set<string>());const admissionEpoch=useRef(0);
  const [stopChoice,setStopChoice]=useState<{jobId:string}|null>(null);
+ // Deferred DOM confirm instead of window.confirm: native video surfaces always draw over WebKit, so JS dialogs would blend behind the preview (and never trigger NativeVideo's modal occlusion rule).
+ const [ask,setAsk]=useState<{message:ReactNode;run:()=>void}|null>(null);
  const stopDialog=useRef<HTMLDialogElement>(null),stopCancel=useRef<HTMLButtonElement>(null),stopTrigger=useRef<HTMLButtonElement>(null);
  const itemStopLock=useRef(false);
  useEffect(()=>{if(!stopChoice)return;const dialog=stopDialog.current!;dialog.showModal();stopCancel.current?.focus();return()=>{if(dialog.open)dialog.close();stopTrigger.current?.focus();};},[stopChoice]);
@@ -1271,7 +1274,8 @@ const promptTools=forgeContext&&<>
   rememberDraft();draftEpoch.current++;setPipeline(p);setCheckpoint(m.name);setModelIdentity(identity(m));
   const saved=drafts.current.get(draftKey(p,m));
   // Only the checkpoint changed: its remembered settings return, the prompts on screen stay.
-  if(saved)applyDraft(keepPrompts?{...saved,settings:{...saved.settings,'studio.run.positive':positive,'studio.run.negative':negative,[musicPromptPreferenceKeys[0]]:musicStyle,[musicPromptPreferenceKeys[1]]:musicLyrics}}:saved,keepSource);else if(defaults)startingSettings(m);
+  // First visit to another checkpoint of the SAME family keeps the current settings instead of family defaults, so models can be compared side by side; family defaults still apply when the family (or pipeline) changes.
+  if(saved)applyDraft(keepPrompts?{...saved,settings:{...saved.settings,'studio.run.positive':positive,'studio.run.negative':negative,[musicPromptPreferenceKeys[0]]:musicStyle,[musicPromptPreferenceKeys[1]]:musicLyrics}}:saved,keepSource);else if(defaults&&!(p===pipeline&&model&&identity(m)!==identity(model)&&familyOf(m)&&familyOf(m)===familyOf(model)))startingSettings(m);
  };
  const applyDraft=(saved:ReturnType<typeof captureDraft>,keepSource=false)=>{
   if(!applyStudioSettings(saved.settings))return;
@@ -1318,7 +1322,7 @@ const promptTools=forgeContext&&<>
  };
  useEffect(()=>{
   const layout=()=>{dragCleanup.current();setSettingsWidth(defaultLayout.settings);setQueueWidth(defaultLayout.queue);setDockHeight(defaultLayout.dock);setSettingsHidden(false);setDockHidden(false);setPromptHeight(110);setPromptHidden(false);};
-  const defaults=()=>{if(!window.confirm(t(project?'studio.quick.confirmProject':'studio.quick.confirm')))return;if(beginner){beginnerLoraDraft.current=null;writePref('beginner.loras',null);}drafts.current.clear();pipelineModels.current.clear();draftEpoch.current++;resetStudioPreferences();setResolution('model');const first=allModels.find(m=>!blocked(m,'t2i'));if(first){setCheckpoint(first.name);setModelIdentity(identity(first));startingSettings(first);}};
+  const defaults=()=>setAsk({message:t(project?'studio.quick.confirmProject':'studio.quick.confirm'),run:()=>{if(beginner){beginnerLoraDraft.current=null;writePref('beginner.loras',null);}drafts.current.clear();pipelineModels.current.clear();draftEpoch.current++;resetStudioPreferences();setResolution('model');const first=allModels.find(m=>!blocked(m,'t2i'));if(first){setCheckpoint(first.name);setModelIdentity(identity(first));startingSettings(first);}}});
   window.addEventListener('deas:reset-studio-layout',layout);window.addEventListener('deas:request-studio-defaults',defaults);
   return()=>{window.removeEventListener('deas:reset-studio-layout',layout);window.removeEventListener('deas:request-studio-defaults',defaults);};
  });
@@ -1411,8 +1415,8 @@ const promptTools=forgeContext&&<>
   const skipped=applySettings(settings);
   setMoreResult(<>{t('studio.run.metadata.partial')}{skipped.length>0&&<> {t('studio.run.metadata.skipped',{items:skipped.join(' · ')})}</>}</>);
  };
- const restoreHistory=(value:HistoryRestore)=>{
-  if((masked||layers.length||editorRef.current?.imageEdited())&&!window.confirm(t('studio.run.metadata.replaceEditor')))return false;
+ const restoreHistory=(value:HistoryRestore,confirmed=false)=>{
+  if(!confirmed&&(masked||layers.length||editorRef.current?.imageEdited())){setAsk({message:t('studio.run.metadata.replaceEditor'),run:()=>restoreHistory(value,true)});return false;}
   metadataRead.current++;rememberDraft();draftEpoch.current++;setEditorSnapshot(undefined);
   const intent=value.intent;
   const name=isVideoIntent(intent)?intent.model:intent.checkpoint,matching=allModels.filter(m=>m.name===name);
@@ -1765,6 +1769,7 @@ const promptTools=forgeContext&&<>
    </div>
   </div>
  </dialog>}
+ {ask&&<ConfirmDialog message={ask.message} onDone={accepted=>{const run=ask.run;setAsk(null);if(accepted)run();}}/>}
  {visionDownload&&<dialog ref={visionDialog} data-vision-download className="continuity-overlay" aria-label={t("studio.run.reference.dlAsk")} onCancel={e=>{e.preventDefault();closeVisionDownload();}}><header className="continuity-overlay-header"><h2>{t("studio.run.reference.dlAsk")}</h2><button type="button" onClick={closeVisionDownload}>{t("studio.close")}</button></header><div className="wb-dock-panel"><p>{t("studio.run.latent.consent")}</p><DownloadPanel embedded installTarget={root} modelsDir={modelsDir} initialEntryIds={visionIds} filenameFilter={["clip_vision_g.safetensors"]} onStatus={visionDownloadStatus}/></div></dialog>}
  {latentDownload&&<dialog ref={latentDialog} data-latent-upscale-download className="continuity-overlay" aria-label={t('studio.run.latent.download')} onCancel={e=>{e.preventDefault();closeLatentDownload();}}><header className="continuity-overlay-header"><h2>{t('studio.run.latent.download')}</h2><button type="button" onClick={closeLatentDownload}>{t('studio.close')}</button></header><div className="wb-dock-panel"><p>{t('studio.run.latent.consent')}</p><DownloadPanel embedded installTarget={root} modelsDir={modelsDir} initialEntryIds={latentIds} filenameFilter={latentDownload==='minimax-h3'?['minimax_h3_latent_upscaler_3d_conv_v1_bf16.safetensors','MiniMax H3 Latent Upscaler.safetensors','minimax h3 latent upscaler.safetensors','minimax_h3_latent_upscaler.safetensors']:['ltx-2.3-spatial-upscaler-x2-1.1.safetensors','LTX-2.3-Latent-Upscaler.safetensors']} onStatus={latentDownloadStatus}/></div></dialog>}
  {referencesOpen&&refsTab&&!planVisible&&<ReferencesOverlay endpoint={endpoint} root={root} refs={refs} onChange={setRefs} family={videoFamily as 'ltx-2'|'minimax-h3'|'minimax-h3-hyperflow'} seconds={video.seconds} label={refLabel} onAdd={addRefs} inputRoot={roots.input} outputRoot={outputDir} refmods={refmods} onRefmods={setRefmods} library={native&&endpoint.trim()?()=>readRefMods(endpoint):undefined} onInsert={tag=>setPositive(positive.trim()?`${positive.trimEnd()} ${tag}`:tag)} onClose={()=>{setReferencesOpen(false);referencesButton.current?.focus();}} picker={<MediaPanel toolbar={error?<p role="alert" className="error-message">{backendErrorText(error,t)}</p>:undefined} selected={null} onSelect={toggleRef} roots={roots} outputRevision={outputRevision} controls={{query,onQuery:setQuery,sort,onSort:setSort,view:dockView,onView:setDockView,type:dockType,onType:setDockType}} marks={marks} actions={mediaActions}/>}/> }

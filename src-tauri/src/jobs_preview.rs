@@ -246,7 +246,7 @@ fn avc_config(data: &[u8], budget: usize) -> Option<()> {
     }
     found.then_some(())
 }
-// shortcut: accept self-contained nonfragmented H.264 MP4 only; extend when the producer changes codecs.
+// shortcut: accept self-contained H.264 MP4 (plain or PyAV frag_keyframe+empty_moov fragmented); extend when the producer changes codecs.
 fn mp4(bytes: &[u8], w: u32, h: u32, budget: usize) -> Option<()> {
     fn boxes(
         b: &[u8],
@@ -282,9 +282,9 @@ fn mp4(bytes: &[u8], w: u32, h: u32, budget: usize) -> Option<()> {
                     h264_nals(data, budget)?;
                     seen[1] = true;
                 }
-                b"moov" | b"trak" | b"mdia" | b"minf" | b"stbl" | b"dinf" => {
-                    boxes(data, depth + 1, w, h, budget, seen)?
-                }
+                // Fragmented streams keep samples in moof/traf; their bytes are still bounded by the mdat walk below.
+                b"moov" | b"trak" | b"mdia" | b"minf" | b"stbl" | b"dinf" | b"mvex" | b"moof"
+                | b"traf" => boxes(data, depth + 1, w, h, budget, seen)?,
                 b"stsd" => {
                     if u32::from_be_bytes(data.get(4..8)?.try_into().ok()?) != 1 {
                         return None;
@@ -324,13 +324,15 @@ fn mp4(bytes: &[u8], w: u32, h: u32, budget: usize) -> Option<()> {
                         ),
                         _ => return None,
                     };
-                    if scale == 0 || duration == 0 || duration > scale * 30 {
+                    // Fragmented streams report duration 0 in the empty moov; the byte budget bounds them instead.
+                    if scale == 0 || duration > scale * 30 {
                         return None;
                     }
                 }
                 b"stsz" => {
+                    // empty_moov fragmentation reports sample count 0 here.
                     let count = u32::from_be_bytes(data.get(8..12)?.try_into().ok()?) as usize;
-                    if count == 0 || count > 256 {
+                    if count > 256 {
                         return None;
                     }
                 }
@@ -347,7 +349,7 @@ fn mp4(bytes: &[u8], w: u32, h: u32, budget: usize) -> Option<()> {
                         }
                     }
                 }
-                b"moof" | b"mvex" | b"encv" | b"hvc1" | b"hev1" => return None,
+                b"encv" | b"hvc1" | b"hev1" => return None,
                 _ => {}
             }
             pos = end;

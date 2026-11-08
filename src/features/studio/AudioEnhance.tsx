@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { isTauri } from '@tauri-apps/api/core';
 import { useI18n } from '../../i18n/I18nProvider';
 import { useAudioEnhance, type AudioEnhanceSettings } from './useAudioEnhance';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { cancelAudioEnhance, exportEnhancedAudio, type AudioEnhanceMode, type AudioEnhanceProfile, type AudioEnhanceDevice, type AudioEnhanceSource } from '../../lib/audioEnhance';
 
 /** Explicit post-processing of a retained source/result. The original is never replaced. */
@@ -25,6 +26,7 @@ function AudioEnhanceControls({ source, name, scope, disabled = false, automatic
   const { t } = useI18n();
   const { mode, setMode, profile, setProfile, device, setDevice, capabilities, checking, probe, available, installing } = settings;
   const [busy, setBusy] = useState(false);
+  const [consent, setConsent] = useState<'deep' | 'stems' | null>(null);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState('');
   const [operationName, setOperationName] = useState('');
@@ -65,7 +67,7 @@ function AudioEnhanceControls({ source, name, scope, disabled = false, automatic
       {automatic && <small>{t('studio.audioEnhance.automatic')}</small>}
       <small>{t('studio.audioEnhance.hint')}</small>
       <div className="wb-option" data-audio-enhance-engines role="group" aria-label={t('studio.audioEnhance.engines')}><span>{t('studio.audioEnhance.engines')}</span>
-      {(['deep', 'stems'] as const).map(value => <button key={value} type="button" className="wb-dock-action" data-audio-enhance-install={value} disabled={!!capabilities?.[value] || busy || !!installing || checking || !isTauri()} onClick={() => { if (window.confirm(t(value === 'stems' ? 'studio.audioEnhance.stemsInstallConsent' : 'studio.audioEnhance.installConsent', { mode: t(`studio.audioEnhance.${value}`) }))) void settings.install(value); }}>{t('studio.audioEnhance.install', { mode: t(`studio.audioEnhance.${value}`) })}</button>)}
+      {(['deep', 'stems'] as const).map(value => <button key={value} type="button" className="wb-dock-action" data-audio-enhance-install={value} disabled={!!capabilities?.[value] || busy || !!installing || checking || !isTauri()} onClick={() => setConsent(value)}>{t('studio.audioEnhance.install', { mode: t(`studio.audioEnhance.${value}`) })}</button>)}
       </div>
       {installing && <><small role="status" data-audio-enhance-install-status>{t('studio.audioEnhance.installing', { mode: t(`studio.audioEnhance.${installing}`) })}{settings.installStatus?.running && <> · {installStageText(t, settings.installStatus)}</>}</small><button type="button" className="wb-dock-action" data-audio-enhance-install-cancel onClick={() => void settings.cancelInstall()}>{t('studio.audioEnhance.installCancel')}</button></>}
       {settings.error && <small role="alert">{settings.error}</small>}
@@ -80,6 +82,7 @@ function AudioEnhanceControls({ source, name, scope, disabled = false, automatic
       {busy && <button type="button" className="wb-dock-action" data-audio-enhance-cancel onClick={() => { void cancelAudioEnhance().catch(failure => { if (live.current) setError(String(failure)); }); }}>{t('studio.audioEnhance.cancel')}</button>}
       {error && <small role="alert">{operationName && `${operationName}: `}{error}</small>}
       {saved && <small role="status" data-audio-enhance-saved>{t('studio.audioEnhance.saved', { path: saved, name: operationName })}</small>}
+      {consent && <ConfirmDialog message={t(consent === 'stems' ? 'studio.audioEnhance.stemsInstallConsent' : 'studio.audioEnhance.installConsent', { mode: t(`studio.audioEnhance.${consent}`) })} onDone={accepted => { const value = consent; setConsent(null); if (accepted) void settings.install(value); }}/>}
     </div>
   </fieldset>;
 }

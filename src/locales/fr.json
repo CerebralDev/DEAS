@@ -1,5 +1,7 @@
 {
   "app.home": "Accueil DEAS",
+  "app.confirm": "Confirmer",
+  "app.cancel": "Annuler",
   "app.brand": "DEAS",
   "app.brandCaption": "Dark Engine AI Studio",
   "app.language": "Langue",

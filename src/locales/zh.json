@@ -1,5 +1,7 @@
 {
   "app.home": "DEAS 首页",
+  "app.confirm": "确认",
+  "app.cancel": "取消",
   "app.brand": "DEAS",
   "app.brandCaption": "Dark Engine AI Studio",
   "app.language": "语言",
