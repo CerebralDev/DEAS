@@ -1,4 +1,4 @@
 [[permission]]
 identifier = "allow-native-media"
-description = "Folder browsing, cached thumbnails, reveal, and explicit native-authorized no-clobber starring within the owned output root, and explicit no-clobber copy-in of pasted/dropped media into the owned input root."
-commands.allow = ["native_media_list", "native_media_describe", "native_media_thumbnail", "native_media_reference_thumbnail", "native_media_metadata", "native_media_reveal", "native_media_star", "native_media_unstar", "native_media_star_status", "native_media_star_notice", "native_media_paste", "native_media_copy_in"]
+description = "Folder browsing, cached thumbnails, reveal, and explicit native-authorized no-clobber starring within the owned output root, and explicit no-clobber copy-in of pasted/dropped media into the owned input root, and explicit metadata-free export of an owned output to a file chosen in the native save dialog."
+commands.allow = ["native_media_list", "native_media_describe", "native_media_thumbnail", "native_media_reference_thumbnail", "native_media_metadata", "native_media_reveal", "native_media_star", "native_media_unstar", "native_media_star_status", "native_media_star_notice", "native_media_paste", "native_media_copy_in", "native_media_export_clean"]

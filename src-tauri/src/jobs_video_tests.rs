@@ -645,11 +645,18 @@ fn tve_post_chain_runs_after_the_decode_with_a_source_rate_baseline() {
         (wan(), json!(["6", 0]), None),
         (h3(), json!(["SD", 0]), Some(json!(["SD", 1]))),
     ] {
+        let plain = compile(&i).unwrap();
+        assert!(plain.get("PG").is_none() && plain.get("B7").is_none());
         i["videoPost"] = post.clone();
         let g = compile(&i).unwrap();
+        // Baseline-first: the whole post chain is the gate's lazy input, B7's filename its eager one.
+        assert_eq!(
+            g["PG"],
+            json!({"class_type":"DEAS_VideoPostprocessGate","inputs":{"baseline":["B7",1],"image":["PF",0]}})
+        );
         assert_eq!(g["PR"]["inputs"]["images"], decoded);
         assert_eq!(g["PF"]["inputs"]["images"], json!(["PR", 0]));
-        assert_eq!(g["7"]["inputs"]["images"], json!(["PF", 0]));
+        assert_eq!(g["7"]["inputs"]["images"], json!(["PG", 0]));
         assert_eq!(
             g["7"]["inputs"]["frame_rate"],
             i["frameRate"].as_f64().unwrap() * 2.0
@@ -677,6 +684,7 @@ fn tve_post_chain_runs_after_the_decode_with_a_source_rate_baseline() {
         i["videoPost"] = json!({"upscaleModel":"2x.safetensors","frameGeneration":{"engine":"rife","multiplier":3,"model":"rife_v4.26.safetensors"}});
         let g = compile(&i).unwrap();
         assert_eq!(g["PM"]["inputs"]["image"], decoded);
+        assert_eq!(g["PG"]["inputs"]["image"], json!(["PF", 0]));
         assert_eq!(g["PF"]["inputs"]["interp_model"], json!(["PFL", 0]));
         assert!(requirements(&i)
             .contains(&("frameInterpolationModels", vec!["rife_v4.26.safetensors"])));
@@ -690,9 +698,110 @@ fn tve_post_chain_runs_after_the_decode_with_a_source_rate_baseline() {
     i["videoPost"] = json!({"rtx":{"denoise":"High"}});
     let g = compile(&i).unwrap();
     assert_eq!(g["B7"]["inputs"]["images"], json!(["B6", 0]));
+    assert_eq!(
+        g["PG"]["inputs"],
+        json!({"baseline":["B7",1],"image":["PR",0]})
+    );
     assert_eq!(g["PR"]["inputs"]["images"], json!(["6", 0]));
-    assert_eq!(g["7"]["inputs"]["images"], json!(["PR", 0]));
+    assert_eq!(g["7"]["inputs"]["images"], json!(["PG", 0]));
     assert_eq!(g["7"]["inputs"]["frame_rate"], 24);
+}
+
+#[test]
+fn seamless_loop_runs_first_and_its_audio_passes_the_baseline_gate() {
+    for (mut i, decoded, audio, fps) in [
+        (ltx(), json!(["6", 0]), Some(json!(["AD", 0])), json!(24)),
+        (wan(), json!(["6", 0]), None, wan()["frameRate"].clone()),
+        (
+            h3(),
+            json!(["SD", 0]),
+            Some(json!(["SD", 1])),
+            json!(["D", 8]),
+        ),
+    ] {
+        i["videoPost"] = json!({"rtx":{"denoise":"High"}});
+        let without = compile(&i).unwrap();
+        i["videoPost"]["loop"] =
+            json!({"backend":"rife","model":"rife_v4.26.safetensors","audio":"beat"});
+        i["videoPost"]["frameGeneration"] = json!({"engine":"rtx","multiplier":2,"mode":"HIGH"});
+        let g = compile(&i).unwrap();
+        let mut lp = json!({"images":decoded,"frame_rate":fps,"exact_endpoint":false,
+            "interpolation_backend":"RIFE / FILM","audio_loop":"Beat-aware","model_name":"rife_v4.26.safetensors"});
+        if let Some(a) = &audio {
+            lp["audio"] = a.clone();
+        }
+        assert_eq!(
+            g["LP"],
+            json!({"class_type":"DaSiWa_SeamlessLoop","inputs":lp})
+        );
+        assert_eq!(g["PR"]["inputs"]["images"], json!(["LP", 0]));
+        assert_eq!(g["PG"]["inputs"]["image"], json!(["PF", 0]));
+        // Frame generation still multiplies the generation fps after the loop.
+        assert_eq!(
+            g["7"]["inputs"]["frame_rate"],
+            i["frameRate"].as_f64().unwrap() * 2.0
+        );
+        // Baseline untouched: original frames and audio, not the loop's.
+        assert_eq!(g["B7"], without["B7"]);
+        assert_eq!(g["B7"]["inputs"]["images"], decoded);
+        match &audio {
+            Some(_) => {
+                assert_eq!(g["PG"]["inputs"]["audio"], json!(["LP", 1]));
+                assert_eq!(g["7"]["inputs"]["audio"], json!(["PG", 1]));
+            }
+            None => {
+                assert!(g["PG"]["inputs"].get("audio").is_none());
+                assert!(g["7"]["inputs"].get("audio").is_none());
+            }
+        }
+        assert!(requirements(&i)
+            .contains(&("frameInterpolationModels", vec!["rife_v4.26.safetensors"])));
+        i["videoPost"]["loop"] = json!({"backend":"rtx","audio":"crossfade"});
+        let g = compile(&i).unwrap();
+        assert_eq!(
+            g["LP"]["inputs"]["interpolation_backend"],
+            "RTX Frame Generation"
+        );
+        assert_eq!(g["LP"]["inputs"]["audio_loop"], "Crossfade");
+        assert!(g["LP"]["inputs"].get("model_name").is_none());
+        assert!(requirements(&i)
+            .iter()
+            .all(|(k, _)| *k != "frameInterpolationModels"));
+        // Loop off: graph identical to one compiled without the key at all.
+        i["videoPost"].as_object_mut().unwrap().remove("loop");
+        let g = compile(&i).unwrap();
+        assert!(g.get("LP").is_none());
+        assert_eq!(g["7"]["inputs"].get("audio"), audio.as_ref());
+        assert_eq!(g["PG"]["inputs"].as_object().unwrap().len(), 2);
+    }
+    for bad in [
+        json!({"backend":"rife","audio":"crossfade"}),
+        json!({"backend":"rife","model":"../x.pth","audio":"crossfade"}),
+        json!({"backend":"rtx","model":"rife_v4.26.safetensors","audio":"crossfade"}),
+        json!({"backend":"rtx","audio":"loud"}),
+        json!({"backend":"film","audio":"crossfade"}),
+        json!({"backend":"rtx"}),
+        json!({}),
+    ] {
+        let mut i = ltx();
+        i["videoPost"] = json!({"loop":bad});
+        assert!(
+            compile(&i).unwrap_err().contains("videoPost.loop"),
+            "{}",
+            i["videoPost"]
+        );
+    }
+    // Loop alone is a valid post chain.
+    let mut i = ltx();
+    i["videoPost"] = json!({"loop":{"backend":"rtx","audio":"crossfade"}});
+    let g = compile(&i).unwrap();
+    assert_eq!(g["PG"]["inputs"]["image"], json!(["LP", 0]));
+    assert_eq!(g["7"]["inputs"]["frame_rate"], 24);
+    use crate::install::Backend;
+    assert!(crate::jobs_video_post::validate_rtx_hardware(&i, Some(&Backend::Amd)).is_err());
+    i["videoPost"]["loop"] =
+        json!({"backend":"rife","model":"rife_v4.26.safetensors","audio":"crossfade"});
+    assert!(crate::jobs_video_post::validate_rtx_hardware(&i, Some(&Backend::Amd)).is_ok());
 }
 
 pub(crate) fn ltx() -> Value {

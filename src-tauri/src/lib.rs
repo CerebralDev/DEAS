@@ -76,13 +76,14 @@ pub use projects::{
 pub mod directory;
 pub use directory::{native_json_open, native_json_save, native_pick_directory};
 pub mod media;
+pub mod media_export;
+pub use media_export::native_media_export_clean;
 pub mod media_metadata;
 mod media_reference;
 pub use media::{
     native_media_copy_in, native_media_describe, native_media_list, native_media_paste,
-    native_media_reveal, native_media_star,
-    native_media_star_notice, native_media_star_status, native_media_thumbnail,
-    native_media_unstar,
+    native_media_reveal, native_media_star, native_media_star_notice, native_media_star_status,
+    native_media_thumbnail, native_media_unstar,
 };
 pub use media_metadata::native_media_metadata;
 pub use media_reference::native_media_reference_thumbnail;

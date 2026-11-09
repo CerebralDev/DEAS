@@ -494,6 +494,37 @@ test('TVE post stages are opt-in on video pipelines, badge-marked, and travel as
  expect(vi.mocked(runWorkbenchJob).mock.lastCall![1]).toMatchObject({videoPost:plan.videoPost});
 });
 
+test('Seamless loop is a default-off post stage gated on the audio-aware node and travels as videoPost.loop',async()=>{
+ vi.mocked(scanModels).mockResolvedValue([...ltxModels]);
+ const allow={...evidence.allowlist,nodes:[...evidence.allowlist.nodes,'FrameInterpolate'],frameInterpolationModels:['rife49.pth','rife_v4.26.safetensors']};
+ vi.mocked(checkRecipePrerequisites).mockResolvedValue({...evidence,allowlist:allow});
+ const props={endpoint:evidence.baseUrl,roots:{models:'/m'}};
+ localStorage.setItem('deas.pref.studio.run.pipeline','"t2v"');
+ const view=render(<I18nProvider><Workbench {...props}/></I18nProvider>);
+ await waitFor(()=>expect(screen.getByRole('tab',{name:'Post-Processing'})).toBeTruthy());
+ fireEvent.click(screen.getByRole('tab',{name:'Post-Processing'}));
+ const toggle=await waitFor(()=>document.querySelector('.wb-post [data-tve-post="loopEnabled"]') as HTMLInputElement);
+ expect(toggle.checked).toBe(false);
+ await waitFor(()=>expect(toggle.disabled).toBe(true)); // Installed pack without the audio-aware loop.
+ expect(document.querySelector('[data-tve-post="loop"]')?.textContent).toContain('0.5.41');
+ view.unmount();
+ vi.mocked(checkRecipePrerequisites).mockResolvedValue({...evidence,allowlist:{...allow,nodes:[...allow.nodes,'DaSiWa_SeamlessLoop']}});
+ const next=render(<I18nProvider><Workbench {...props} planVisible/></I18nProvider>);
+ await waitFor(()=>expect(document.querySelector('[data-plan-intent]')?.textContent).toContain('video-generation'));
+ expect(JSON.parse(document.querySelector('[data-plan-intent]')!.textContent!)).not.toHaveProperty('videoPost');
+ next.rerender(<I18nProvider><Workbench {...props}/></I18nProvider>);
+ fireEvent.click(screen.getByRole('tab',{name:'Post-Processing'}));
+ await waitFor(()=>expect((document.querySelector('[data-tve-post="loopEnabled"]') as HTMLInputElement).disabled).toBe(false));
+ fireEvent.click(document.querySelector('[data-tve-post="loopEnabled"]')!);
+ expect(screen.getByRole('button',{name:'Run'})).toHaveProperty('disabled',true); // RIFE needs a model.
+ expect([...document.querySelectorAll('[data-tve-post="loopModel"] option')].map(o=>o.getAttribute('value'))).not.toContain('rife49.pth'); // The loop node lists only .safetensors.
+ fireEvent.change(document.querySelector('[data-tve-post="loopModel"]')!,{target:{value:'rife_v4.26.safetensors'}});
+ fireEvent.change(document.querySelector('[data-tve-post="loopAudio"]')!,{target:{value:'beat'}});
+ next.rerender(<I18nProvider><Workbench {...props} planVisible/></I18nProvider>);
+ expect(JSON.parse(document.querySelector('[data-plan-intent]')!.textContent!).videoPost).toEqual({loop:{backend:'rife',model:'rife_v4.26.safetensors',audio:'beat'}});
+ expect(document.querySelector('[data-plan-stage="tve"]')?.textContent).toContain('Seamless loop rife_v4.26.safetensors beat-aware');
+});
+
 test('H3 latent upscaler options sit in their own menu, keep separate refine steps and reach Run Plan only when changed',async()=>{
  const files=[
   {category:'diffusion_models',name:'h3.safetensors',family:'minimax-h3'},
@@ -5474,4 +5505,63 @@ test('Chat cannot render while Generate is not on text-to-image, and says what t
  const onChatStudio=vi.fn();
  render(<I18nProvider><Workbench endpoint={evidence.baseUrl} roots={{models:'/m'}} onChatStudio={onChatStudio}/></I18nProvider>);
  await waitFor(()=>expect(onChatStudio).toHaveBeenLastCalledWith(expect.objectContaining({checkpoint:'a.safetensors',blocked:expect.stringContaining('Switch its pipeline to text-to-image')})));
+});
+test('running jobs show a step-time estimate after two step updates and drop it on completion',async()=>{
+ let clock=0,polls=0;const now=vi.spyOn(Date,'now').mockImplementation(()=>clock);
+ try{
+  const job=heldJob('eta','running');
+  vi.mocked(readCurrentWorkbench).mockResolvedValue(collection([{...job,progress:{value:0,max:10}}]));
+  vi.mocked(pollWorkbench).mockImplementation(async()=>{polls++;if(polls<=2)clock=polls*1000;return collection([polls>=4?{...job,state:'succeeded'}:{...job,progress:{value:Math.min(polls,2),max:10}}]);});
+  render(<I18nProvider><Workbench endpoint=""/></I18nProvider>);
+  await waitFor(()=>expect(document.querySelector('.wb-shown .empty-note')?.textContent).toContain('1/10'),{timeout:4000});
+  expect(document.querySelector('[data-step-eta]')).toBeNull();
+  await waitFor(()=>expect(document.querySelector('[data-job-id="eta"]')?.textContent).toContain('2/10 · ~8 sec left'),{timeout:4000});
+  expect(document.querySelector('.wb-shown .empty-note')?.textContent).toContain('2/10 · ~8 sec left');
+  await waitFor(()=>expect(document.querySelector('[data-job-id="eta"] [data-state]')?.getAttribute('data-state')).toBe('succeeded'),{timeout:4000});
+  expect(document.querySelector('[data-step-eta]')).toBeNull();
+ }finally{now.mockRestore();}
+});
+const navJobs=()=>[
+ {...heldJob('pair','succeeded'),outputRoot:'/out',outputs:[{filename:'one.png',subfolder:'raw',type:'output' as const,role:'processed' as const},{filename:'two.png',subfolder:'raw',type:'output' as const,role:'original' as const}]},
+ {...heldJob('clip','succeeded'),outputRoot:'/out',outputs:[{filename:'clip.mp4',subfolder:'',type:'output' as const}]},
+ {...heldJob('last','succeeded'),outputRoot:'/out',outputs:[{filename:'c.png',subfolder:'',type:'output' as const}]}];
+test('full view steps through recent image results in queue order, skips video, stops at the ends and leaves the draft alone',async()=>{
+ vi.mocked(readCurrentWorkbench).mockResolvedValue(collection(navJobs()));
+ render(<I18nProvider><Workbench endpoint="http://new:7802/"/></I18nProvider>);
+ fireEvent.change(screen.getByLabelText('Prompt'),{target:{value:'keep'}});
+ await waitFor(()=>expect(document.querySelector('.wb-shown img')?.getAttribute('src')).toContain('/out/c.png'));
+ clickMedia(document.querySelector<HTMLImageElement>('.wb-shown img')!);
+ const src=()=>document.querySelector('.wb-viewer img')?.getAttribute('src'),name=()=>document.querySelector('.wb-viewer-name')!.textContent;
+ expect(name()).toContain('1 / 3');expect(screen.getByRole('button',{name:'Previous picture'})).toHaveProperty('disabled',true);
+ fireEvent.keyDown(window,{key:'ArrowLeft'});expect(src()).toContain('/out/c.png');
+ fireEvent.keyDown(document.querySelector('#run-positive')!,{key:'ArrowRight'});expect(src()).toContain('/out/c.png');
+ fireEvent.keyDown(window,{key:'ArrowRight'});expect(src()).toContain('/out/raw/one.png');expect(name()).toContain('2 / 3');
+ fireEvent.click(screen.getByRole('button',{name:'Next picture'}));expect(src()).toContain('/out/raw/two.png');
+ expect(screen.getByRole('button',{name:'Next picture'})).toHaveProperty('disabled',true);
+ fireEvent.keyDown(window,{key:'ArrowRight'});expect(src()).toContain('/out/raw/two.png');
+ fireEvent.keyDown(window,{key:'Escape'});expect(document.querySelector('.wb-viewer')).toBeNull();
+ expect((screen.getByLabelText('Prompt') as HTMLTextAreaElement).value).toBe('keep');
+ expect(runWorkbenchJob).not.toHaveBeenCalled();expect(uploadInput).not.toHaveBeenCalled();expect(uploadMask).not.toHaveBeenCalled();
+});
+test('Export without metadata saves a clean copy from the queue menu and preview toolbar; cancel is silent, errors show',async()=>{
+ const job=navJobs()[2];
+ vi.mocked(readCurrentWorkbench).mockResolvedValue(collection([job]));
+ let reply:()=>Promise<unknown>=async()=>({path:'/save/c.png',size:3});
+ vi.mocked(invoke).mockImplementation(async(command)=>command==='native_media_export_clean'?reply():command==='native_media_star_status'?{starred:false,unavailable:null}:{entries:[],truncated:false});
+ const view=render(<I18nProvider><Workbench endpoint="http://new:7802/"/></I18nProvider>);
+ await waitFor(()=>expect(document.querySelector('[data-job-id="last"]')).not.toBeNull());
+ fireEvent.contextMenu(document.querySelector('[data-job-id="last"] .wb-queue-select')!);
+ const item=screen.getByRole('menuitem',{name:'Export without metadata…'});
+ expect(item.getAttribute('title')).toContain('the original is unchanged');fireEvent.click(item);
+ await waitFor(()=>expect(invoke).toHaveBeenCalledWith('native_media_export_clean',{path:'/out/c.png',title:'Export without metadata'}));
+ await screen.findByText('Saved a copy without metadata: /save/c.png');
+ reply=async()=>null;const toolbar=()=>document.querySelector<HTMLButtonElement>('[data-media-export-clean]')!;
+ fireEvent.click(toolbar());
+ await waitFor(()=>expect(vi.mocked(invoke).mock.calls.filter(c=>c[0]==='native_media_export_clean')).toHaveLength(2));
+ expect(document.querySelector('.wb-more-feedback')).toBeNull();
+ reply=async()=>{throw new Error('disk full');};fireEvent.click(toolbar());
+ await screen.findByText('Export without metadata failed: disk full');
+ vi.mocked(isTauri).mockReturnValue(false);view.rerender(<I18nProvider><Workbench endpoint="http://new:7802/"/></I18nProvider>);
+ expect(toolbar().disabled).toBe(true);expect(toolbar().title).toBe('Exporting without metadata requires a local file in the desktop app.');
+ expect(runWorkbenchJob).not.toHaveBeenCalled();
 });

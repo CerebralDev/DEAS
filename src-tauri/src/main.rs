@@ -153,6 +153,7 @@ fn main() {
             deas::native_media_thumbnail,
             deas::native_media_paste,
             deas::native_media_copy_in,
+            deas::native_media_export_clean,
             deas::native_media_reference_thumbnail,
             deas::native_media_reveal,
             deas::native_media_metadata,

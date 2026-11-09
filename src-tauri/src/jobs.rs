@@ -1526,6 +1526,19 @@ impl Jobs {
             let split = diffusion.is_object();
             let video = crate::jobs_video::is_video(&intent);
             if video { crate::jobs_video::validate_preview_capability(&intent, allow)?; }
+            if video
+                && !crate::jobs_video_post::is_enhance(&intent)
+                && intent.get("videoPost").is_some()
+                && !allow["nodes"].as_array().is_some_and(|n| n.contains(&json!("DEAS_VideoPostprocessGate")))
+            {
+                return Err("Video post-processing requires the DEAS baseline-first lazy gate and a video saver with a filename output. Update/reopen the owned backend or disable post-processing; unsupported external backends cannot run it".into());
+            }
+            if video
+                && intent["videoPost"].get("loop").is_some()
+                && !allow["nodes"].as_array().is_some_and(|n| n.contains(&json!("DaSiWa_SeamlessLoop")))
+            {
+                return Err("Seamless loop requires DaSiWa_SeamlessLoop with audio, frame_rate and audio_loop inputs (DaSiWa node pack 0.5.41 or newer). Update ComfyUI and the node packs via Backend, or turn Seamless loop off".into());
+            }
             let music = crate::jobs_music::is_music(&intent);
             let sam3 = crate::jobs_sam3::is_sam3(&intent);
             if !video && !music && !sam3 {

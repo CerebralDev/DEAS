@@ -27,6 +27,11 @@ from app.assets.manager import default_asset_manager
 server.PromptServer(loop, default_asset_manager())  # custom nodes register routes on PromptServer.instance at import time
 import nodes, execution
 loop.run_until_complete(nodes.init_extra_nodes(init_custom_nodes=True))
+# The DEAS adapter as this checkout ships it (the backend's deployed copy may predate it).
+import importlib.util
+adapter_spec = importlib.util.spec_from_file_location('deas_image_postprocess', Path(__file__).resolve().parents[1] / 'src-tauri/src/image_postprocess.py')
+adapter = importlib.util.module_from_spec(adapter_spec); adapter_spec.loader.exec_module(adapter)
+nodes.NODE_CLASS_MAPPINGS.update(adapter.NODE_CLASS_MAPPINGS)
 graphs = json.loads(GRAPHS.read_text(encoding='utf-8'))
 first = lambda kind: (folder_paths.get_filename_list(kind) or ['MISSING'])[0]
 pick = {'unet': [n for n in folder_paths.get_filename_list('diffusion_models')], 'te': folder_paths.get_filename_list('text_encoders'), 'vae': folder_paths.get_filename_list('vae'), 'img': folder_paths.get_filename_list('input') if 'input' in folder_paths.folder_names_and_paths else [], 'lup': folder_paths.get_filename_list('latent_upscale_models')}

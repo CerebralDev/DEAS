@@ -4,12 +4,13 @@ import { StarMediaButton } from '../media/StarMediaButton';
 import type { MediaItem } from '../../lib/media';
 import { zoomAt, type View } from './imageEditor';
 
-/** Full-window picture view: wheel zooms at the cursor, drag pans, edge-fit/100 %, backdrop click, Escape or ✕ closes. Read-only. */
-export function ImageViewer({src,alt,onClose,item,onMoved}:{src:string;alt:string;onClose:()=>void;item?:MediaItem;onMoved?:(item:MediaItem)=>void}){
+/** Full-window picture view: wheel zooms at the cursor, drag pans, edge-fit/100 %, backdrop click, Escape or ✕ closes; Left/Right step through `position` siblings. Read-only. */
+export function ImageViewer({src,alt,onClose,item,onMoved,onPrev,onNext,position}:{src:string;alt:string;onClose:()=>void;item?:MediaItem;onMoved?:(item:MediaItem)=>void;onPrev?:()=>void;onNext?:()=>void;position?:{index:number;total:number}}){
  const {t}=useI18n();
  const [relocated,setRelocated]=useState<MediaItem|null>(null);
- useEffect(()=>setRelocated(null),[src]);
- const box=useRef<HTMLDivElement>(null);const close=useRef(onClose);close.current=onClose;
+ // A different picture refits; a star relocation of the same picture keeps the current zoom.
+ useEffect(()=>{if(relocated?.src!==src){setSize(null);setView(null);}setRelocated(null);},[src]); // eslint-disable-line react-hooks/exhaustive-deps
+ const box=useRef<HTMLDivElement>(null);const close=useRef(onClose);close.current=onClose;const step=useRef({onPrev,onNext});step.current={onPrev,onNext};
  const [size,setSize]=useState<{width:number;height:number}|null>(null);
  const [view,setView]=useState<View|null>(null);
  const dragged=useRef(false),stopPan=useRef<(()=>void)|null>(null);
@@ -20,7 +21,8 @@ export function ImageViewer({src,alt,onClose,item,onMoved}:{src:string;alt:strin
  useEffect(()=>{
   const el=box.current;if(!el)return;
   const wheel=(e:WheelEvent)=>{e.preventDefault();const r=el.getBoundingClientRect();setView(v=>v&&zoomAt(v,{x:e.clientX-r.left,y:e.clientY-r.top},v.scale*Math.exp(-e.deltaY*.001),zoomLimit.current));};
-  const key=(e:KeyboardEvent)=>{if(e.key==='Escape')close.current();};
+  const key=(e:KeyboardEvent)=>{if(e.key==='Escape')close.current();
+   else if((e.key==='ArrowLeft'||e.key==='ArrowRight')&&!e.altKey&&!e.ctrlKey&&!e.metaKey&&!e.shiftKey&&!(e.target instanceof Element&&e.target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])'))){const go=e.key==='ArrowLeft'?step.current.onPrev:step.current.onNext;if(go){e.preventDefault();go();}}};
   el.addEventListener('wheel',wheel,{passive:false});window.addEventListener('keydown',key);
   return()=>{el.removeEventListener('wheel',wheel);window.removeEventListener('keydown',key);stopPan.current?.();};
  },[]);
@@ -39,7 +41,9 @@ export function ImageViewer({src,alt,onClose,item,onMoved}:{src:string;alt:strin
   }}>
   <div className="wb-viewer-tools">
    <StarMediaButton item={relocated??item??{name:alt,src,media:'image'}} onMoved={next=>{setRelocated(next);onMoved?.(next);}}/>
-   <span className="wb-viewer-name">{alt}{view&&<> · {Math.round(view.scale*100)} %</>}</span>
+   {position&&<button type="button" data-viewer-prev aria-label={t('studio.run.viewer.prev')} title={t('studio.run.viewer.prev')} disabled={!onPrev} onClick={onPrev}>‹</button>}
+   <span className="wb-viewer-name">{position&&<>{position.index+1} / {position.total} · </>}{alt}{view&&<> · {Math.round(view.scale*100)} %</>}</span>
+   {position&&<button type="button" data-viewer-next aria-label={t('studio.run.viewer.next')} title={t('studio.run.viewer.next')} disabled={!onNext} onClick={onNext}>›</button>}
    <button type="button" aria-label={t('studio.editor.zoomOut')} onClick={()=>zoom(s=>s/1.25)}>−</button>
    <button type="button" onClick={fit}>{t('studio.editor.fit')}</button>
    <button type="button" onClick={()=>zoom(()=>1)}>{t('studio.editor.actual')}</button>

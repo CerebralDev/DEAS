@@ -48,7 +48,7 @@ export function TveBackendEnhance({ endpoint, source, disabled = false }: { endp
   }, [job?.id, job?.state]); // eslint-disable-line react-hooks/exhaustive-deps
   const videoPost = toVideoPost(tve);
   const fps = source ? source.fpsNumerator / source.fpsDenominator : undefined;
-  const ready = !!source?.sourceId && !!videoPost && !!endpoint.trim() && isTauri() && !busy && !disabled && audioEnhance.ready && !(tve.frameGen && tve.engine === 'rife' && !tve.rifeModel);
+  const ready = !!source?.sourceId && !!videoPost && !!endpoint.trim() && isTauri() && !busy && !disabled && audioEnhance.ready && !(tve.frameGen && tve.engine === 'rife' && !tve.rifeModel) && !(tve.loop && tve.loopBackend === 'rife' && !tve.loopModel);
   async function run() {
     if (!ready || !source?.sourceId || !videoPost) return;
     const audio = audioEnhance.intent ? { ...audioEnhance.intent } : undefined;

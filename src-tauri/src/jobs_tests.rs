@@ -1569,6 +1569,107 @@ async fn video_prepare_checks_every_graph_node_and_reads_gifs_outputs() {
 }
 
 #[tokio::test]
+async fn video_postprocess_prepare_requires_the_baseline_first_gate() {
+    let plain = crate::jobs_video::tests::ltx();
+    let mut post = plain.clone();
+    post["videoPost"] = json!({"upscaleModel":"2x-Sharp.safetensors"});
+    let graph = compile(&post).unwrap();
+    let mut all = json!({"UNETLoader":{"input":{"required":{"unet_name":[["LTX2/ltx.safetensors"]]}}},
+        "CLIPLoader":{"input":{"required":{"clip_name":[["gemma_3_12B_it_fp8.safetensors","ltx-2.3_text_projection_bf16.safetensors"]],"type":[["ltxv"]]}}},
+        "VAELoader":{"input":{"required":{"vae_name":[["LTX2/video_vae.safetensors","LTX2/audio_vae.safetensors"]]}}},
+        "DualCLIPLoader":{"input":{"required":{"clip_name1":[["gemma_3_12B_it_fp8.safetensors","ltx-2.3_text_projection_bf16.safetensors"]],"type":[["ltxv"]]}}},
+        "KSampler":{"input":{"required":{"sampler_name":[["euler_cfg_pp"]],"scheduler":[["linear_quadratic"]]}}},
+        "UpscaleModelLoader":{"input":{"required":{"model_name":["COMBO",{"multiselect":false,"options":["2x-Sharp.safetensors"]}]}}},
+        "DaSiWa_EnhancedVideoCombine":{"output":["IMAGE","STRING"]},
+        "DEAS_VideoPostprocessGate":{"input":{"required":{"baseline":["IMAGE,STRING"],"image":["IMAGE",{"lazy":true}]},"optional":{"audio":["AUDIO",{"lazy":true}]}},"output":["IMAGE","AUDIO"]}});
+    for n in graph.as_object().unwrap().values() {
+        let name = n["class_type"].as_str().unwrap();
+        if all.get(name).is_none() {
+            all[name] = json!({});
+        }
+    }
+    for compatible in [true, false] {
+        let mut info = all.clone();
+        if !compatible {
+            // A saver without the filename socket cannot prove the baseline finished.
+            info["DaSiWa_EnhancedVideoCombine"]["output"] = json!(["IMAGE"]);
+        }
+        let (base, task) = server(move |_, _| (200, info.to_string())).await;
+        let jobs = Jobs::default();
+        assert!(jobs.prepare(base.clone(), plain.clone()).await.is_ok());
+        let result = jobs.prepare(base, post.clone()).await;
+        task.abort();
+        if compatible {
+            let g = &result.unwrap()["graph"];
+            assert_eq!(g["PG"]["inputs"]["baseline"], json!(["B7", 1]));
+            assert_eq!(g["PG"]["inputs"]["image"], json!(["PM", 0]));
+            assert_eq!(g["7"]["inputs"]["images"], json!(["PG", 0]));
+        } else {
+            assert!(result.unwrap_err().contains("baseline-first lazy gate"));
+        }
+    }
+}
+
+#[tokio::test]
+async fn seamless_loop_prepare_requires_the_audio_aware_node_and_its_model() {
+    let mut post = crate::jobs_video::tests::ltx();
+    post["videoPost"] =
+        json!({"loop":{"backend":"rife","model":"rife_v4.26.safetensors","audio":"crossfade"}});
+    let graph = compile(&post).unwrap();
+    let new_loop = json!({"input":{"required":{"images":["IMAGE"]},"optional":{"audio":["AUDIO"],"frame_rate":["FLOAT"],
+        "audio_loop":[["Crossfade","Beat-aware"]]}},"output":["IMAGE","AUDIO"]});
+    let mut all = json!({"UNETLoader":{"input":{"required":{"unet_name":[["LTX2/ltx.safetensors"]]}}},
+        "CLIPLoader":{"input":{"required":{"clip_name":[["gemma_3_12B_it_fp8.safetensors","ltx-2.3_text_projection_bf16.safetensors"]],"type":[["ltxv"]]}}},
+        "VAELoader":{"input":{"required":{"vae_name":[["LTX2/video_vae.safetensors","LTX2/audio_vae.safetensors"]]}}},
+        "DualCLIPLoader":{"input":{"required":{"clip_name1":[["gemma_3_12B_it_fp8.safetensors","ltx-2.3_text_projection_bf16.safetensors"]],"type":[["ltxv"]]}}},
+        "KSampler":{"input":{"required":{"sampler_name":[["euler_cfg_pp"]],"scheduler":[["linear_quadratic"]]}}},
+        "FrameInterpolationModelLoader":{"input":{"required":{"model_name":[["rife_v4.26.safetensors"]]}}},
+        "DaSiWa_EnhancedVideoCombine":{"output":["IMAGE","STRING"]},
+        "DaSiWa_SeamlessLoop":new_loop,
+        "DEAS_VideoPostprocessGate":{"input":{"required":{"baseline":["IMAGE,STRING"],"image":["IMAGE",{"lazy":true}]},"optional":{"audio":["AUDIO",{"lazy":true}]}},"output":["IMAGE","AUDIO"]}});
+    for n in graph.as_object().unwrap().values() {
+        let name = n["class_type"].as_str().unwrap();
+        if all.get(name).is_none() {
+            all[name] = json!({});
+        }
+    }
+    for case in ["new", "old", "noModel"] {
+        let mut info = all.clone();
+        match case {
+            // Installed 0.5.40 pack: IMAGE in/out only.
+            "old" => {
+                info["DaSiWa_SeamlessLoop"] =
+                    json!({"input":{"required":{"images":["IMAGE"]}},"output":["IMAGE"]})
+            }
+            "noModel" => {
+                info["FrameInterpolationModelLoader"]["input"]["required"]["model_name"] =
+                    json!([["film.pth"]])
+            }
+            _ => {}
+        }
+        let (base, task) = server(move |_, _| (200, info.to_string())).await;
+        let result = Jobs::default().prepare(base, post.clone()).await;
+        task.abort();
+        match case {
+            "new" => {
+                let g = &result.unwrap()["graph"];
+                assert_eq!(g["LP"]["inputs"]["audio"], json!(["AD", 0]));
+                assert_eq!(g["7"]["inputs"]["audio"], json!(["PG", 1]));
+            }
+            "old" => {
+                let e = result.unwrap_err();
+                assert!(
+                    e.contains("DaSiWa_SeamlessLoop")
+                        && e.contains("Update ComfyUI and the node packs via Backend"),
+                    "{e}"
+                );
+            }
+            _ => assert!(result.unwrap_err().contains("rife_v4.26.safetensors")),
+        }
+    }
+}
+
+#[tokio::test]
 async fn music_prepare_dispatches_without_image_fallbacks_and_reads_audio_outputs() {
     let t2m = crate::jobs_music::tests::full();
     let cover: Value =
@@ -2847,7 +2948,7 @@ fn upscale_model_runs_on_the_source_before_the_exact_resize() {
 fn image_postprocess_nodes() -> Value {
     let mut info = nodes();
     info["SaveImage"]["output"] = json!(["IMAGE"]);
-    info["DEAS_ImagePostprocessGate"] = json!({"input":{"required":{"baseline":["IMAGE,STRING"],"image":["IMAGE",{"lazy":true}]}},"output":["IMAGE"]});
+    info["DEAS_ImagePostprocessGate"] = json!({"input":{"required":{"baseline":["IMAGE,STRING"],"image":["IMAGE",{"lazy":true}]},"optional":{"audio":["AUDIO",{"lazy":true}]}},"output":["IMAGE","AUDIO"]});
     info
 }
 

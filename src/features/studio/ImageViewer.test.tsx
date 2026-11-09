@@ -41,3 +41,25 @@ test('dragging the picture onto the backdrop does not dismiss the viewer',()=>{
  fireEvent.click(box);expect(close).not.toHaveBeenCalled();
  fireEvent.click(box);expect(close).toHaveBeenCalledTimes(1);
 });
+test('Left/Right step through siblings, stop at the ends, skip text fields and modifiers; Escape still closes',()=>{
+ const close=vi.fn(),prev=vi.fn(),next=vi.fn();
+ const view=render(<I18nProvider><input data-outside/><ImageViewer src="a.png" alt="a" onClose={close} onNext={next} position={{index:0,total:2}}/></I18nProvider>);
+ expect(document.querySelector('.wb-viewer-name')!.textContent).toContain('1 / 2');
+ expect(screen.getByRole('button',{name:'Previous picture'})).toHaveProperty('disabled',true);
+ fireEvent.keyDown(window,{key:'ArrowLeft'});expect(prev).not.toHaveBeenCalled();
+ fireEvent.keyDown(window,{key:'ArrowRight',ctrlKey:true});fireEvent.keyDown(document.querySelector('[data-outside]')!,{key:'ArrowRight'});expect(next).not.toHaveBeenCalled();
+ fireEvent.keyDown(window,{key:'ArrowRight'});expect(next).toHaveBeenCalledTimes(1);
+ view.rerender(<I18nProvider><ImageViewer src="b.png" alt="b" onClose={close} onPrev={prev} position={{index:1,total:2}}/></I18nProvider>);
+ expect(screen.getByRole('button',{name:'Next picture'})).toHaveProperty('disabled',true);
+ fireEvent.keyDown(window,{key:'ArrowRight'});expect(next).toHaveBeenCalledTimes(1);
+ fireEvent.click(screen.getByRole('button',{name:'Previous picture'}));fireEvent.keyDown(window,{key:'ArrowLeft'});expect(prev).toHaveBeenCalledTimes(2);
+ fireEvent.keyDown(window,{key:'Escape'});expect(close).toHaveBeenCalledTimes(1);
+});
+test('a new picture refits instead of keeping the previous zoom',()=>{
+ const close=vi.fn();const view=render(<I18nProvider><ImageViewer src="a.png" alt="a" onClose={close}/></I18nProvider>);
+ const load=(w:number,h:number)=>{const image=screen.getByRole('dialog').querySelector('img')!;Object.defineProperties(image,{naturalWidth:{value:w,configurable:true},naturalHeight:{value:h,configurable:true}});fireEvent.load(image);return image;};
+ load(100,50);fireEvent.click(screen.getByRole('button',{name:'100%'}));
+ view.rerender(<I18nProvider><ImageViewer src="b.png" alt="b" onClose={close}/></I18nProvider>);
+ expect(screen.getByRole('dialog').querySelector('img')!.style.visibility).toBe('hidden');
+ expect(load(100,50).style.transform).toContain('scale(8)');
+});

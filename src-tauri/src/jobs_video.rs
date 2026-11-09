@@ -1114,20 +1114,40 @@ fn baseline_combine(
     g["B7"] = saver;
 }
 
-/// Optional TVE chain after the decode: returns (combine images, combine frame rate).
-fn post(g: &mut Value, images: Value, frame_rate: Value, i: &Value) -> (Value, Value) {
+/// Optional TVE chain after the decode: returns (combine images, combine frame rate, combine audio).
+fn post(
+    g: &mut Value,
+    images: Value,
+    frame_rate: Value,
+    audio: Option<Value>,
+    i: &Value,
+) -> (Value, Value, Option<Value>) {
     match i.get("videoPost") {
         Some(p) => {
+            let looped = p.get("loop").is_some();
+            let (images, audio) =
+                crate::jobs_video_post::seamless_loop(g, images, frame_rate.clone(), audio, p);
             let out = crate::jobs_video_post::chain(g, images, p);
+            // The whole chain (incl. its model loaders) sits behind the lazy input, so B7 (always
+            // present with videoPost) is encoded before any post node starts.
+            g["PG"] = json!({"class_type":"DEAS_VideoPostprocessGate","inputs":{"baseline":["B7",1],"image":out}});
+            // Looped audio also passes the gate, else saver 7 would pull LP ahead of B7.
+            let audio = match audio {
+                Some(a) if looped => {
+                    g["PG"]["inputs"]["audio"] = a;
+                    Some(json!(["PG", 1]))
+                }
+                a => a,
+            };
             let m = crate::jobs_video_post::multiplier(p);
             let fps = if m > 1 {
                 json!(i["frameRate"].as_f64().unwrap() * m as f64)
             } else {
                 frame_rate
             };
-            (out, fps)
+            (json!(["PG", 0]), fps, audio)
         }
-        None => (images, frame_rate),
+        None => (images, frame_rate, audio),
     }
 }
 
@@ -1294,8 +1314,14 @@ fn ltx(i: &Value) -> Value {
     decode(&mut g, "6", video, json!(["V", 0]), i);
     g["AD"] =
         json!({"class_type":"LTXVAudioVAEDecode","inputs":{"samples":audio,"audio_vae":["AV",0]}});
-    let (images, fps) = post(&mut g, json!(["6", 0]), i["frameRate"].clone(), i);
-    combine(&mut g, images, Some(json!(["AD", 0])), fps, i);
+    let (images, fps, audio) = post(
+        &mut g,
+        json!(["6", 0]),
+        i["frameRate"].clone(),
+        Some(json!(["AD", 0])),
+        i,
+    );
+    combine(&mut g, images, audio, fps, i);
     if i.get("latentUpscale").is_some() {
         baseline_combine(
             &mut g,
@@ -1371,8 +1397,8 @@ fn wan(i: &Value) -> Result<Value, String> {
     g["KH"] = sampler(json!(["SH", 0]), json!(["W", 2]), true);
     g["KL"] = sampler(json!(["SL", 0]), json!(["KH", 0]), false);
     decode(&mut g, "6", json!(["KL", 0]), json!(["V", 0]), i);
-    let (images, fps) = post(&mut g, json!(["6", 0]), i["frameRate"].clone(), i);
-    combine(&mut g, images, None, fps, i);
+    let (images, fps, audio) = post(&mut g, json!(["6", 0]), i["frameRate"].clone(), None, i);
+    combine(&mut g, images, audio, fps, i);
     if needs_post_baseline(i) {
         baseline_combine(&mut g, json!(["6", 0]), None, i["frameRate"].clone(), i);
     }
@@ -1480,8 +1506,14 @@ fn h3(i: &Value) -> Value {
     // Segment Prepare/Decode serve both Director output modes and are plain decode without capture.
     g["SP"] = json!({"class_type":"DaSiWaH3ContinuitySegmentPrepare","inputs":{"sampled":["5",0],"context":["G",2]}});
     g["SD"] = json!({"class_type":"DaSiWaH3ContinuitySegmentDecode","inputs":{"latent":["SP",0],"vae":["V",0],"audio_vae":["AV",0],"context":["SP",1]}});
-    let (images, fps) = post(&mut g, json!(["SD", 0]), json!(["D", 8]), i);
-    combine(&mut g, images, Some(json!(["SD", 1])), fps, i);
+    let (images, fps, audio) = post(
+        &mut g,
+        json!(["SD", 0]),
+        json!(["D", 8]),
+        Some(json!(["SD", 1])),
+        i,
+    );
+    combine(&mut g, images, audio, fps, i);
     if needs_post_baseline(i) {
         baseline_combine(
             &mut g,

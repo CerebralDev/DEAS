@@ -134,7 +134,7 @@ fn check_sidecars(source: &Path) -> Result<(), String> {
     }
     Ok(())
 }
-fn open_media(source: &Path) -> Result<std::fs::File, String> {
+pub(crate) fn open_media(source: &Path) -> Result<std::fs::File, String> {
     #[cfg(target_os = "linux")]
     {
         use std::os::unix::fs::OpenOptionsExt;

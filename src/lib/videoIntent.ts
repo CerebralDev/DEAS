@@ -33,7 +33,11 @@ export const rtxQualities=['Low','Medium','High','Ultra'] as const;
 export const rtxUpscaleModes=['VSR','High Bitrate','Streaming Medium','Streaming Ultra'] as const;
 export const frameGenModes=['LOW','MEDIUM','HIGH'] as const;
 export type RtxQuality=typeof rtxQualities[number];
+export const loopAudios=['crossfade','beat'] as const;
+export type LoopAudio=typeof loopAudios[number];
 export interface VideoPost {
+ /** DaSiWa Seamless Loop, first in the chain: trims the frames to a loop at unchanged fps and loops the audio. */
+ loop?:{ backend:'rife'; model:string; audio:LoopAudio }|{ backend:'rtx'; audio:LoopAudio };
  upscaleModel?:string;
  /** RTX disk fallback (`use_mmap`) for both RTX nodes; only for batches that exceed available RAM. */
  useMmap?:boolean;
@@ -44,7 +48,9 @@ const multiplierOk=(m:unknown)=>Number.isInteger(m)&&(m as number)>=2&&(m as num
 const chunkFramesOk=(n:unknown)=>Number.isInteger(n)&&(n as number)>=1&&(n as number)<=1024;
 export const isVideoPost=(v:unknown):v is VideoPost=>{
  const p=v as VideoPost;
- if(!p||typeof p!=='object'||!Object.keys(p).length||Object.keys(p).some(k=>!['upscaleModel','rtx','frameGeneration','useMmap'].includes(k)))return false;
+ if(!p||typeof p!=='object'||!Object.keys(p).length||Object.keys(p).some(k=>!['upscaleModel','rtx','frameGeneration','useMmap','loop'].includes(k)))return false;
+ const l=p.loop;
+ if(l!==undefined&&!(l&&inList(loopAudios,l.audio)&&(l.backend==='rtx'||(l.backend==='rife'&&typeof l.model==='string'))))return false;
  if(p.upscaleModel!==undefined&&typeof p.upscaleModel!=='string')return false;
  if(p.useMmap!==undefined&&typeof p.useMmap!=='boolean')return false;
  const r=p.rtx;

@@ -20,6 +20,7 @@ export function activePost(p: { video: boolean; audio: boolean; latent: boolean;
   const audio = p.audio && p.audioMode !== 'off' ? ['audio'] : [];
   if (p.video) return [
     ...(p.latent ? ['latent'] : []),
+    ...(p.tve.loop ? ['loop'] : []),
     ...(p.tve.upscaleModel ? ['upscale'] : []),
     ...(['denoise', 'deblur', 'rtxUpscale', 'frameGen'] as const).filter(k => p.tve[k]),
     ...audio,

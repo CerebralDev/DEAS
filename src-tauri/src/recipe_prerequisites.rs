@@ -13,8 +13,9 @@ const REQUIRED_NODES: [&str; 6] = [
 ];
 /// Image-to-image (`LoadImage`, `VAEEncode`), split diffusion-model loading and the DaSiWa
 /// Civitai-metadata saver; their absence blocks only the recipe variant that needs them.
-const OPTIONAL_NODES: [&str; 36] = [
+const OPTIONAL_NODES: [&str; 37] = [
     "DEAS_ImagePostprocessGate",
+    "DEAS_VideoPostprocessGate",
     "TextEncodeQwenImage21",
     "DEAS_ImagePromptEncode",
     "EmptyFlux2LatentImage",
@@ -160,9 +161,36 @@ fn option(s: &str) -> bool {
 }
 
 // Advertise the gate only with the effective saver's post-save socket and our lazy ABI.
+fn gate_abi(gate: &Value) -> bool {
+    gate["output"] == json!(["IMAGE", "AUDIO"])
+        && gate["input"]["required"]
+            == json!({"baseline":["IMAGE,STRING"],"image":["IMAGE",{"lazy":true}]})
+        && gate["input"]["optional"] == json!({"audio":["AUDIO",{"lazy":true}]})
+}
+
+// Seamless loop only from node packs whose loop also maps the audio (DaSiWa nodes 0.5.41+).
+fn seamless_loop_ready(nodes: &Value) -> bool {
+    let node = &nodes["DaSiWa_SeamlessLoop"];
+    let input = |f: &str| {
+        node["input"]["required"]
+            .get(f)
+            .unwrap_or(&node["input"]["optional"][f])
+    };
+    let modes = input("audio_loop");
+    let modes = if modes[0] == "COMBO" {
+        &modes[1]["options"]
+    } else {
+        &modes[0]
+    };
+    node["output"][1] == "AUDIO"
+        && input("audio")[0] == "AUDIO"
+        && input("frame_rate")[0] == "FLOAT"
+        && crate::jobs_video_post::LOOP_AUDIO
+            .iter()
+            .all(|(_, m)| modes.as_array().is_some_and(|a| a.contains(&json!(m))))
+}
+
 fn image_postprocess_ready(nodes: &Value) -> bool {
-    let gate = &nodes["DEAS_ImagePostprocessGate"];
-    let required = json!({"baseline":["IMAGE,STRING"],"image":["IMAGE",{"lazy":true}]});
     let metadata = nodes.get("DaSiWa_MetadataImageSaver").is_some()
         && nodes.get("DaSiWa_MetadataConfig").is_some();
     let (saver, output) = if metadata {
@@ -170,9 +198,13 @@ fn image_postprocess_ready(nodes: &Value) -> bool {
     } else {
         ("SaveImage", "IMAGE")
     };
-    gate["output"] == json!(["IMAGE"])
-        && gate["input"]["required"] == required
-        && nodes[saver]["output"][0] == output
+    gate_abi(&nodes["DEAS_ImagePostprocessGate"]) && nodes[saver]["output"][0] == output
+}
+
+// The video baseline saver B7 feeds the gate through its `filename` STRING socket.
+fn video_postprocess_ready(nodes: &Value) -> bool {
+    gate_abi(&nodes["DEAS_VideoPostprocessGate"])
+        && nodes["DaSiWa_EnhancedVideoCombine"]["output"][1] == "STRING"
 }
 
 fn preview_input<'a>(nodes: &'a Value, field: &str) -> &'a Value {
@@ -278,7 +310,7 @@ fn parse(base: &reqwest::Url, nodes: &Value) -> Result<Value, String> {
     Ok(json!({
         "baseUrl":base.as_str(), "recipeId":"checkpoint-text-to-image-diagnostic", "version":1,
         "allowlist":{
-            "nodes":REQUIRED_NODES.iter().chain(OPTIONAL_NODES.iter()).chain(SIGMA_NODES.iter()).chain(OPTION_NODES.iter()).chain(crate::jobs_sam3::NODES.iter()).chain(crate::jobs::H3_EDIT_NODES.iter()).chain(crate::jobs_video::VIDEO_NODES.iter()).chain(crate::jobs_video::H3_CONTINUITY_NODES.iter()).chain(crate::jobs_video_post::POST_NODES.iter()).chain(crate::jobs_music::MUSIC_NODES.iter()).chain(crate::jobs_music::ace::NODES.iter()).filter(|name| definitions.contains_key(**name) && (**name != "DEAS_ImagePostprocessGate" || image_postprocess_ready(nodes)) && (**name != "ModelPreviewOverrideKJ" || video_preview_ready(nodes))).collect::<Vec<_>>(),
+            "nodes":REQUIRED_NODES.iter().chain(OPTIONAL_NODES.iter()).chain(SIGMA_NODES.iter()).chain(OPTION_NODES.iter()).chain(crate::jobs_sam3::NODES.iter()).chain(crate::jobs::H3_EDIT_NODES.iter()).chain(crate::jobs_video::VIDEO_NODES.iter()).chain(crate::jobs_video::H3_CONTINUITY_NODES.iter()).chain(crate::jobs_video_post::POST_NODES.iter()).chain(crate::jobs_music::MUSIC_NODES.iter()).chain(crate::jobs_music::ace::NODES.iter()).filter(|name| definitions.contains_key(**name) && (**name != "DEAS_ImagePostprocessGate" || image_postprocess_ready(nodes)) && (**name != "DEAS_VideoPostprocessGate" || video_postprocess_ready(nodes)) && (**name != "ModelPreviewOverrideKJ" || video_preview_ready(nodes)) && (**name != "DaSiWa_SeamlessLoop" || seamless_loop_ready(nodes))).collect::<Vec<_>>(),
             "checkpoints":combo(nodes, "CheckpointLoaderSimple", "ckpt_name")?,
             "loras":combo(nodes, "LoraLoader", "lora_name")?,
             "images":combo(nodes, "LoadImage", "image")?,
@@ -459,7 +491,7 @@ mod tests {
     fn image_postprocess_gate_requires_lazy_abi_and_effective_post_save_socket() {
         let base = reqwest::Url::parse("http://127.0.0.1:8188/").unwrap();
         let mut info = nodes();
-        let gate = json!({"input":{"required":{"baseline":["IMAGE,STRING"],"image":["IMAGE",{"lazy":true}]}},"output":["IMAGE"]});
+        let gate = json!({"input":{"required":{"baseline":["IMAGE,STRING"],"image":["IMAGE",{"lazy":true}]},"optional":{"audio":["AUDIO",{"lazy":true}]}},"output":["IMAGE","AUDIO"]});
         info["DEAS_ImagePostprocessGate"] = gate.clone();
         let listed = |info: &Value| {
             parse(&base, info).unwrap()["allowlist"]["nodes"]
@@ -483,6 +515,11 @@ mod tests {
         }
         info["DEAS_ImagePostprocessGate"]["output"] = json!(["STRING"]);
         assert!(!listed(&info));
+        info["DEAS_ImagePostprocessGate"]["output"] = json!(["IMAGE"]);
+        assert!(!listed(&info)); // Pre-audio adapter: video loops could not pass the gate.
+        info["DEAS_ImagePostprocessGate"] = gate.clone();
+        info["DEAS_ImagePostprocessGate"]["input"]["optional"]["audio"] = json!(["AUDIO"]);
+        assert!(!listed(&info));
         info["DEAS_ImagePostprocessGate"] = gate;
         info["DaSiWa_MetadataImageSaver"] = json!({"output":[]});
         assert!(listed(&info)); // Incomplete metadata pair still selects core.
@@ -497,6 +534,74 @@ mod tests {
             .remove("DEAS_ImagePostprocessGate");
         assert!(!listed(&info));
         assert!(parse(&base, &info).is_ok()); // Plain generation stays available.
+    }
+
+    #[test]
+    fn video_postprocess_gate_requires_lazy_abi_and_video_saver_filename_socket() {
+        let base = reqwest::Url::parse("http://127.0.0.1:8188/").unwrap();
+        let mut info = nodes();
+        let gate = json!({"input":{"required":{"baseline":["IMAGE,STRING"],"image":["IMAGE",{"lazy":true}]},"optional":{"audio":["AUDIO",{"lazy":true}]}},"output":["IMAGE","AUDIO"]});
+        info["DEAS_VideoPostprocessGate"] = gate.clone();
+        let listed = |info: &Value| {
+            parse(&base, info).unwrap()["allowlist"]["nodes"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("DEAS_VideoPostprocessGate"))
+        };
+        assert!(!listed(&info)); // No video saver.
+        info["DaSiWa_EnhancedVideoCombine"] = json!({"output":["IMAGE"]});
+        assert!(!listed(&info)); // Saver without the post-save filename.
+        info["DaSiWa_EnhancedVideoCombine"]["output"] = json!(["IMAGE", "STRING"]);
+        assert!(listed(&info));
+        info["DEAS_VideoPostprocessGate"]["input"]["required"]["image"] = json!(["IMAGE"]);
+        assert!(!listed(&info)); // Lazy ABI is mandatory.
+        info["DEAS_VideoPostprocessGate"] = gate.clone();
+        info["DEAS_VideoPostprocessGate"]["input"]
+            .as_object_mut()
+            .unwrap()
+            .remove("optional");
+        assert!(!listed(&info)); // Audio lazy input is part of the ABI.
+        info["DEAS_VideoPostprocessGate"] = gate;
+        info["DEAS_VideoPostprocessGate"]["output"] = json!(["STRING"]);
+        assert!(!listed(&info));
+    }
+
+    #[test]
+    fn seamless_loop_is_listed_only_with_its_audio_inputs() {
+        let base = reqwest::Url::parse("http://127.0.0.1:8188/").unwrap();
+        let mut info = nodes();
+        let listed = |info: &Value| {
+            parse(&base, info).unwrap()["allowlist"]["nodes"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("DaSiWa_SeamlessLoop"))
+        };
+        // Installed 0.5.40 pack: IMAGE in/out only.
+        info["DaSiWa_SeamlessLoop"] =
+            json!({"input":{"required":{"images":["IMAGE"]}},"output":["IMAGE"]});
+        assert!(!listed(&info));
+        let new = json!({"input":{"required":{"images":["IMAGE"]},"optional":{
+            "model_name":[["rife_v4.26.safetensors"]],"exact_endpoint":["BOOLEAN",{"default":false}],
+            "interpolation_backend":[["RIFE / FILM","RTX Frame Generation"]],
+            "audio":["AUDIO"],"frame_rate":["FLOAT",{"default":0.0}],
+            "audio_loop":[["Crossfade","Beat-aware"],{"default":"Crossfade"}]}},"output":["IMAGE","AUDIO"]});
+        info["DaSiWa_SeamlessLoop"] = new.clone();
+        assert!(listed(&info));
+        info["DaSiWa_SeamlessLoop"]["input"]["optional"]["audio_loop"] =
+            json!(["COMBO",{"options":["Crossfade","Beat-aware"]}]);
+        assert!(listed(&info)); // V3 combo form.
+        for (field, value) in [
+            ("audio_loop", json!([["Crossfade"]])),
+            ("frame_rate", json!(["INT"])),
+            ("audio", json!(["IMAGE"])),
+        ] {
+            info["DaSiWa_SeamlessLoop"] = new.clone();
+            info["DaSiWa_SeamlessLoop"]["input"]["optional"][field] = value;
+            assert!(!listed(&info), "{field}");
+        }
+        info["DaSiWa_SeamlessLoop"] = new;
+        info["DaSiWa_SeamlessLoop"]["output"] = json!(["IMAGE"]);
+        assert!(!listed(&info));
     }
 
     #[test]

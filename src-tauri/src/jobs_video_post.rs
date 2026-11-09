@@ -10,14 +10,17 @@ pub(crate) const RTX_QUALITIES: [&str; 4] = ["Low", "Medium", "High", "Ultra"];
 pub(crate) const RTX_UPSCALE_MODES: [&str; 4] =
     ["VSR", "High Bitrate", "Streaming Medium", "Streaming Ultra"];
 pub(crate) const FRAME_GEN_MODES: [&str; 3] = ["LOW", "MEDIUM", "HIGH"];
-pub(crate) const POST_NODES: [&str; 6] = [
+pub(crate) const POST_NODES: [&str; 7] = [
     "UpscaleModelLoader",
     "ImageUpscaleWithModel",
     "DaSiWa_RTX_UpscalerRefiner",
     "DaSiWa_RTX_FrameGeneration",
     "FrameInterpolationModelLoader",
     "FrameInterpolate",
+    "DaSiWa_SeamlessLoop",
 ];
+pub(crate) const LOOP_AUDIO: [(&str, &str); 2] =
+    [("crossfade", "Crossfade"), ("beat", "Beat-aware")];
 const ENHANCE_FIELDS: [&str; 6] = [
     "recipeId",
     "version",
@@ -47,8 +50,29 @@ fn multiplier_ok(v: &Value) -> bool {
 
 /// `videoPost`: at least one stage; each stage only with the node's own enum/range values.
 pub(crate) fn validate(p: &Value) -> Result<(), String> {
-    if !keys_in(p, &["upscaleModel", "rtx", "frameGeneration", "useMmap"]) {
-        return Err("videoPost needs upscaleModel, rtx or frameGeneration".into());
+    if !keys_in(
+        p,
+        &["upscaleModel", "rtx", "frameGeneration", "useMmap", "loop"],
+    ) {
+        return Err("videoPost needs upscaleModel, rtx, frameGeneration or loop".into());
+    }
+    if let Some(l) = p.get("loop") {
+        let audio = LOOP_AUDIO.iter().any(|(k, _)| l["audio"] == *k);
+        let ok = audio
+            && match l["backend"].as_str() {
+                Some("rife") => {
+                    keys_in(l, &["backend", "model", "audio"])
+                        // The loop node lists only native .safetensors interpolators (core also lists .pth).
+                        && l["model"].as_str().is_some_and(|m| {
+                            comfy_model_name(m) && m.to_ascii_lowercase().ends_with(".safetensors")
+                        })
+                }
+                Some("rtx") => keys_in(l, &["backend", "audio"]),
+                _ => false,
+            };
+        if !ok {
+            return Err("Invalid videoPost.loop: {backend rife, model, audio crossfade|beat} or {backend rtx, audio crossfade|beat}".into());
+        }
     }
     if p.get("useMmap").is_some_and(|v| !v.is_boolean()) {
         return Err("videoPost.useMmap must be a boolean".into());
@@ -117,11 +141,42 @@ pub(crate) fn validate_rtx_hardware(
 ) -> Result<(), String> {
     let post = &intent["videoPost"];
     let rtx = post.get("rtx").is_some_and(|r| !r.is_null())
-        || post["frameGeneration"]["engine"].as_str() == Some("rtx");
+        || post["frameGeneration"]["engine"].as_str() == Some("rtx")
+        || post["loop"]["backend"].as_str() == Some("rtx");
     if rtx && !matches!(backend, Some(crate::install::Backend::Nvidia)) {
-        return Err("videoPost RTX refine/frame generation requires an owned backend installed on an NVIDIA GPU (RTX Video runs on the NVIDIA NGX SDK); AMD and CPU plans keep upscaleModel, RIFE frame interpolation and every other stage".into());
+        return Err("videoPost RTX refine/frame generation/seamless loop requires an owned backend installed on an NVIDIA GPU (RTX Video runs on the NVIDIA NGX SDK); AMD and CPU plans keep upscaleModel, RIFE frame interpolation and every other stage".into());
     }
     Ok(())
+}
+
+/// Seamless loop, first in the chain (fewest frames, `frame_rate` = generation fps): trims to a
+/// loop at unchanged fps and maps `audio` sample-exactly. Returns (images, audio) for the rest;
+/// audio becomes `LP` output 1 only when there is audio (silent videos stay unconnected).
+pub(crate) fn seamless_loop(
+    g: &mut Value,
+    images: Value,
+    frame_rate: Value,
+    audio: Option<Value>,
+    p: &Value,
+) -> (Value, Option<Value>) {
+    let Some(l) = p.get("loop") else {
+        return (images, audio);
+    };
+    let rife = l["backend"] == "rife";
+    let mut inputs = json!({
+        "images":images,"frame_rate":frame_rate,"exact_endpoint":false,
+        "interpolation_backend":if rife {"RIFE / FILM"} else {"RTX Frame Generation"},
+        "audio_loop":LOOP_AUDIO.iter().find(|(k, _)| l["audio"] == *k).map(|(_, v)| *v).unwrap_or("Crossfade")
+    });
+    if rife {
+        inputs["model_name"] = l["model"].clone();
+    }
+    let audio = audio.map(|a| {
+        inputs["audio"] = a;
+        json!(["LP", 1])
+    });
+    g["LP"] = json!({"class_type":"DaSiWa_SeamlessLoop","inputs":inputs});
+    (json!(["LP", 0]), audio)
 }
 
 /// Emits the chain on `images` and returns the processed images link.
@@ -222,9 +277,16 @@ pub(crate) fn compile_enhance(i: &Value) -> Result<Value, String> {
         "SV":{"class_type":"LoadVideo","inputs":{"file":i["sourceVideo"]}},
         "SVC":{"class_type":"GetVideoComponents","inputs":{"video":["SV",0]}},
     });
-    let images = chain(&mut g, json!(["SVC", 0]), &i["videoPost"]);
+    let (images, audio) = seamless_loop(
+        &mut g,
+        json!(["SVC", 0]),
+        i["frameRate"].clone(),
+        Some(json!(["SVC", 1])),
+        &i["videoPost"],
+    );
+    let images = chain(&mut g, images, &i["videoPost"]);
     let fps = i["frameRate"].as_f64().unwrap() * multiplier(&i["videoPost"]) as f64;
-    combine(&mut g, images, Some(json!(["SVC", 1])), json!(fps), i);
+    combine(&mut g, images, audio, json!(fps), i);
     Ok(g)
 }
 
@@ -238,10 +300,10 @@ pub(crate) fn requirements(p: &Value) -> Vec<(&'static str, Vec<&str>)> {
         ),
         (
             "frameInterpolationModels",
-            (p["frameGeneration"]["engine"] == "rife")
-                .then(|| p["frameGeneration"]["model"].as_str())
-                .flatten()
+            [&p["frameGeneration"], &p["loop"]]
                 .into_iter()
+                .filter(|s| s["engine"] == "rife" || s["backend"] == "rife")
+                .filter_map(|s| s["model"].as_str())
                 .collect(),
         ),
     ];
@@ -355,9 +417,16 @@ mod tests {
             json!({"frameGeneration":{"engine":"rife","multiplier":2}}),
             json!({"frameGeneration":{"engine":"rife","multiplier":17,"model":"rife.safetensors"}}),
             json!({"frameGeneration":{"engine":"other","multiplier":2}}),
+            json!({"loop":{"backend":"rife","model":"rife49.pth","audio":"crossfade"}}),
+            json!({"loop":{"backend":"rife","audio":"beat"}}),
+            json!({"loop":{"backend":"rtx","audio":"stretch"}}),
         ] {
             assert!(validate(&bad).is_err(), "{bad}");
         }
+        assert!(validate(
+            &json!({"loop":{"backend":"rife","model":"rife_v4.26.SafeTensors","audio":"beat"}})
+        )
+        .is_ok());
     }
 
     #[test]
@@ -376,6 +445,23 @@ mod tests {
         let names: Vec<_> = requirements(&i["videoPost"]);
         assert!(names.contains(&("upscaleModels", vec!["2x-AnimeSharpV4_RCAN.safetensors"])));
         assert!(names.contains(&("frameInterpolationModels", vec!["rife_v4.26.safetensors"])));
+        // TVE has no baseline gate: the loop takes the source audio and feeds saver 7 directly.
+        let mut looped = i.clone();
+        looped["videoPost"]["loop"] =
+            json!({"backend":"rife","model":"rife_v4.27.safetensors","audio":"crossfade"});
+        let g = compile_enhance(&looped).unwrap();
+        assert_eq!(g["LP"]["inputs"]["images"], json!(["SVC", 0]));
+        assert_eq!(g["LP"]["inputs"]["audio"], json!(["SVC", 1]));
+        assert_eq!(g["LP"]["inputs"]["frame_rate"], 24);
+        assert_eq!(g["PM"]["inputs"]["image"], json!(["LP", 0]));
+        assert_eq!(g["7"]["inputs"]["audio"], json!(["LP", 1]));
+        assert_eq!(
+            requirements(&looped["videoPost"])[1],
+            (
+                "frameInterpolationModels",
+                vec!["rife_v4.26.safetensors", "rife_v4.27.safetensors"]
+            )
+        );
         for (key, value) in [
             ("sourceVideo", json!("sub/clip.mp4")),
             ("frameRate", json!(0)),

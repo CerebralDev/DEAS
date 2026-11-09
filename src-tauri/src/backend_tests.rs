@@ -295,14 +295,21 @@ import sys
 scope = {}
 exec(sys.argv[1], scope)
 Gate = scope['NODE_CLASS_MAPPINGS']['DEAS_ImagePostprocessGate']
+assert scope['NODE_CLASS_MAPPINGS']['DEAS_VideoPostprocessGate'] is Gate
 gate = Gate()
-assert Gate.INPUT_TYPES() == {'required': {'baseline': ('IMAGE,STRING',), 'image': ('IMAGE', {'lazy': True})}}
-assert Gate.RETURN_TYPES == ('IMAGE',)
-image = object()
+assert Gate.INPUT_TYPES() == {'required': {'baseline': ('IMAGE,STRING',), 'image': ('IMAGE', {'lazy': True})}, 'optional': {'audio': ('AUDIO', {'lazy': True})}}
+assert Gate.RETURN_TYPES == ('IMAGE', 'AUDIO')
+image, audio = object(), object()
 for baseline in [object(), 'saved.png']:
+    # Image graphs: audio unconnected (absent kwarg) is never requested.
     assert gate.check_lazy_status(baseline) == ['image']
     assert gate.check_lazy_status(baseline, image) == []
-    assert gate.forward(baseline, image)[0] is image
+    assert gate.forward(baseline, image) == (image, None)
+    # Looped video: connected audio arrives as None until evaluated.
+    assert gate.check_lazy_status(baseline, None, None) == ['image', 'audio']
+    assert gate.check_lazy_status(baseline, image, None) == ['audio']
+    assert gate.check_lazy_status(baseline, image, audio) == []
+    assert gate.forward(baseline, image, audio) == (image, audio)
 "#;
     let result = Command::new("/usr/bin/python3")
         .args(["-c", script, include_str!("image_postprocess.py")])

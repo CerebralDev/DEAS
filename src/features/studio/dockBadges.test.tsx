@@ -19,5 +19,7 @@ test('post counts the stages that run for the current pipeline',()=>{
  expect(activePost(base)).toEqual([]);
  expect(activePost({...base,refine:true,sam:true,latent:true,tve:{...defaultTve,frameGen:true}})).toEqual(['refine','sam']);
  expect(activePost({...base,video:true,audio:true,audioMode:'clean',latent:true,tve:{...defaultTve,upscaleModel:'x.pth',denoise:true,frameGen:true},refine:true})).toEqual(['latent','upscale','denoise','frameGen','audio']);
+ expect(activePost({...base,video:true,audio:false,audioMode:'off',latent:false,tve:{...defaultTve,loop:true}})).toEqual(['loop']);
+ expect(activePost({...base,video:false,audio:false,audioMode:'off',latent:false,tve:{...defaultTve,loop:true}})).toEqual([]);
  expect(activePost({...base,video:true,audio:false,audioMode:'clean'})).toEqual([]);
 });
