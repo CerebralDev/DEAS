@@ -68,7 +68,7 @@ it('uses a frame as the picture to analyse', async () => {
   await screen.findByText(/49 frames/);
   fireEvent.click(document.querySelector('[data-frame-cell="20"]')!);
   fireEvent.click(screen.getByRole('button', { name: 'Use this frame' }));
-  await waitFor(() => expect(onUse).toHaveBeenCalledWith({ name: 'clip-f0021.png', path: 'C:/frames/clip-f0021.png', media: 'image', src: 'asset://C:/frames/clip-f0021.png' }));
+  await waitFor(() => expect(onUse).toHaveBeenCalledWith({ name: 'clip-f0021.png', path: 'C:/frames/clip-f0021.png', media: 'image', src: 'asset://C:/frames/clip-f0021.png' }, 20));
 });
 
 it('sends a frame with whatever Generate offers, refusing what Generate blocks', async () => {
@@ -120,4 +120,53 @@ it('sends every picked frame through a collecting send, in order, and says which
   fireEvent.click(document.querySelector('[data-frame-cell="20"]')!);
   fireEvent.click(screen.getByRole('button', { name: 'Add as reference (4)' }));
   expect(await screen.findByText('Frame 8: Add as reference. It is set in the Generate tab. Not sent: frames 3, 6 already there · frame 10: References are full.')).toBeTruthy();
+});
+
+it('plays the clip with the strip following, and pausing stops on the frame on screen with the exact frame', async () => {
+  const played: number[] = [];
+  const time = new WeakMap<HTMLMediaElement, number>();
+  const proto = HTMLMediaElement.prototype;
+  const saved = { play: proto.play, pause: proto.pause, time: Object.getOwnPropertyDescriptor(proto, 'currentTime') };
+  proto.play = vi.fn(async function (this: HTMLMediaElement) { played.push(time.get(this) ?? 0); });
+  proto.pause = vi.fn();
+  Object.defineProperty(proto, 'currentTime', { configurable: true, get(this: HTMLMediaElement) { return time.get(this) ?? 0; }, set(this: HTMLMediaElement, v: number) { time.set(this, v); } });
+  try {
+    ui();
+    await screen.findByText(/49 frames/);
+    fireEvent.click(document.querySelector('[data-frame-cell="4"]')!);
+    fireEvent.click(screen.getByRole('button', { name: '▶ Play' }));
+    // From the frame on screen: frame 5 at 16 fps, a quarter frame in.
+    await waitFor(() => expect(played).toEqual([4.25 / 16]));
+    expect((document.querySelector('[data-frame-video]') as HTMLVideoElement).hidden).toBe(false);
+    const video = document.querySelector('[data-frame-video]') as HTMLVideoElement;
+    video.currentTime = 30 / 16;
+    await waitFor(() => expect(screen.getByText('Frame 31 / 49 · 0:01.88')).toBeTruthy());
+    const before = calls('native_analysis_frame').length;
+    fireEvent.click(screen.getByRole('button', { name: '❚❚ Pause' }));
+    expect(proto.pause).toHaveBeenCalled();
+    await waitFor(() => expect(calls('native_analysis_frame').slice(before).at(-1)).toEqual({ path: 'E:/out/clip.mp4', index: 30, count: 49 }));
+    expect((document.querySelector('[data-frame-video]') as HTMLVideoElement).hidden).toBe(true);
+    // A clip the player cannot read says so and stays steppable.
+    fireEvent.error(video);
+    expect(await screen.findByText(/cannot be played here/)).toBeTruthy();
+    expect((screen.getByRole('button', { name: '▶ Play' }) as HTMLButtonElement).disabled).toBe(true);
+  } finally {
+    proto.play = saved.play; proto.pause = saved.pause;
+    if (saved.time) Object.defineProperty(proto, 'currentTime', saved.time);
+  }
+});
+
+it('steps with the arrow keys wherever focus is, but not while typing', async () => {
+  ui();
+  await screen.findByText(/49 frames/);
+  fireEvent.keyDown(document.body, { key: 'ArrowRight' });
+  fireEvent.keyDown(document.body, { key: 'ArrowRight', shiftKey: true });
+  expect(screen.getByText('Frame 12 / 49 · 0:00.69')).toBeTruthy();
+  const box = document.body.appendChild(document.createElement('input'));
+  fireEvent.keyDown(box, { key: 'ArrowLeft' });
+  // Space outside the picker presses whatever has focus there; it does not pick.
+  fireEvent.keyDown(document.body, { key: ' ' });
+  expect(screen.getByText('Frame 12 / 49 · 0:00.69')).toBeTruthy();
+  expect(document.querySelector('[data-frame-cell="11"]')!.getAttribute('aria-selected')).toBe('false');
+  box.remove();
 });

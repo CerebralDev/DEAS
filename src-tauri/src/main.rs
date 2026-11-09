@@ -78,6 +78,7 @@ fn main() {
             deas::analysis::native_analysis_overview,
             deas::analysis::native_analysis_setup,
             deas::analysis::native_analysis_cancel,
+            deas::analysis_convert::native_analysis_convert,
             deas::analysis::native_analysis_stage,
             deas::analysis::native_analysis_tag,
             deas::analysis::native_analysis_pick,

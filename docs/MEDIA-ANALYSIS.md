@@ -36,6 +36,15 @@ A list without categories is sorted with DEAS's bundled Danbooru tag table, so c
 
 Something that looks like a tagger but cannot be used is **listed under "Found but cannot be used" with the reason**: PyTorch weights only (e.g. an animetimm folder with `pytorch_model.bin` and no `model.onnx`), an ONNX file in a tagger folder with no tag list beside it, or a tag list in a shape DEAS cannot read. Other ONNX models (a face detector in `models/onnx`) are not taggers and are not listed.
 
+### Converting animetimm checkpoints
+
+ComfyUI's animetimm node keeps its taggers as PyTorch weights (`pytorch_model.bin` or `model.safetensors`), and the Hugging Face repos are gated, so there is often no ONNX file to use. When such a folder also has its `config.json` (naming the timm architecture), `preprocess.json` and `selected_tags.csv`, its "cannot be used" entry offers **Convert to ONNX**, which says what it costs before anything happens:
+
+- It downloads the conversion tools — PyTorch for the CPU, timm, onnx (about 0.3 GB, hash-locked in `src-tauri/src/analysis_convert_requirements*.txt`) — into a throwaway environment. The environment goes after each conversion; the downloaded packages stay in DEAS's uv cache while another checkpoint here is still waiting (so converting a second one downloads nothing) and are removed with the last one.
+- PromptForge's exporter (`src-tauri/src/animetimm_export.py`) builds the copy with WD's input contract inside the graph (BGR flip, NHWC→NCHW, scaling, the checkpoint's own normalisation, sigmoid), so the tagger worker runs it like any WD tagger. It checks the copy against the PyTorch model and keeps it only if they agree.
+- The copy (about the size of the weights: 2.8 GB for ConvNeXtV2-Huge, 0.25 GB for CAFormer-S36) goes to `<analysis runtime>/converted/` with a note of where it came from. **The original folder is only read.** It is then listed as a normal tagger, marked "(converted)", with animetimm's thresholds; it stays usable if the original folder moves.
+- It takes a few minutes and, for ConvNeXtV2-Huge, several GB of memory. *Cancel* stops it at any step and keeps nothing. If the drive is short of space it says how much is needed. Errors go to **Logs**.
+
 Model input is read from the model itself: NHWC models get WD's preprocessing (white square pad, BGR, 0–255); NCHW models with a `preprocess.json` get animetimm's timm steps; other NCHW models get a white square pad, RGB 0–1 and the mean/std named in a `config.json` beside them, else 0.5/0.5. The scores used are the output with one score per tag (the last such output, for models that return several).
 
 > Verified on real files: WD v3 EVA02-Large and WD v1.4 MOAT in the WD14 Tagger node's folder. The other formats are covered by tests on their published file shapes; their preprocessing defaults have not been checked against real Camie/PixAI/JoyTag/cl_tagger models.
@@ -52,7 +61,7 @@ Pick one tagger or **All taggers (merged)** (every tag any of them found, at its
 
 ## Made with, and Open in ComfyUI
 
-**Made with** lists the generation settings embedded in the picture (ComfyUI, A1111/Forge, Swarm). **Open in ComfyUI** loads the picture's embedded ComfyUI workflow into the **Comfy** tab through DEAS's existing editor hand-off (the same one Media's metadata pane uses: a ready/load handshake with the owned ComfyUI's page). It is disabled with the reason when the picture carries no workflow, or when the backend is not running.
+**Made with** shows what made the picture, read like PromptForge does (`src/lib/comfyMeta.ts`, ported from its `comfymeta.mjs`): checkpoint, LoRAs (including rgthree's Power Lora Loader), seed, sampler, steps / CFG / denoise, and the prompt and negative. In a ComfyUI picture the links are followed: a seed wired from a seed node (rgthree's Seed) is found, the split sampler layout's settings on sibling nodes are found, and a prompt built at run time by concat or wildcard nodes is shown as the parts that were typed and marked so (the finished prompt is not in the file). Long seeds keep their exact digits. A1111/Forge/Swarm pictures are read with Generate's own parser. **Copy the original prompt** and **Send it to Generate** take the prompt with them; *All metadata* keeps the raw fields. **Open in ComfyUI** loads the picture's embedded ComfyUI workflow into the **Comfy** tab through DEAS's existing editor hand-off (the same one Media's metadata pane uses: a ready/load handshake with the owned ComfyUI's page). It is disabled with the reason when the picture carries no workflow, or when the backend is not running.
 
 ## Describe
 
@@ -66,7 +75,9 @@ When the tagger recognised a character, the model is also given **that series' c
 
 Every tag it suggests is checked against the Danbooru tag table; tags Danbooru does not have are struck through and left out when you press **Add its tags to the tags above**.
 
-Describe has its own model pick (it does not change the model Prompt Forge writes with). The list loads the first time you press Describe. A model that cannot see pictures is refused with a plain message: Ollama is asked up front (`/api/show` capabilities); an OpenAI-compatible server's refusal of the picture is translated; local GGUF models cannot read pictures. **Stop** ends it and keeps what was written.
+Describe has its own model pick (it does not change the model Prompt Forge writes with). When an LLM is set up, the list loads as soon as a picture is open, so the model is chosen before anything runs; without one, clicking the list asks for the LLM setup. Describe always runs on the model shown in the list.
+
+**Temperature** (0–1.5, default 0.2) and **Repeat penalty** (0–2, default 0; sent as the server's presence penalty) are PromptForge's sliders and are remembered. At 0.2 with no penalty small vision models can repeat whole sentences; Qwen's own advice for its vision models is 0.7 with 1.5. On one picture whose tags said `horse_girl`, the 27B described a centaur in 2 of 3 runs at 0.2 and in none of 4 at 0.7/1.5 — a small sample, but a reason the sliders are there. A model that cannot see pictures is refused with a plain message: Ollama is asked up front (`/api/show` capabilities); an OpenAI-compatible server's refusal of the picture is translated; local GGUF models cannot read pictures. **Stop** ends it and keeps what was written.
 
 ## Frame picker
 
@@ -75,7 +86,8 @@ A video opens as a strip of every frame (every *k*-th past 2,000 frames; the arr
 - **Frame-exact.** Frames come from FFmpeg **by number** (`select=eq(n,N)` over decoded frames), not by seeking to a time, so the frame you see is the frame you get — B-frames, variable rates and odd timestamps included. ffprobe counts the frames; one FFmpeg pass writes the thumbnails (cached for the five newest clips). FFmpeg with ffprobe must be on PATH.
 - **Step** with ‹ › or ←/→ (Shift for 10), Home/End; click a thumbnail to go there.
 - **Pick** with the button, Space, Ctrl-click or Shift-click (a range). **Save frame…** / **Save picked…** ask for a folder once and write `<video>-f0001.png` files; an existing file is never replaced.
-- **Use this frame** (Enter) makes it the picture Media Analysis reads: tags, Made with (none for a frame) and Describe.
+- **Use this frame** (Enter) makes it the picture Media Analysis reads: tags, Made with (none for a frame) and Describe. **← Back to the video** under it reopens the picker on that frame, with the frames you picked still picked.
+- **▶ Play / ❚❚ Pause** (K) plays the clip in the stage with the strip and frame counter following it; pausing stops on the frame on screen and shows the exact FFmpeg frame for it. Stepping or clicking a frame pauses. A clip the built-in player cannot read (some codecs) says so and can still be stepped through frame by frame.
 - **Send this frame to Generate** shows exactly what the Generate tab would do with a picture right now — for a Wan or H3 video model, *Use as first frame*, *Use as last frame*, *Use as both*, and H3's *Add as reference*. A send that collects pictures (H3 references, a picture model's prompt references) takes every picked frame at once, in order, and says which frames it skipped and why (already there, references full); blocked actions are greyed with Generate's reason. With no such model chosen in Generate, the picker says to choose one first.
 
 Frames for analysis and sends are kept in the runtime's `frames` folder (the newest clips only). The video is never changed or uploaded.
@@ -88,6 +100,8 @@ Frames for analysis and sends are kept in the runtime's `frames` folder (the new
 | `src-tauri/src/analysis_taggers.rs` | Discovery and tag-list reading |
 | `src-tauri/src/analysis_frames.rs` | The frame picker's FFmpeg reads and saves |
 | `src-tauri/src/analysis_describe.rs` | Describe: cast list, the LLM call, reading the answer |
+| `src-tauri/src/analysis_convert.rs` | Converting animetimm checkpoints to ONNX |
+| `src-tauri/src/animetimm_export.py` | The exporter it runs (from PromptForge) |
 | `src-tauri/src/tagger_worker.py` | One picture through one ONNX tagger |
 | `src/features/analysis/` | The tab and the frame picker |
 

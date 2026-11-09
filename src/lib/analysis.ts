@@ -3,7 +3,8 @@ import { Channel, invoke } from '@tauri-apps/api/core';
 /** Media Analysis (ported from PromptForge): image taggers run on the CPU by DEAS's private analysis runtime. */
 export interface Tagger { id: string; name: string; model: string; labels: string; place: string; tags: number; categories: boolean; generalThreshold: number; characterThreshold: number }
 /** Found where taggers are kept, but not usable as it is: the reason says why, in plain words. */
-export interface UnusableTagger { name: string; place: string; reason: string }
+/** `convert`: an animetimm checkpoint DEAS can convert to ONNX once (`bytes`: its weights, about the copy's size). */
+export interface UnusableTagger { name: string; place: string; reason: string; convert?: { folder: string; bytes: number } }
 export interface AnalysisInstall { running: boolean; stage: string; downloaded: number; total: number; error: string | null }
 export interface AnalysisOverview { runtimeReady: boolean; install: AnalysisInstall; taggers: Tagger[]; unusable: UnusableTagger[]; defaultSize: number }
 export interface TagResult { tagger: string; rating: Record<string, number>; general: [string, number][]; character: [string, number][]; ms: number }
@@ -16,6 +17,8 @@ export const analysisOverview = (models: string[]) => invoke<AnalysisOverview>('
 /** Installs the runtime; `download` also fetches WD v3 EVA02, and only when no tagger is found at all. */
 export const setupAnalysis = (models: string[], download = false) => invoke<AnalysisOverview>('native_analysis_setup', { models, download });
 export const cancelAnalysisSetup = () => invoke<void>('native_analysis_cancel');
+/** Converts a PyTorch-only animetimm checkpoint to an ONNX copy in DEAS's own folder (asked for, never pushed). */
+export const convertTagger = (models: string[], folder: string) => invoke<AnalysisOverview>('native_analysis_convert', { models, folder });
 export const tagPicture = (models: string[], tagger: string, image: string, general?: number, character?: number) =>
   invoke<TagResult>('native_analysis_tag', { models, tagger, image, general, character });
 /** Choose…: a picture or video by path, through the system's file dialog; null when cancelled. */
@@ -37,10 +40,12 @@ export const saveFrames = (path: string, indices: number[], count: number, title
 /** Describe: the picture in words from the vision LLM, with the tagger's tags and, when it recognised a character, that series' cast. */
 export interface Reading { text: string; description: string; characters: string[]; suggested: string[]; unknown: string[]; doubtful: string; cast: [string, number][]; stopped: boolean }
 export type DescribeEvent = { type: 'started'; cast: [string, number][] } | { type: 'text'; text: string };
-export function describePicture(root: string, model: string, image: string, tags: string[], requestId: string, onEvent: (e: DescribeEvent) => void) {
+/** Describe's sampling, PromptForge's sliders: temperature 0-1.5 and presence penalty 0-2. */
+export interface DescribeSampling { temperature: number; presencePenalty: number }
+export function describePicture(root: string, model: string, image: string, tags: string[], sampling: DescribeSampling, requestId: string, onEvent: (e: DescribeEvent) => void) {
   const channel = new Channel<DescribeEvent>();
   channel.onmessage = onEvent;
-  return invoke<Reading>('native_analysis_describe', { root, model, image, tags, requestId, onEvent: channel });
+  return invoke<Reading>('native_analysis_describe', { root, model, image, tags, temperature: sampling.temperature, presencePenalty: sampling.presencePenalty, requestId, onEvent: channel });
 }
 export const cancelDescribe = (requestId: string) => invoke<boolean>('native_analysis_describe_cancel', { requestId });
 

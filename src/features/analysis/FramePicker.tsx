@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { convertFileSrc, isTauri } from '@tauri-apps/api/core';
 import { useI18n } from '../../i18n/I18nProvider';
 import { analysisError, clipFrame, clock, openClip, saveFrames, type Clip } from '../../lib/analysis';
@@ -9,48 +9,91 @@ const src = (path: string) => (isTauri() ? convertFileSrc(path) : path);
 
 export interface FramePickerProps {
   video: { path: string; name: string };
+  /** The frame to open on (back from a frame that was used), and the frames picked before. */
+  start?: number;
+  startPicked?: number[];
+  /** Picks as they change, so they survive going to a frame and back. */
+  onPicked?: (picked: number[]) => void;
   /** "Use this frame": the frame becomes the picture Media Analysis reads (tags, Describe). */
-  onUse: (frame: MediaItem) => void;
+  onUse: (frame: MediaItem, index: number) => void;
   /** What the Generate tab would do with a picture right now (Wan first/last frame, H3 pictures, ...). */
   frameActions?: (item: MediaItem) => MediaAction[];
   onClose: () => void;
 }
 
 /** Every frame of a video in a strip; step, pick, save, or send a frame on. Ported from PromptForge's frame picker, with frames from FFmpeg by number. */
-export function FramePicker({ video, onUse, frameActions, onClose }: FramePickerProps) {
+export function FramePicker({ video, start = 0, startPicked, onPicked, onUse, frameActions, onClose }: FramePickerProps) {
   const { t } = useI18n();
   const [clip, setClip] = useState<Clip | null>(null);
   const [error, setError] = useState('');
   const [index, setIndex] = useState(0);
   const [picked, setPicked] = useState<Set<number>>(new Set());
+  useEffect(() => { onPicked?.([...picked]); }, [picked]); // eslint-disable-line react-hooks/exhaustive-deps
   const [last, setLast] = useState<number | null>(null);
   const [full, setFull] = useState<{ index: number; path: string } | null>(null);
   const [busy, setBusy] = useState('');
   const [note, setNote] = useState('');
   const strip = useRef<HTMLDivElement>(null);
   const root = useRef<HTMLDivElement>(null);
+  // Keys work whenever the picker is on screen, not only while it has focus: the latest
+  // handler is called from one window listener (see `key` below for which keys go where).
+  const keys = useRef<(e: KeyboardEvent) => void>(() => {});
+  useEffect(() => {
+    const listen = (e: KeyboardEvent) => {
+      const el = root.current;
+      if (el?.isConnected && !el.closest('[hidden]')) keys.current(e);
+    };
+    window.addEventListener('keydown', listen);
+    return () => window.removeEventListener('keydown', listen);
+  }, []);
 
   useEffect(() => {
     let alive = true;
-    setClip(null); setError(''); setIndex(0); setPicked(new Set()); setFull(null); setNote('');
-    openClip(video.path).then(c => { if (alive) setClip(c); }, e => { if (alive) setError(analysisError(e)); });
+    setClip(null); setError(''); setIndex(start); setPicked(new Set(startPicked)); setFull(null); setNote('');
+    openClip(video.path).then(c => { if (alive) { setClip(c); setIndex(i => Math.min(i, Math.max(0, c.count - 1))); } }, e => { if (alive) setError(analysisError(e)); });
     return () => { alive = false; };
   }, [video.path]);
 
+  // Playing: the real video in the stage, the strip and counter following it frame by frame.
+  // Pausing stops on the frame on screen, and the exact FFmpeg frame takes its place.
+  const [playing, setPlaying] = useState(false);
+  const [cantPlay, setCantPlay] = useState(false);
+  const player = useRef<HTMLVideoElement>(null);
+  const rate = clip ? (clip.fps > 0 ? clip.fps : clip.duration > 0 ? clip.count / clip.duration : 0) : 0;
+  useEffect(() => { setPlaying(false); setCantPlay(false); }, [video.path]);
+  useEffect(() => {
+    const v = player.current;
+    if (!playing || !v || !clip || !rate) return;
+    let alive = true, handle = 0;
+    const frames = typeof v.requestVideoFrameCallback === 'function';
+    const tick = (time: number) => {
+      if (!alive) return;
+      setIndex(Math.max(0, Math.min(clip.count - 1, Math.round(time * rate))));
+      schedule();
+    };
+    const schedule = () => {
+      handle = frames ? v.requestVideoFrameCallback((_now, meta) => tick(meta.mediaTime)) : requestAnimationFrame(() => tick(v.currentTime));
+    };
+    schedule();
+    return () => { alive = false; if (frames) v.cancelVideoFrameCallback(handle); else cancelAnimationFrame(handle); };
+  }, [playing, clip, rate]);
+
   // The full-size frame follows the current one, a moment after stepping stops.
   useEffect(() => {
-    if (!clip) return;
+    if (!clip || playing) return;
     let alive = true;
     const timer = setTimeout(() => {
       clipFrame(video.path, index, clip.count).then(path => { if (alive) setFull({ index, path }); }, e => { if (alive) setError(analysisError(e)); });
     }, 180);
     return () => { alive = false; clearTimeout(timer); };
-  }, [clip, index, video.path]);
+  }, [clip, index, video.path, playing]);
 
   const thumb = (i: number) => clip ? clip.thumbs[Math.min(clip.thumbs.length - 1, Math.floor(i / clip.stride))] : undefined;
   useEffect(() => {
     if (!clip) return;
-    strip.current?.querySelector<HTMLElement>(`[data-frame-cell="${Math.floor(index / clip.stride) * clip.stride}"]`)?.scrollIntoView?.({ block: 'nearest', inline: 'center' });
+    const row = strip.current;
+    const cell = row?.querySelector<HTMLElement>(`[data-frame-cell="${Math.floor(index / clip.stride) * clip.stride}"]`);
+    if (row && cell) row.scrollLeft = cell.offsetLeft - (row.clientWidth - cell.clientWidth) / 2;
   }, [index, clip]);
 
   if (error && !clip) return <div className="analysis-frames" data-frame-picker>
@@ -59,7 +102,15 @@ export function FramePicker({ video, onUse, frameActions, onClose }: FramePicker
   </div>;
   if (!clip) return <div className="analysis-frames" data-frame-picker><p className="chat-status" role="status">{t('analysis.frames.reading', { name: video.name })}</p></div>;
 
-  const go = (i: number) => setIndex(Math.max(0, Math.min(clip.count - 1, i)));
+  const pause = () => { player.current?.pause(); setPlaying(false); };
+  const play = () => {
+    const v = player.current;
+    if (!v || !rate) return;
+    // From the frame on screen (from the start at the end); a quarter frame in, so it lands on it.
+    v.currentTime = (index >= clip.count - 1 ? 0 : index + 0.25) / rate;
+    v.play().then(() => { setCantPlay(false); setPlaying(true); }, () => { setCantPlay(true); setPlaying(false); });
+  };
+  const go = (i: number) => { if (playing) pause(); setIndex(Math.max(0, Math.min(clip.count - 1, i))); };
   const toggle = (i: number) => setPicked(p => { const n = new Set(p); if (n.has(i)) n.delete(i); else n.add(i); return n; });
   const time = (i: number) => clip.fps > 0 ? clock(i / clip.fps) : '';
   const frameItem = async (i: number): Promise<MediaItem> => {
@@ -71,7 +122,7 @@ export function FramePicker({ video, onUse, frameActions, onClose }: FramePicker
     setBusy(label); setError(''); setNote('');
     try { await fn(); } catch (e) { setError(analysisError(e)); } finally { setBusy(''); }
   };
-  const use = () => work('use', async () => onUse(await frameItem(index)));
+  const use = () => work('use', async () => onUse(await frameItem(index), index));
   const save = (indices: number[]) => work('save', async () => {
     const n = await saveFrames(video.path, [...indices].sort((a, b) => a - b), clip.count, t('analysis.frames.saveTitle'));
     if (n) setNote(t('analysis.frames.saved', { count: String(n) }));
@@ -118,12 +169,18 @@ export function FramePicker({ video, onUse, frameActions, onClose }: FramePicker
     else go(i);
     setLast(i);
   };
-  const key = (e: KeyboardEvent) => {
-    if ((e.target as HTMLElement).closest('input, select, textarea')) return;
+  keys.current = (e: KeyboardEvent) => {
+    const target = e.target instanceof Element ? e.target : null;
+    // Typing stays typing, and shortcuts with Ctrl/Alt/Cmd belong to someone else.
+    if (e.defaultPrevented || e.ctrlKey || e.altKey || e.metaKey || target?.closest('input, select, textarea, [contenteditable="true"]')) return;
+    // Outside the picker only the stepping keys and K; Space and Enter press whatever has focus there.
+    const inside = !!target && !!root.current?.contains(target);
+    if (!inside && !['ArrowLeft', 'ArrowRight', 'Home', 'End', 'k', 'K'].includes(e.key)) return;
     const step = e.shiftKey ? 10 : 1;
     if (e.key === 'ArrowLeft') { e.preventDefault(); go(index - step); }
     else if (e.key === 'ArrowRight') { e.preventDefault(); go(index + step); }
     else if (e.key === 'Home') { e.preventDefault(); go(0); }
+    else if (e.key === 'k' || e.key === 'K') { e.preventDefault(); if (playing) pause(); else play(); }
     else if (e.key === 'End') { e.preventDefault(); go(clip.count - 1); }
     else if (e.key === ' ' && !(e.target as HTMLElement).closest('button')) { e.preventDefault(); toggle(index); }
     else if (e.key === 'Enter' && !(e.target as HTMLElement).closest('button')) { e.preventDefault(); void use(); }
@@ -132,7 +189,7 @@ export function FramePicker({ video, onUse, frameActions, onClose }: FramePicker
   const shown = full?.index === index ? src(full.path) : thumb(index) ? src(thumb(index)!) : '';
   const cells = clip.thumbs.map((path, k) => k * clip.stride);
 
-  return <div className="analysis-frames" data-frame-picker ref={root} tabIndex={0} onKeyDown={key} aria-label={t('analysis.frames.title')}>
+  return <div className="analysis-frames" data-frame-picker ref={root} tabIndex={0} aria-label={t('analysis.frames.title')}>
     <div className="analysis-frames-head">
       <strong>{t('analysis.frames.title')}</strong>
       <span className="forge-note" data-frame-meta>{t('analysis.frames.meta', { name: clip.name, width: String(clip.width), height: String(clip.height), count: String(clip.count), fps: clip.fps ? String(Math.round(clip.fps * 1000) / 1000) : '?', length: clock(clip.duration) })}</span>
@@ -141,13 +198,16 @@ export function FramePicker({ video, onUse, frameActions, onClose }: FramePicker
     <div className="analysis-frames-stage">
       <button type="button" className="analysis-frames-side" disabled={index === 0} aria-label={t('analysis.frames.prev')} onClick={() => go(index - 1)}>{index > 0 && thumb(index - 1) && <img src={src(thumb(index - 1)!)} alt=""/>}</button>
       <div className={`analysis-frames-current${isPicked ? ' picked' : ''}`}>
-        {shown && <img src={shown} alt={t('analysis.frames.frame', { n: String(index + 1) })} data-frame-current={full?.index === index ? 'full' : 'thumb'}/>}
+        <video ref={player} src={src(video.path)} preload="metadata" playsInline hidden={!playing} data-frame-video
+          onEnded={() => { setPlaying(false); setIndex(clip.count - 1); }} onError={() => { setPlaying(false); setCantPlay(true); }}/>
+        {shown && !playing && <img src={shown} alt={t('analysis.frames.frame', { n: String(index + 1) })} data-frame-current={full?.index === index ? 'full' : 'thumb'}/>}
         {isPicked && <span className="analysis-frames-badge">✓ {t('analysis.frames.picked')}</span>}
       </div>
       <button type="button" className="analysis-frames-side" disabled={index >= clip.count - 1} aria-label={t('analysis.frames.next')} onClick={() => go(index + 1)}>{index < clip.count - 1 && thumb(index + 1) && <img src={src(thumb(index + 1)!)} alt=""/>}</button>
     </div>
     <div className="analysis-frames-nav">
       <button type="button" className="forge-ghost" data-frame-prev title={t('analysis.frames.prevHelp')} onClick={() => go(index - 1)}>‹</button>
+      <button type="button" className="forge-ghost" data-frame-play disabled={cantPlay || !rate} title={t(cantPlay ? 'analysis.frames.cantPlay' : 'analysis.frames.playHelp')} onClick={() => { if (playing) pause(); else play(); }}>{playing ? `❚❚ ${t('analysis.frames.pause')}` : `▶ ${t('analysis.frames.play')}`}</button>
       <span data-frame-pos>{t('analysis.frames.position', { n: String(index + 1), count: String(clip.count), time: time(index) })}</span>
       <button type="button" className="forge-ghost" data-frame-next title={t('analysis.frames.nextHelp')} onClick={() => go(index + 1)}>›</button>
     </div>
@@ -158,6 +218,7 @@ export function FramePicker({ video, onUse, frameActions, onClose }: FramePicker
         <img src={src(clip.thumbs[i / clip.stride])} alt="" loading="lazy"/><span>{i + 1}</span>
       </button>)}
     </div>
+    {cantPlay && <p className="forge-note" data-frame-cant-play>{t('analysis.frames.cantPlay')}</p>}
     {clip.stride > 1 && <p className="forge-note">{t('analysis.frames.strided', { stride: String(clip.stride) })}</p>}
     <div className="forge-actions analysis-frames-actions">
       <button type="button" className="action-button" data-frame-use disabled={!!busy} title={t('analysis.frames.useHelp')} onClick={() => void use()}>{t(busy === 'use' ? 'analysis.frames.working' : 'analysis.frames.use')}</button>

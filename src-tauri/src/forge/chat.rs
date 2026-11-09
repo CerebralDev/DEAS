@@ -51,6 +51,8 @@ pub struct Round<'a> {
     pub tools: Option<&'a [Value]>,
     pub temperature: Option<f64>,
     pub top_p: Option<f64>,
+    /// Discourages repeating what is already written (Qwen advises 1.5 for its vision models).
+    pub presence_penalty: Option<f64>,
     /// A hard ceiling on the answer (num_predict / max_tokens).
     pub max_tokens: Option<u32>,
     pub timeout: Duration,
@@ -76,6 +78,9 @@ fn request(r: &Round<'_>, stream: bool) -> Result<(reqwest::Url, Value, bool), S
         if let Some(p) = r.top_p {
             options["top_p"] = json!(p);
         }
+        if let Some(p) = r.presence_penalty {
+            options["presence_penalty"] = json!(p);
+        }
         if let Some(n) = r.max_tokens {
             options["num_predict"] = json!(n);
         }
@@ -87,6 +92,9 @@ fn request(r: &Round<'_>, stream: bool) -> Result<(reqwest::Url, Value, bool), S
         }
         if let Some(p) = r.top_p {
             b["top_p"] = json!(p);
+        }
+        if let Some(p) = r.presence_penalty {
+            b["presence_penalty"] = json!(p);
         }
         if let Some(n) = r.max_tokens {
             b["max_tokens"] = json!(n);
@@ -680,6 +688,7 @@ pub(super) mod tests {
                 tools: None,
                 temperature: None,
                 top_p: None,
+                presence_penalty: None,
                 max_tokens: None,
                 timeout: Duration::from_secs(1),
             };
@@ -741,6 +750,7 @@ pub(super) mod tests {
                     tools: None,
                     temperature: None,
                     top_p: None,
+                    presence_penalty: None,
                     max_tokens: None,
                     timeout: Duration::from_secs(2),
                 };
@@ -840,6 +850,7 @@ pub(super) mod tests {
                     tools: None,
                     temperature: None,
                     top_p: None,
+                    presence_penalty: None,
                     max_tokens: None,
                     timeout: Duration::from_secs(30),
                 },
@@ -886,6 +897,7 @@ pub(super) mod tests {
                     tools: None,
                     temperature: None,
                     top_p: None,
+                    presence_penalty: None,
                     max_tokens: None,
                     timeout: Duration::from_secs(30),
                 },
@@ -929,6 +941,7 @@ pub(super) mod tests {
                     tools: None,
                     temperature: None,
                     top_p: None,
+                    presence_penalty: None,
                     max_tokens: None,
                     timeout: Duration::from_secs(2),
                 },
@@ -964,6 +977,7 @@ pub(super) mod tests {
                     tools: None,
                     temperature: None,
                     top_p: None,
+                    presence_penalty: None,
                     max_tokens: None,
                     timeout: Duration::from_secs(30),
                 },

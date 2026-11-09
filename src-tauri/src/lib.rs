@@ -1,4 +1,5 @@
 pub mod analysis;
+pub mod analysis_convert;
 pub mod analysis_describe;
 pub mod analysis_frames;
 pub mod analysis_taggers;

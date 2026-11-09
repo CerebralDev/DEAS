@@ -51,8 +51,8 @@ const WD_DIR: &str = "wd-eva02-large-tagger-v3";
 /// A tagger run: model load plus one picture on a slow CPU, with room to spare.
 const RUN_TIMEOUT: Duration = Duration::from_secs(300);
 
-static CANCEL: AtomicBool = AtomicBool::new(false);
-static INSTALLING: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(1);
+pub(crate) static CANCEL: AtomicBool = AtomicBool::new(false);
+pub(crate) static INSTALLING: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(1);
 static RUNNING: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(1);
 static STATUS: Mutex<InstallStatus> = Mutex::new(InstallStatus {
     running: false,
@@ -72,7 +72,7 @@ pub struct InstallStatus {
     pub error: Option<String>,
 }
 
-fn status(stage: &str, downloaded: u64, total: u64, error: Option<String>) {
+pub(crate) fn status(stage: &str, downloaded: u64, total: u64, error: Option<String>) {
     if let Ok(mut s) = STATUS.lock() {
         *s = InstallStatus {
             running: !matches!(stage, "completed" | "failed" | "cancelled" | ""),
@@ -106,7 +106,7 @@ fn runtime_dir() -> PathBuf {
     root().join("taggers")
 }
 
-fn python(dir: &Path) -> PathBuf {
+pub(crate) fn python(dir: &Path) -> PathBuf {
     dir.join(if cfg!(windows) {
         "venv/Scripts/python.exe"
     } else {
@@ -128,7 +128,7 @@ pub(crate) fn runtime_ready() -> bool {
         && python(&dir).is_file()
 }
 
-fn check_cancel() -> Result<(), String> {
+pub(crate) fn check_cancel() -> Result<(), String> {
     if CANCEL.load(Ordering::Relaxed) {
         Err("ANALYSIS_CANCELLED: Installation cancelled".into())
     } else {
@@ -153,7 +153,7 @@ fn sha256_file(path: &Path) -> Result<String, String> {
     Ok(format!("{:x}", hash.finalize()))
 }
 
-fn quiet(command: &mut Command) {
+pub(crate) fn quiet(command: &mut Command) {
     command
         .env("PYTHONNOUSERSITE", "1")
         .env("UV_CACHE_DIR", root().join("uv-cache"))
@@ -189,7 +189,7 @@ fn step(mut command: Command) -> Result<(), String> {
     ))
 }
 
-fn find_uv(preferred: Option<PathBuf>) -> Result<PathBuf, String> {
+pub(crate) fn find_uv(preferred: Option<PathBuf>) -> Result<PathBuf, String> {
     preferred
         .filter(|p| p.is_absolute() && p.is_file())
         .or_else(|| {
@@ -359,7 +359,7 @@ async fn download_default(models: &Path) -> Result<(), String> {
 pub use crate::analysis_taggers::{Tagger, Unusable};
 use crate::analysis_taggers::discover;
 
-fn model_roots(models: &[String]) -> Vec<PathBuf> {
+pub(crate) fn model_roots(models: &[String]) -> Vec<PathBuf> {
     let mut out: Vec<PathBuf> = vec![];
     for m in models {
         let p = PathBuf::from(m.trim());
@@ -629,6 +629,17 @@ pub fn native_analysis_overview(models: Vec<String>) -> Overview {
     }
 }
 
+/// DEAS's own uv, from the approved install plan.
+pub(crate) fn managed_uv(engine: &crate::install::Engine) -> Option<PathBuf> {
+    engine.approved_plan().map(|plan| {
+        PathBuf::from(plan.request.storage_path).join(if cfg!(windows) {
+            "runtime/uv.exe"
+        } else {
+            "runtime/uv"
+        })
+    })
+}
+
 /// Installs the tagger runtime. With `download`, and only when no tagger is found at all,
 /// it also downloads WD v3 EVA02 into the first models folder: never pushed on anyone.
 #[tauri::command]
@@ -650,13 +661,7 @@ pub async fn native_analysis_setup(
         .map_err(|_| "ANALYSIS_BUSY: Tagger setup is already running")?;
     CANCEL.store(false, Ordering::Relaxed);
     status("starting", 0, 0, None);
-    let managed_uv = engine.approved_plan().map(|plan| {
-        PathBuf::from(plan.request.storage_path).join(if cfg!(windows) {
-            "runtime/uv.exe"
-        } else {
-            "runtime/uv"
-        })
-    });
+    let managed_uv = managed_uv(&engine);
     let result = async {
         install_runtime(managed_uv).await?;
         if let (Some(true), Some(first)) = (download, &first) {

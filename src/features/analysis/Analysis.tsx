@@ -2,19 +2,27 @@ import { useContext, useEffect, useRef, useState, type ClipboardEvent, type Drag
 import { convertFileSrc, isTauri } from '@tauri-apps/api/core';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { useI18n } from '../../i18n/I18nProvider';
-import { analysisError, analysisOverview, cancelAnalysisSetup, cancelDescribe, describePicture, modelFolders, pickMedia, setupAnalysis, stagePicture, tagPicture, tagsAsPrompt, type AnalysisOverview, type Reading, type TagResult } from '../../lib/analysis';
+import { analysisError, analysisOverview, cancelAnalysisSetup, cancelDescribe, convertTagger, describePicture, modelFolders, pickMedia, setupAnalysis, stagePicture, tagPicture, tagsAsPrompt, type AnalysisOverview, type Reading, type TagResult } from '../../lib/analysis';
 import { embeddedWorkflow, OpenComfyWorkflow, type ComfyWorkflow } from '../../lib/comfyWorkflow';
 import { nativeModelId } from '../../lib/forge';
 import { imageMetadataRows, readImageMetadata, type ImageMetadata } from '../../lib/imageMetadata';
 import { describeMedia, itemFromEntry, type MediaItem } from '../../lib/media';
 import { isBoolean, isString, usePref } from '../../lib/preferences';
+import { hasLlmConfiguration } from '../../lib/llm';
+import { madeSummary, type ComfyMeta } from '../../lib/comfyMeta';
 import { useForgeModels } from '../forge/ForgeButton';
 import { prepare } from '../forge/ReferenceImages';
 import type { MediaAction } from '../media/MediaLibrary';
 import { FramePicker } from './FramePicker';
 import './analysis.css';
 
-export interface AnalysisPicture { path: string; src: string; name: string; media: 'image' | 'video' }
+export interface AnalysisPicture {
+  path: string; src: string; name: string; media: 'image' | 'video';
+  /** A video: the frame to open the picker on. */
+  start?: number;
+  /** A frame taken from a video: the video and the frame, for "Back to the video". */
+  fromVideo?: { path: string; src: string; name: string; frame: number };
+}
 export interface AnalysisProps {
   active?: boolean;
   /** The ComfyUI backend, for the LLM model list Describe picks from. */
@@ -29,6 +37,7 @@ export interface AnalysisProps {
 }
 
 const gb = (bytes: number) => (bytes / 1024 ** 3).toFixed(1);
+const isNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const percent = (p: number) => `${Math.round(p * 100)}%`;
 const IMAGE = /\.(png|jpe?g|webp)$/i;
 const VIDEO = /\.(mp4|mov|m4v|mkv|webm)$/i;
@@ -53,9 +62,12 @@ export function Analysis({ active = true, endpoint = '', roots, root, incoming, 
   const [general, setGeneral] = useState<number | null>(null);
   const [character, setCharacter] = useState<number | null>(null);
   const [picture, setPicture] = useState<AnalysisPicture | null>(null);
+  // Frames picked per video, kept while the tab is open so a trip to one frame and back keeps them.
+  const picks = useRef(new Map<string, number[]>());
   const [result, setResult] = useState<TagResult | null>(null);
   const [added, setAdded] = useState<string[]>([]);
   const [made, setMade] = useState<ImageMetadata | null>(null);
+  const [summary, setSummary] = useState<ComfyMeta | null>(null);
   const [workflow, setWorkflow] = useState<ComfyWorkflow | null>(null);
   const [opening, setOpening] = useState(false);
   const [openError, setOpenError] = useState('');
@@ -67,12 +79,19 @@ export function Analysis({ active = true, endpoint = '', roots, root, incoming, 
   // Describe: the configured LLM, its own pick (not the one that writes prompts).
   const forge = useForgeModels(endpoint, root, active);
   const [describeModel, setDescribeModel] = usePref('analysis.describeModel', '', isString);
+  // PromptForge's defaults: 0.2 and no penalty (a reading task); its hint says when to raise them.
+  const [temperature, setTemperature] = usePref('analysis.describeTemperature', 0.2, isNumber);
+  const [penalty, setPenalty] = usePref('analysis.describePenalty', 0, isNumber);
   const [reading, setReading] = useState<Reading | null>(null);
   const [streamed, setStreamed] = useState('');
   const [describing, setDescribing] = useState<string | null>(null);
   const [castShown, setCastShown] = useState<[string, number][]>([]);
   const [describeError, setDescribeError] = useState('');
   const [wantDescribe, setWantDescribe] = useState(false);
+  const [pickFirst, setPickFirst] = useState(false);
+  // The checkpoint folder being converted to ONNX, and how the last conversion ended.
+  const [converting, setConverting] = useState('');
+  const [converted, setConverted] = useState<{ folder: string; note: string; error: boolean } | null>(null);
   const box = useRef<HTMLDivElement>(null);
   const run = useRef(0);
   const mounted = useRef(true);
@@ -112,10 +131,10 @@ export function Analysis({ active = true, endpoint = '', roots, root, incoming, 
   const load = (pic: AnalysisPicture) => {
     run.current++;
     stopDescribe();
-    setPicture(pic); setResult(null); setAdded([]); setMade(null); setWorkflow(null); setOpenError(''); setError(''); setBusy(false);
+    setPicture(pic); setResult(null); setAdded([]); setMade(null); setSummary(null); setWorkflow(null); setOpenError(''); setError(''); setBusy(false);
     setReading(null); setStreamed(''); setDescribeError(''); setCastShown([]);
     if (pic.media === 'image') {
-      readImageMetadata(pic.path).then(entries => { setMade(imageMetadataRows(entries)); setWorkflow(embeddedWorkflow(entries)); }, () => setMade([]));
+      readImageMetadata(pic.path).then(entries => { setMade(imageMetadataRows(entries)); setSummary(madeSummary(entries)); setWorkflow(embeddedWorkflow(entries)); }, () => setMade([]));
       void tag(pic);
     }
   };
@@ -175,6 +194,17 @@ export function Analysis({ active = true, endpoint = '', roots, root, incoming, 
     // A cancel is said calmly under the setup (analysis.cancelled), not as an error.
     try { setOverview(await started); } catch (e) { if (!String(e).includes('ANALYSIS_CANCELLED')) setError(analysisError(e)); void refresh(); }
   };
+  const convert = async (folder: string, name: string) => {
+    setConverting(folder); setConverted(null);
+    const started = convertTagger(models, folder);
+    setTimeout(() => { if (mounted.current) void refresh(); }, 300);
+    try { setOverview(await started); setConverted({ folder, note: t('analysis.convert.done', { name }), error: false }); }
+    catch (e) {
+      // A cancel is said calmly; anything else says what went wrong and what to do.
+      setConverted({ folder, note: String(e).includes('ANALYSIS_CANCELLED') ? t('analysis.convert.cancelled') : analysisError(e), error: !String(e).includes('ANALYSIS_CANCELLED') });
+      void refresh();
+    } finally { setConverting(''); }
+  };
   const tagNames = result ? [...result.character, ...result.general].map(([n]) => n) : [];
   const tags = [...tagNames, ...added.filter(a => !tagNames.includes(a))];
   const copy = async (what: string, text: string) => { try { await navigator.clipboard.writeText(text); setCopied(what); setTimeout(() => setCopied(''), 1500); } catch { /* the text is on screen */ } };
@@ -194,10 +224,10 @@ export function Analysis({ active = true, endpoint = '', roots, root, incoming, 
     if (!llmModel) { setWantDescribe(true); forge.load(); return; }
     const id = crypto.randomUUID();
     const mine = run.current;
-    setDescribing(id); setReading(null); setStreamed(''); setDescribeError(''); setCastShown([]);
+    setDescribing(id); setReading(null); setStreamed(''); setDescribeError(''); setCastShown([]); setPickFirst(false);
     try {
       const image = await dataUri(picture);
-      const out = await describePicture(root, nativeModelId(llmModel), image, tagNames, id, e => {
+      const out = await describePicture(root, nativeModelId(llmModel), image, tagNames, { temperature, presencePenalty: penalty }, id, e => {
         if (mine !== run.current) return;
         if (e.type === 'started') setCastShown(e.cast);
         else setStreamed(s => s + e.text);
@@ -206,16 +236,40 @@ export function Analysis({ active = true, endpoint = '', roots, root, incoming, 
     } catch (e) { if (mine === run.current) setDescribeError(analysisError(e)); }
     finally { setDescribing(d => d === id ? null : d); }
   };
-  // The model list loads on the first Describe (it may ask for an LLM setup); then it runs.
-  useEffect(() => { if (wantDescribe && llmModel) { setWantDescribe(false); void describe(); } }, [wantDescribe, llmModel]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (wantDescribe && (forge.error || (forge.list && !llmModels.length))) setWantDescribe(false); }, [wantDescribe, forge.error, forge.list, llmModels.length]);
+  // The model list is there before anyone presses Describe, so the model can be picked first. Only
+  // when an LLM is set up: opening a picture must not pop the LLM setup at someone who only tags.
+  useEffect(() => {
+    if (!active || picture?.media !== 'image' || !root || forge.list) return;
+    let alive = true;
+    hasLlmConfiguration(root).then(ok => { if (alive && ok) forge.load(); }, () => {});
+    return () => { alive = false; };
+  }, [active, picture?.path, root, forge.list]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Describe pressed before the list was there: it lists the models and stops, so the run is
+  // always on the model shown in the list, never one nobody saw.
+  useEffect(() => {
+    if (wantDescribe && (llmModel || forge.error || (forge.list && !llmModels.length))) { setWantDescribe(false); setPickFirst(!!llmModel); }
+  }, [wantDescribe, llmModel, forge.error, forge.list, llmModels.length]);
   // Only what is new: real Danbooru tags it suggested, and the characters it named, that the list does not have yet.
   const addable = reading ? [...new Set([...reading.characters, ...reading.suggested.filter(s => !reading.unknown.includes(s))])].filter(t => !tags.includes(t)) : [];
   const addSuggested = () => setAdded(a => [...new Set([...a, ...addable])]);
 
+  const convertedNote = converted && !converted.error && !unusable.some(u => u.convert?.folder === converted.folder) && <p className="forge-note" role="status" data-analysis-converted>{converted.note}</p>;
   const unusableList = unusable.length > 0 && <details className="analysis-unusable" data-analysis-unusable open={!taggers.length}>
     <summary>{t('analysis.unusable', { count: String(unusable.length) })}</summary>
-    <ul>{unusable.map((u, i) => <li key={i}><strong>{u.name}</strong> <span className="forge-note">{u.place}</span><br/>{u.reason}</li>)}</ul>
+    <ul>{unusable.map((u, i) => <li key={i}><strong>{u.name}</strong> <span className="forge-note">{u.place}</span><br/>{u.reason}
+      {u.convert && <div className="analysis-convert" data-analysis-convert={u.convert.folder}>
+        {converting === u.convert.folder && install?.running
+          ? <div className="analysis-progress" data-analysis-converting>
+            <span>{t(`analysis.stage.${install.stage}`, { done: '', total: '' })}</span>
+            <button type="button" className="forge-ghost" data-analysis-convert-cancel onClick={() => void cancelAnalysisSetup()}>{t('analysis.cancel')}</button>
+          </div>
+          : <>
+            <p className="forge-note">{t('analysis.convert.note', { tools: gb(300_000_000), size: gb(u.convert.bytes) })}</p>
+            <button type="button" className="forge-ghost" data-analysis-convert-run disabled={!!converting || !!install?.running} onClick={() => void convert(u.convert!.folder, u.name)}>{t('analysis.convert.run')}</button>
+          </>}
+        {converted?.folder === u.convert.folder && converting !== u.convert.folder && <p className={converted.error ? 'error-message' : 'forge-note'} role={converted.error ? 'alert' : 'status'}>{converted.note}</p>}
+      </div>}
+    </li>)}</ul>
   </details>;
 
   return <section className="analysis-tab" aria-label={t('studio.tab.analysis')} onPaste={paste}>
@@ -226,21 +280,45 @@ export function Analysis({ active = true, endpoint = '', roots, root, incoming, 
           : <label className="forge-ghost analysis-choose"><input type="file" data-analysis-file accept="image/png,image/jpeg,image/webp" onChange={e => { void fromFile(e.target.files?.[0]); e.target.value = ''; }}/>{t('analysis.choose')}</label>}
       </div>
       {picture?.media === 'video'
-        ? <FramePicker video={{ path: picture.path, name: picture.name }} frameActions={frameActions} onClose={() => setPicture(null)}
-          onUse={frame => load({ path: frame.path!, src: frame.src, name: frame.name, media: 'image' })}/>
+        ? <FramePicker key={picture.path} video={{ path: picture.path, name: picture.name }} start={picture.start} startPicked={picks.current.get(picture.path)}
+          onPicked={list => picks.current.set(picture.path, list)} frameActions={frameActions} onClose={() => setPicture(null)}
+          onUse={(frame, index) => load({ path: frame.path!, src: frame.src, name: frame.name, media: 'image', fromVideo: { path: picture.path, src: picture.src, name: picture.name, frame: index } })}/>
         : <div className={`analysis-drop${over ? ' over' : ''}${picture ? ' filled' : ''}`} data-analysis-drop onDragOver={e => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)} onDrop={drop}>
           {picture?.media === 'image' ? <img src={picture.src} alt={picture.name} data-analysis-image/>
             : <div className="forge-empty"><strong>{t('analysis.emptyTitle')}</strong><span>{t('analysis.emptyBody')}</span></div>}
         </div>}
       {picture?.media === 'image' && <p className="forge-note analysis-name" title={picture.name}>{picture.name}</p>}
+      {picture?.media === 'image' && picture.fromVideo && <button type="button" className="forge-ghost" data-analysis-back-to-video
+        onClick={() => { const v = picture.fromVideo!; load({ path: v.path, src: v.src, name: v.name, media: 'video', start: v.frame }); }}>
+        {t('analysis.frames.back', { name: picture.fromVideo.name, frame: String(picture.fromVideo.frame + 1) })}</button>}
       {picture?.media === 'image' && made && <div className="analysis-made-head">
         <button type="button" className="forge-ghost" data-analysis-open-comfy disabled={!!comfyBlocked || opening} title={comfyBlocked || t('analysis.openComfyHelp')} onClick={() => void openInComfy()}>{t(opening ? 'analysis.openingComfy' : 'analysis.openComfy')}</button>
         {comfyBlocked && <span className="forge-note" data-analysis-comfy-reason>{comfyBlocked}</span>}
         {openError && <span className="error-message" role="alert">{openError}</span>}
       </div>}
-      {made && made.length > 0 && <details className="analysis-made" data-analysis-made><summary>{t('analysis.madeWith')}</summary>
-        <dl>{made.slice(0, 24).map(([k, v], i) => <div key={i}><dt>{k}</dt><dd>{v.length > 600 ? `${v.slice(0, 600)}…` : v}</dd></div>)}</dl>
-      </details>}
+      {made && made.length > 0 && <div className="analysis-made" data-analysis-made>
+        <span className="forge-note analysis-made-title">{t('analysis.madeWith')}</span>
+        {summary && <>
+          <dl className="analysis-made-summary" data-analysis-made-summary>
+            {([
+              ['analysis.made.checkpoint', summary.checkpoints.join(', ')],
+              ['analysis.made.loras', summary.loras.map(l => l.model != null ? `${l.name} @ ${l.model}` : l.name).join(', ')],
+              ['analysis.made.seed', summary.seed ?? ''],
+              ['analysis.made.sampler', [summary.sampler, summary.settings.sampler_name, summary.settings.scheduler].filter(Boolean).join(' · ')],
+              ['analysis.made.effort', [summary.settings.steps, summary.settings.cfg, summary.settings.denoise].filter(v => v !== undefined).join(' / ')],
+            ] as const).filter(([, v]) => v).map(([k, v]) => <div key={k}><dt>{t(k)}</dt><dd>{v}</dd></div>)}
+          </dl>
+          {summary.prompt && <p className="analysis-made-prompt" data-analysis-made-prompt><strong>{t('analysis.made.prompt')}:</strong> {summary.prompt}{summary.promptPartial && <span className="forge-note"> {t('analysis.made.partial')}</span>}</p>}
+          {summary.negative && <p className="analysis-made-prompt"><strong>{t('analysis.made.negative')}:</strong> {summary.negative}{summary.negativePartial && <span className="forge-note"> {t('analysis.made.partial')}</span>}</p>}
+          {summary.prompt && <div className="forge-actions">
+            <button type="button" className="forge-ghost" data-analysis-made-copy onClick={() => void copy('prompt', summary.prompt!)}>{t(copied === 'prompt' ? 'forge.copied' : 'analysis.made.copy')}</button>
+            <button type="button" className="forge-ghost" data-analysis-made-send onClick={() => onSend(summary.prompt!, summary.negative ?? '')}>{t('analysis.made.send')}</button>
+          </div>}
+        </>}
+        <details className="analysis-made-all"><summary>{t(summary ? 'analysis.made.all' : 'analysis.madeWith')}</summary>
+          <dl>{made.slice(0, 24).map(([k, v], i) => <div key={i}><dt>{k}</dt><dd>{v.length > 600 ? `${v.slice(0, 600)}…` : v}</dd></div>)}</dl>
+        </details>
+      </div>}
       {made && made.length === 0 && picture?.media === 'image' && <p className="forge-note" data-analysis-no-made>{t('analysis.noMade')}</p>}
     </div>
 
@@ -259,14 +337,14 @@ export function Analysis({ active = true, endpoint = '', roots, root, incoming, 
               <p className="forge-note">{t('analysis.lookedIn')}</p>
               <p className="forge-note">{t('analysis.downloadOffer', { size: gb(overview.defaultSize) })}</p>
             </>}
-          {unusableList}
-          {install?.running
+          {unusableList}{convertedNote}
+          {install?.running && !converting
             ? <div className="analysis-progress" data-analysis-progress>
               <span>{t(`analysis.stage.${install.stage}`, { done: gb(install.downloaded), total: gb(install.total) })}</span>
               {install.total > 0 && <progress max={install.total} value={install.downloaded}/>}
               <button type="button" className="forge-ghost" data-analysis-cancel onClick={() => void cancelAnalysisSetup()}>{t('analysis.cancel')}</button>
             </div>
-            : <div className="forge-actions">
+            : install?.running ? null : <div className="forge-actions">
               {taggers.length > 0
                 ? <button type="button" className="action-button" data-analysis-setup-run onClick={() => void setup()}>{t('analysis.setup')}</button>
                 : <button type="button" className="action-button" data-analysis-download disabled={!models.length} onClick={() => void setup(true)}>{t('analysis.download', { size: gb(overview.defaultSize) })}</button>}
@@ -289,7 +367,7 @@ export function Analysis({ active = true, endpoint = '', roots, root, incoming, 
             <button type="button" className="action-button" data-analysis-tag disabled={busy || picture?.media !== 'image'} onClick={() => void tag()}>{t(busy ? 'analysis.tagging' : result ? 'analysis.again' : 'analysis.tag')}</button>
           </div>
           {current && chosen !== 'all' && <p className="forge-note analysis-where" data-analysis-where>{t(current.categories ? 'analysis.taggerFrom' : 'analysis.taggerFromNoCategories', { place: current.place, count: String(current.tags) })}</p>}
-          {unusableList}
+          {unusableList}{convertedNote}
           {busy && <p className="chat-status">{t('analysis.reading', { tagger: chosen === 'all' ? t('analysis.allTaggers') : current?.name ?? '' })}</p>}
           {result && <div className="analysis-out" data-analysis-result>
             <p className="forge-note">{result.tagger} · {(result.ms / 1000).toFixed(1)} s{rating ? ` · ${t('analysis.rating')}: ${rating[0]} ${percent(rating[1])}` : ''}</p>
@@ -313,13 +391,21 @@ export function Analysis({ active = true, endpoint = '', roots, root, incoming, 
         <p className="forge-note">{t('analysis.describe.body')}</p>
         <div className="analysis-controls">
           <label className="forge-field"><span>{t('forge.model')}</span>
-            <select data-analysis-describe-model value={llmModel} disabled={!llmModels.length} onMouseDown={() => { if (!forge.list) forge.load(); }} onFocus={() => { if (!forge.list) forge.load(); }} onChange={e => setDescribeModel(e.target.value)}>
+            <select data-analysis-describe-model value={llmModel} onMouseDown={() => { if (!forge.list) forge.load(); }} onFocus={() => { if (!forge.list) forge.load(); }} onChange={e => { setDescribeModel(e.target.value); setPickFirst(false); }}>
               {llmModels.length ? llmModels.map(m => <option key={m.id} value={m.id}>{m.label}</option>) : <option value="">{t(forge.list ? 'forge.noModels' : 'analysis.describe.modelsOnClick')}</option>}
             </select></label>
           {describing
             ? <button type="button" className="forge-ghost" data-analysis-describe-stop onClick={stopDescribe}>{t('analysis.describe.stop')}</button>
             : <button type="button" className="action-button" data-analysis-describe-run disabled={busy || wantDescribe} onClick={() => void describe()}>{t(wantDescribe ? 'analysis.describe.loading' : reading ? 'analysis.describe.again' : 'analysis.describe.run')}</button>}
         </div>
+        <div className="analysis-sampling" data-analysis-sampling>
+          <label className="forge-field"><span>{t('analysis.describe.temperature')} <output data-analysis-temperature-value>{temperature.toFixed(2)}</output></span>
+            <input type="range" min={0} max={1.5} step={0.05} value={temperature} data-analysis-temperature aria-label={t('analysis.describe.temperature')} onChange={e => setTemperature(Number(e.target.value))}/></label>
+          <label className="forge-field"><span>{t('analysis.describe.penalty')} <output data-analysis-penalty-value>{penalty.toFixed(1)}</output></span>
+            <input type="range" min={0} max={2} step={0.1} value={penalty} data-analysis-penalty aria-label={t('analysis.describe.penalty')} onChange={e => setPenalty(Number(e.target.value))}/></label>
+        </div>
+        <p className="forge-note">{t('analysis.describe.samplingHint')}</p>
+        {pickFirst && <p className="forge-note" role="status" data-analysis-pick-first>{t('analysis.describe.pickFirst')}</p>}
         {!result && !busy && ready && <p className="forge-note">{t('analysis.describe.noTags')}</p>}
         {forge.error && <p className="error-message" role="alert">{t(forge.error)}</p>}
         {describing && <p className="chat-status" role="status">{castShown.length ? t('analysis.describe.readingCast', { series: castShown.map(([s, n]) => `${s} (${n})`).join(', ') }) : t('analysis.describe.reading')}</p>}

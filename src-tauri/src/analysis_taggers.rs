@@ -52,6 +52,27 @@ pub struct Unusable {
     pub name: String,
     pub place: String,
     pub reason: String,
+    /// An animetimm checkpoint DEAS can turn into an ONNX copy (analysis_convert.rs).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub convert: Option<Convertible>,
+}
+
+/// A PyTorch checkpoint that can be converted: its folder and the size of its weights
+/// (the ONNX copy is about as big).
+#[derive(Clone, Serialize, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Convertible {
+    pub folder: String,
+    pub bytes: u64,
+}
+
+/// An ONNX copy DEAS made of a checkpoint: where the checkpoint was, as people know it,
+/// and the copy's model file.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Converted {
+    pub source: PathBuf,
+    pub place: String,
+    pub model: PathBuf,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -540,6 +561,21 @@ fn thresholds(model: &Path) -> (f64, f64) {
     }
 }
 
+/// An animetimm-style timm checkpoint: weights the converter reads, a config naming the
+/// architecture, and the test-time preprocessing it needs for the input.
+fn convertible(dir: &Path, weights: &str) -> Option<Convertible> {
+    if !matches!(weights, "pytorch_model.bin" | "model.safetensors") || !dir.join("preprocess.json").is_file() || !dir.join("selected_tags.csv").is_file() {
+        return None;
+    }
+    let config: serde_json::Value = serde_json::from_slice(&fs::read(dir.join("config.json")).ok()?).ok()?;
+    config.get("architecture")?.as_str()?;
+    config.get("num_classes")?.as_u64()?;
+    Some(Convertible {
+        folder: dir.to_string_lossy().into(),
+        bytes: fs::metadata(dir.join(weights)).ok()?.len(),
+    })
+}
+
 type Key = (PathBuf, u64, Option<SystemTime>);
 /// Tag lists read once per file version: discovery runs each time the tab opens.
 static SUMMARIES: Mutex<Option<HashMap<Key, Result<(usize, bool), String>>>> = Mutex::new(None);
@@ -589,6 +625,7 @@ impl Found {
                     name,
                     place: place.into(),
                     reason: "No tag list beside the model file. Taggers ship one (selected_tags.csv, or a .csv/.json with the model's name); put it in the same folder.".into(),
+                    convert: None,
                 });
             }
             return;
@@ -618,6 +655,7 @@ impl Found {
             name,
             place: place.into(),
             reason: format!("Its tag list cannot be used: {last_error}."),
+            convert: None,
         });
     }
 
@@ -633,10 +671,17 @@ impl Found {
         if self.unusable.iter().any(|u| u.place == place && u.name == name) {
             return;
         }
+        let convert = convertible(dir, weights);
+        let reason = if convert.is_some() {
+            format!("Only PyTorch weights here ({weights}); Media Analysis runs ONNX taggers. DEAS can convert it to ONNX once, on this PC.")
+        } else {
+            format!("Only PyTorch weights here ({weights}); Media Analysis runs ONNX taggers. An ONNX copy of this tagger (model.onnx) in the same folder would be used.")
+        };
         self.unusable.push(Unusable {
             name,
             place: place.into(),
-            reason: format!("Only PyTorch weights here ({weights}); Media Analysis runs ONNX taggers. An ONNX copy of this tagger (model.onnx) in the same folder would be used."),
+            reason,
+            convert,
         });
     }
 }
@@ -680,8 +725,15 @@ fn scan(found: &mut Found, dir: &Path, base: &Path, prefix: &str, depth: usize, 
     }
 }
 
-/// Every tagger in these model folders and their ComfyUI's custom nodes.
+/// Every tagger in these model folders and their ComfyUI's custom nodes, with the ONNX
+/// copies DEAS converted.
 pub fn discover(models: &[PathBuf]) -> Found {
+    discover_with(models, &crate::analysis_convert::converted())
+}
+
+/// Discovery with the converted copies given: a copy stands in for its checkpoint's
+/// "cannot be used" entry, and is still listed if the checkpoint has gone.
+pub fn discover_with(models: &[PathBuf], converted: &[Converted]) -> Found {
     let mut found = Found::default();
     // DEAS's own folder first: that is where the optional download goes.
     for m in models {
@@ -714,6 +766,14 @@ pub fn discover(models: &[PathBuf]) -> Found {
                 }
             }
         }
+    }
+    for c in converted {
+        let at = found.unusable.iter().position(|u| u.convert.as_ref().is_some_and(|v| Path::new(&v.folder) == c.source));
+        let place = match at {
+            Some(i) => found.unusable.remove(i).place,
+            None => c.place.clone(),
+        };
+        found.add_model(c.model.clone(), &format!("{place} (converted)"), true);
     }
     // Two copies of one tagger: tell them apart by where they are.
     let names: Vec<String> = found.taggers.iter().map(|t| t.name.clone()).collect();
@@ -773,7 +833,7 @@ mod tests {
         // Not a tagger node: never scanned.
         write(&comfy.join("custom_nodes/ComfyUI-Impact/models/thing.onnx"), "x");
 
-        let found = discover(&[models]);
+        let found = discover_with(&[models], &[]);
         let got: Vec<(&str, &str, usize, bool)> = found
             .taggers
             .iter()

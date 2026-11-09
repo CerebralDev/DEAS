@@ -394,11 +394,32 @@ fn vision_error(model: &str, e: String) -> String {
 }
 
 #[allow(clippy::too_many_arguments)]
+/// Temperature and presence penalty for Describe: PromptForge's sliders and ranges. At
+/// 0.2 with no penalty the small vision models repeat whole sentences; Qwen's own advice
+/// for its vision models is 0.7 with a presence penalty of 1.5.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Sampling {
+    pub temperature: f64,
+    pub presence_penalty: f64,
+}
+
+impl Sampling {
+    /// Clamped to PromptForge's ranges; anything missing keeps the old 0.2 and no penalty.
+    pub fn from(temperature: Option<f64>, presence_penalty: Option<f64>) -> Self {
+        let pick = |v: Option<f64>, lo: f64, hi: f64, default: f64| v.filter(|x| x.is_finite()).map_or(default, |x| x.clamp(lo, hi));
+        Self {
+            temperature: pick(temperature, 0.0, 1.5, 0.2),
+            presence_penalty: pick(presence_penalty, 0.0, 2.0, 0.0),
+        }
+    }
+}
+
 pub async fn describe(
     root: &Path,
     model: &str,
     image: &str,
     tags: Vec<String>,
+    sampling: Sampling,
     stop: &AtomicBool,
     emit: &mut (dyn FnMut(DescribeEvent) + Send),
 ) -> Result<Reading, String> {
@@ -464,15 +485,16 @@ pub async fn describe(
         ),
     ];
     let mut on_text = |piece: &str| emit(DescribeEvent::Text { text: piece.to_string() });
-    // A reading task: low temperature, thinking off (PromptForge's settings).
+    // A reading task: thinking off, sampling from the tab (PromptForge's settings).
     let reply = chat::stream_round(
         chat::Round {
             config: &config,
             model,
             messages: &messages,
             tools: None,
-            temperature: Some(0.2),
+            temperature: Some(sampling.temperature),
             top_p: None,
+            presence_penalty: (sampling.presence_penalty > 0.0).then_some(sampling.presence_penalty),
             max_tokens: Some(2048),
             timeout: TIMEOUT,
         },
@@ -507,6 +529,8 @@ pub async fn native_analysis_describe(
     model: String,
     image: String,
     tags: Vec<String>,
+    temperature: Option<f64>,
+    presence_penalty: Option<f64>,
     request_id: String,
     on_event: tauri::ipc::Channel<DescribeEvent>,
 ) -> Result<Reading, String> {
@@ -525,7 +549,8 @@ pub async fn native_analysis_describe(
     let mut emit = |e: DescribeEvent| {
         let _ = on_event.send(e);
     };
-    let out = describe(&root, &model, &image, tags, &flag, &mut emit).await;
+    let sampling = Sampling::from(temperature, presence_penalty);
+    let out = describe(&root, &model, &image, tags, sampling, &flag, &mut emit).await;
     stop_flags()
         .lock()
         .unwrap_or_else(|e| e.into_inner())
@@ -598,5 +623,13 @@ Characters:
     fn a_server_refusing_the_picture_reads_as_no_vision() {
         assert!(vision_error("m", "LLM server error 500: image input is not supported - hint: you may need to provide the mmproj".into()).contains("cannot see pictures"));
         assert_eq!(vision_error("m", "The LLM took too long to answer".into()), "ANALYSIS_DESCRIBE: The LLM took too long to answer");
+    }
+
+    #[test]
+    fn sampling_keeps_promptforges_defaults_and_ranges() {
+        assert_eq!(Sampling::from(None, None), Sampling { temperature: 0.2, presence_penalty: 0.0 });
+        assert_eq!(Sampling::from(Some(0.7), Some(1.5)), Sampling { temperature: 0.7, presence_penalty: 1.5 });
+        assert_eq!(Sampling::from(Some(9.0), Some(-1.0)), Sampling { temperature: 1.5, presence_penalty: 0.0 });
+        assert_eq!(Sampling::from(Some(f64::NAN), Some(3.0)), Sampling { temperature: 0.2, presence_penalty: 2.0 });
     }
 }

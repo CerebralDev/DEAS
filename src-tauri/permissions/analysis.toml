@@ -1,4 +1,4 @@
 [[permission]]
 identifier = "allow-native-analysis"
 description = "Media Analysis: list the image taggers in the models folders, install the private tagger runtime (and, only when asked, the WD v3 tagger), cancel that install, choose and tag one picture, read a video's frames and save picked ones, and describe a picture with the configured vision LLM."
-commands.allow = ["native_analysis_overview", "native_analysis_setup", "native_analysis_cancel", "native_analysis_stage", "native_analysis_tag", "native_analysis_pick", "native_analysis_frames_open", "native_analysis_frame", "native_analysis_frames_save", "native_analysis_describe", "native_analysis_describe_cancel"]
+commands.allow = ["native_analysis_overview", "native_analysis_setup", "native_analysis_cancel", "native_analysis_convert", "native_analysis_stage", "native_analysis_tag", "native_analysis_pick", "native_analysis_frames_open", "native_analysis_frame", "native_analysis_frames_save", "native_analysis_describe", "native_analysis_describe_cancel"]
