@@ -1027,6 +1027,7 @@ async fn answer(
                     tools: offer.then_some(defs.as_slice()),
                     temperature: None,
                     top_p: None,
+                    presence_penalty: None,
                     max_tokens: None,
                     timeout: ROUND_TIMEOUT,
                 },

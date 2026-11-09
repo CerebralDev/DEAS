@@ -1,0 +1,72 @@
+.analysis-tab { display: grid; grid-template-columns: minmax(280px, 1fr) minmax(320px, 1.2fr); gap: 12px; height: 100%; min-height: 0; padding: 12px; box-sizing: border-box; }
+@media (max-width: 900px) { .analysis-tab { grid-template-columns: minmax(0, 1fr); overflow-y: auto; } }
+.analysis-picture, .analysis-results { display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow-y: auto; }
+.analysis-choose input { display: none; }
+.analysis-choose { cursor: pointer; }
+.analysis-drop { flex: none; min-height: 360px; display: grid; place-items: center; border: 1px dashed rgb(var(--ink-rgb) / 0.2); border-radius: 8px; overflow: hidden; background: var(--deep); }
+.analysis-drop.over { border-color: var(--blue); background: rgb(var(--blue-rgb) / 0.1); }
+.analysis-drop.filled { border-style: solid; }
+.analysis-drop img { max-width: 100%; max-height: 62vh; object-fit: contain; }
+.analysis-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 0; }
+.analysis-made summary { cursor: pointer; font-size: 12px; color: var(--text-2); }
+.analysis-made dl { display: grid; gap: 6px; margin: 8px 0 0; font-size: 12px; }
+.analysis-made dt { color: var(--muted); }
+.analysis-made dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.analysis-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+.analysis-controls .forge-field { min-width: 0; }
+.analysis-controls select { min-width: 200px; }
+.analysis-controls input[type="number"] { width: 80px; }
+.analysis-out { display: grid; gap: 6px; }
+.analysis-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.analysis-chip { font-size: 12px; cursor: default; }
+.analysis-chip.character { border-color: var(--blue); color: var(--chalk); }
+.analysis-actions { align-items: center; margin-top: 4px; }
+.analysis-setup { display: grid; gap: 8px; }
+.analysis-setup ul { margin: 0; padding-left: 18px; }
+.analysis-progress { display: grid; gap: 6px; }
+.analysis-progress progress { width: 100%; }
+.analysis-made-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.analysis-where { margin: 0; }
+.analysis-unusable summary { cursor: pointer; font-size: 12px; color: var(--text-2); }
+.analysis-unusable ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 6px; font-size: 12px; }
+.analysis-chip.added { border-style: dashed; }
+.analysis-chip.unknown { opacity: 0.6; text-decoration: line-through dotted; }
+.analysis-describe { display: grid; gap: 8px; border-top: 1px solid rgb(var(--ink-rgb) / 0.12); padding-top: 10px; }
+.analysis-reading { display: grid; gap: 6px; }
+.analysis-description { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; line-height: 1.45; }
+.analysis-stream { margin: 0; max-height: 240px; overflow: auto; white-space: pre-wrap; font-size: 12px; color: var(--text-2); }
+.analysis-frames { display: grid; gap: 8px; min-width: 0; outline: none; }
+.analysis-frames:focus-visible { box-shadow: 0 0 0 2px rgb(var(--blue-rgb) / 0.5); border-radius: 8px; }
+.analysis-frames-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.analysis-frames-head .forge-note { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.analysis-frames-stage { display: grid; grid-template-columns: 64px minmax(0, 1fr) 64px; gap: 6px; align-items: center; }
+.analysis-frames-side { padding: 0; border: 1px solid rgb(var(--ink-rgb) / 0.15); border-radius: 6px; background: var(--deep); min-height: 40px; cursor: pointer; overflow: hidden; }
+.analysis-frames-side:disabled { cursor: default; opacity: 0.3; }
+.analysis-frames-side img { width: 100%; display: block; }
+.analysis-frames-current { position: relative; display: grid; place-items: center; background: var(--deep); border: 1px solid rgb(var(--ink-rgb) / 0.2); border-radius: 8px; height: clamp(240px, 52vh, 720px); overflow: hidden; }
+.analysis-frames-current.picked { border-color: var(--blue); }
+/* Thumbnail stand-in, exact frame and playing video fill the same box, so nothing changes size while the exact frame loads. */
+.analysis-frames-current img { width: 100%; height: 100%; object-fit: contain; }
+.analysis-frames-badge { position: absolute; top: 6px; right: 6px; font-size: 12px; padding: 2px 8px; border-radius: 10px; background: var(--blue); color: var(--chalk); }
+.analysis-frames-nav { display: flex; gap: 8px; align-items: center; justify-content: center; font-size: 12px; }
+.analysis-frames-strip { position: relative; display: flex; gap: 4px; overflow-x: auto; padding-bottom: 6px; }
+.analysis-frames-cell { flex: none; position: relative; padding: 0; height: 64px; border: 2px solid transparent; border-radius: 4px; background: var(--deep); cursor: pointer; overflow: hidden; }
+.analysis-frames-cell img { height: 100%; display: block; }
+.analysis-frames-cell span { position: absolute; left: 2px; bottom: 1px; font-size: 10px; color: var(--chalk); text-shadow: 0 0 2px #000, 0 0 2px #000; }
+.analysis-frames-cell.current { border-color: var(--chalk); }
+.analysis-frames-cell.picked { border-color: var(--blue); }
+.analysis-frames-actions, .analysis-frames-sends { align-items: center; flex-wrap: wrap; }
+.analysis-convert { margin-top: 6px; display: grid; gap: 4px; justify-items: start; }
+.analysis-convert .forge-note { margin: 0; }
+.analysis-sampling { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px 16px; margin-top: 8px; }
+.analysis-sampling input[type="range"] { width: 100%; }
+.analysis-sampling output { margin-left: 6px; font-variant-numeric: tabular-nums; }
+.analysis-made { display: grid; gap: 6px; }
+.analysis-made-title { text-transform: uppercase; letter-spacing: .04em; }
+.analysis-made-summary { display: grid; grid-template-columns: max-content 1fr; gap: 2px 10px; margin: 0; font-size: 12px; }
+.analysis-made-summary > div { display: contents; }
+.analysis-made-summary dt { color: var(--muted); font-weight: 600; }
+.analysis-made-summary dd { margin: 0; overflow-wrap: anywhere; }
+.analysis-made-prompt { margin: 4px 0 0; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.analysis-frames-current video { display: block; width: 100%; height: 100%; object-fit: contain; }
+.analysis-frames-current video[hidden] { display: none; }

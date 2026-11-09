@@ -10,7 +10,7 @@ pub mod canon;
 pub mod character;
 pub mod chat;
 pub mod clean;
-mod data;
+pub mod data;
 pub mod engine;
 pub mod gpu_swap;
 pub mod message;

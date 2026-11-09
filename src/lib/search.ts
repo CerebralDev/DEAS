@@ -3,7 +3,7 @@
  * Search only reads; navigation is the tab band's own switch (no setting is written, nothing is submitted).
  */
 export type SearchView = 'studio' | 'downloads' | 'comfy' | 'backend' | 'logs';
-export type SearchStudioTab = 'generate' | 'forge' | 'chat' | 'tve' | 'monitor' | 'map';
+export type SearchStudioTab = 'generate' | 'forge' | 'chat' | 'analysis' | 'tve' | 'monitor' | 'map';
 export type SearchPanel = 'startup' | 'llm' | 'auth';
 
 export interface SearchEntry {
@@ -121,6 +121,30 @@ export const searchIndex: readonly SearchEntry[] = [
   { view: studio, studioTab: 'forge', tab: 'studio.tab.forge', section: 'studio.tab.forge', label: 'forge.detail', target: '[data-forge-ladder="detail"]', aliases: ['length', 'level'] },
   // Chat
   { view: studio, studioTab: 'chat', tab: 'studio.tab.chat', section: 'studio.tab.chat', label: 'chat.message', target: '[data-chat-input]', aliases: ['prompt', 'ask'] },
+  // Media Analysis
+  { view: studio, studioTab: 'analysis', tab: 'studio.tab.analysis', section: 'analysis.picture', label: 'analysis.choose', target: '[data-analysis-choose], [data-analysis-file]', aliases: ['open', 'file', 'picture', 'video', 'browse', 'import'] },
+  { view: studio, studioTab: 'analysis', tab: 'studio.tab.analysis', section: 'analysis.tags', label: 'analysis.setup', target: '[data-analysis-setup-run]', aliases: ['install', 'runtime', 'tagger', 'onnx'], reason: 'analysis.search.setupOnly' },
+  { view: studio, studioTab: 'analysis', tab: 'studio.tab.analysis', section: 'analysis.tags', label: 'analysis.search.download', target: '[data-analysis-download]', aliases: ['download', 'WD', 'EVA02', 'tagger', 'install'], reason: 'analysis.search.setupOnly' },
+  { view: studio, studioTab: 'analysis', tab: 'studio.tab.analysis', section: 'analysis.tags', label: 'analysis.rescan', target: '[data-analysis-rescan]', aliases: ['rescan', 'refresh', 'scan', 'taggers'], reason: 'analysis.search.setupOnly' },
+  { view: studio, studioTab: 'analysis', tab: 'studio.tab.analysis', section: 'analysis.tags', label: 'analysis.tagger', target: '[data-analysis-tagger]', aliases: ['tagger', 'model', 'WD', 'animetimm'], reason: 'analysis.search.needsSetup' },
+  { view: studio, studioTab: 'analysis', tab: 'studio.tab.analysis', section: 'analysis.tags', label: 'analysis.general', target: '[data-analysis-general]', aliases: ['threshold', 'general', 'confidence'], reason: 'analysis.search.needsSetup' },
+  { view: studio, studioTab: 'analysis', tab: 'studio.tab.analysis', section: 'analysis.tags', label: 'analysis.character', target: '[data-analysis-character]', aliases: ['threshold', 'character', 'confidence'], reason: 'analysis.search.needsSetup' },
+  { view: studio, studioTab: 'analysis', tab: 'studio.tab.analysis', section: 'analysis.tags', label: 'analysis.tag', target: '[data-analysis-tag]', aliases: ['tag', 'tags', 'interrogate', 'booru', 'danbooru', 'read'], reason: 'analysis.search.needsSetup' },
+  { view: studio, studioTab: 'analysis', tab: 'studio.tab.analysis', section: 'analysis.tags', label: 'analysis.copy', target: '[data-analysis-copy]', aliases: ['copy', 'clipboard', 'tags'], reason: 'analysis.search.needsTags' },
+  { view: studio, studioTab: 'analysis', tab: 'studio.tab.analysis', section: 'analysis.tags', label: 'chat.toGenerate', target: '[data-analysis-send]', aliases: ['send', 'prompt', 'generate', 'tags'], reason: 'analysis.search.needsTags' },
+  { view: studio, studioTab: 'analysis', tab: 'studio.tab.analysis', section: 'analysis.tags', label: 'analysis.spaces', target: '[data-analysis-spaces]', aliases: ['underscore', 'spaces', 'format'], reason: 'analysis.search.needsTags' },
+  { view: studio, studioTab: 'analysis', tab: 'studio.tab.analysis', section: 'analysis.tags', label: 'analysis.convert.run', target: '[data-analysis-convert-run]', aliases: ['convert', 'onnx', 'animetimm', 'pytorch'], reason: 'analysis.search.noConvert' },
+  { view: studio, studioTab: 'analysis', tab: 'studio.tab.analysis', section: 'analysis.describe.title', label: 'forge.model', target: '[data-analysis-describe-model]', aliases: ['llm', 'vision', 'model', 'describe'], reason: 'analysis.search.needsPicture' },
+  { view: studio, studioTab: 'analysis', tab: 'studio.tab.analysis', section: 'analysis.describe.title', label: 'analysis.describe.run', target: '[data-analysis-describe-run]', aliases: ['describe', 'caption', 'vision', 'llm'], reason: 'analysis.search.needsPicture' },
+  { view: studio, studioTab: 'analysis', tab: 'studio.tab.analysis', section: 'analysis.describe.title', label: 'analysis.describe.temperature', target: '[data-analysis-temperature]', aliases: ['temperature', 'sampling', 'describe'], reason: 'analysis.search.needsPicture' },
+  { view: studio, studioTab: 'analysis', tab: 'studio.tab.analysis', section: 'analysis.describe.title', label: 'analysis.describe.penalty', target: '[data-analysis-penalty]', aliases: ['repeat', 'presence', 'penalty', 'sampling'], reason: 'analysis.search.needsPicture' },
+  { view: studio, studioTab: 'analysis', tab: 'studio.tab.analysis', section: 'analysis.frames.title', label: 'analysis.frames.prev', target: '[data-frame-prev]', aliases: ['frame', 'step', 'back', 'video'], reason: 'analysis.search.needsVideo' },
+  { view: studio, studioTab: 'analysis', tab: 'studio.tab.analysis', section: 'analysis.frames.title', label: 'analysis.frames.next', target: '[data-frame-next]', aliases: ['frame', 'step', 'forward', 'video'], reason: 'analysis.search.needsVideo' },
+  { view: studio, studioTab: 'analysis', tab: 'studio.tab.analysis', section: 'analysis.frames.title', label: 'analysis.frames.play', target: '[data-frame-play]', aliases: ['play', 'pause', 'video'], reason: 'analysis.search.needsVideo' },
+  { view: studio, studioTab: 'analysis', tab: 'studio.tab.analysis', section: 'analysis.frames.title', label: 'analysis.frames.use', target: '[data-frame-use]', aliases: ['frame', 'still', 'extract', 'video'], reason: 'analysis.search.needsVideo' },
+  { view: studio, studioTab: 'analysis', tab: 'studio.tab.analysis', section: 'analysis.frames.title', label: 'analysis.frames.pick', target: '[data-frame-pick]', aliases: ['select', 'mark', 'frame'], reason: 'analysis.search.needsVideo' },
+  { view: studio, studioTab: 'analysis', tab: 'studio.tab.analysis', section: 'analysis.frames.title', label: 'analysis.frames.save', target: '[data-frame-save]', aliases: ['export', 'png', 'frame', 'video'], reason: 'analysis.search.needsVideo' },
+  { view: studio, studioTab: 'analysis', tab: 'studio.tab.analysis', section: 'analysis.frames.title', label: 'analysis.frames.clear', target: '[data-frame-clear]', aliases: ['picks', 'unselect', 'frame'], reason: 'analysis.search.needsVideo' },
   { view: studio, studioTab: 'generate', dockTab: 'post', tab: 'setup.tab.studio', section: 'studio.audioEnhance.title', label: 'studio.audioEnhance.deep', target: '[data-audio-enhance="post"] [data-audio-enhance-install="deep"]', aliases: ['audio', 'install', 'download', 'retry', 'engine', 'DeepFilterNet', 'speech', 'license', 'consent'], reason: 'studio.audioEnhance.modelsMissing' },
   { view: studio, studioTab: 'generate', dockTab: 'post', tab: 'setup.tab.studio', section: 'studio.audioEnhance.title', label: 'studio.audioEnhance.stems', target: '[data-audio-enhance="post"] [data-audio-enhance-install="stems"]', aliases: ['audio', 'install', 'download', 'retry', 'engine', 'Smule', 'MIT', 'Windowed RoFormer', 'vocals', 'instrumental', 'license', 'consent', 'checkpoint'], reason: 'studio.audioEnhance.modelsMissing' },
   { view: studio, studioTab: 'tve', tab: 'studio.tab.tve', section: 'studio.audioEnhance.title', label: 'studio.audioEnhance.deep', target: '[data-audio-enhance="tve"] [data-audio-enhance-install="deep"]', aliases: ['audio', 'install', 'download', 'retry', 'engine', 'DeepFilterNet', 'speech', 'license', 'consent'], reason: 'studio.audioEnhance.modelsMissing' },

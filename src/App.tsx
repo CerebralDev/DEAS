@@ -12,12 +12,15 @@ import { TrueVideoEnhancer } from './features/studio/TrueVideoEnhancer';
 import { Monitoring } from './features/monitoring/Monitoring';
 import { PromptForge } from './features/forge/PromptForge';
 import { Chat } from './features/chat/Chat';
+import { Analysis } from './features/analysis/Analysis';
+import type { MediaItem } from './lib/media';
+import type { MediaAction } from './features/media/MediaLibrary';
 import type { Folders } from './lib/settings';
 import type { ChatRenderOutcome, ChatRenderRequest, ChatStudio } from './lib/chat';
 import type { ForgeCanvasContext, ForgeSendCanvas } from './lib/forgeCanvas';
 import { oneOf, usePref } from './lib/preferences';
 import {type Experience,type BeginnerPage} from './features/beginner/Experience';
-const studioTabs=['generate','forge','chat','tve','monitor','map'] as const;
+const studioTabs=['generate','forge','chat','analysis','tve','monitor','map'] as const;
 const presentation: Record<string,{column:number;order:number}>={engine:{column:0,order:0},director:{column:1,order:0},plugins:{column:1,order:1},forge:{column:2,order:0},refmods:{column:2,order:1},continuity:{column:2,order:2},output:{column:2,order:3}};
 interface DirectorDraft {direction:string;framing:string;mood:string}
 const defaultDraft:DirectorDraft={direction:'',framing:'wide',mood:'natural'};
@@ -65,6 +68,12 @@ export default function App(){
  // Prompt Forge mounts on first visit (it reads the backend's model list) and then keeps its draft.
  const forgeOpened=useRef(false);if(tab==='forge')forgeOpened.current=true;
  const chatOpened=useRef(false);if(tab==='chat')chatOpened.current=true;
+ const analysisOpened=useRef(false);if(tab==='analysis')analysisOpened.current=true;
+ // Media's "Open in Media Analysis" sends the picture here.
+ const [toAnalyze,setToAnalyze]=useState<{item:MediaItem;n:number}>();
+ const analyze=(item:MediaItem)=>{setToAnalyze(a=>({item,n:(a?.n??0)+1}));setTab('analysis');};
+ // The frame picker's sends are whatever Generate would do with a picture right now.
+ const frameActions=useRef<((item:MediaItem)=>MediaAction[])|undefined>(undefined);
  const tveOpened=useRef(false);if(tab==='tve')tveOpened.current=true;
  const monitorOpened=useRef(false);if(tab==='monitor')monitorOpened.current=true;
  const [forgeHost,setForgeHost]=useState<HTMLDivElement|null>(null);
@@ -110,7 +119,8 @@ export default function App(){
    <AiOSetup experience={experience} onExperience={setExperience} beginnerPage={beginnerPage} onBeginnerPage={setBeginnerPage} studioTab={tab} onStudioTab={setTab} onStudioActiveChange={setStudioActive} onConnectExisting={connectExisting} onEnvironment={setEnvironment} studio={<div id="studio-workspace" className="studio-workspace">
     <div className="studio-columns">
     <div className="studio-main">
-    <div className="studio-generate-host" hidden={tab==='forge'||tab==='chat'||tab==='tve'||tab==='monitor'}><Workbench beginner={beginner} beginnerPage={beginnerPage} onBeginnerPage={setBeginnerPage} planVisible={tab==='map'} endpoint={endpoint} roots={roots} root={environment?.root} incoming={sent} onCanvasContext={setForgeCanvasContext} onOpenVideoPost={()=>setTab('tve')} forgeHost={forgeHost} forgeActive={studioActive&&tab==='forge'} onOpenPromptForge={()=>setTab('forge')} onH3ForgeAvailable={setH3ForgeAvailable} chatRender={chatRender} onChatRender={chatRendered} onChatStudio={setChatStudio}/></div>
+    <div className="studio-generate-host" hidden={tab==='forge'||tab==='chat'||tab==='analysis'||tab==='tve'||tab==='monitor'}><Workbench beginner={beginner} beginnerPage={beginnerPage} onBeginnerPage={setBeginnerPage} planVisible={tab==='map'} endpoint={endpoint} roots={roots} root={environment?.root} incoming={sent} onCanvasContext={setForgeCanvasContext} onOpenVideoPost={()=>setTab('tve')} forgeHost={forgeHost} forgeActive={studioActive&&tab==='forge'} onOpenPromptForge={()=>setTab('forge')} onH3ForgeAvailable={setH3ForgeAvailable} chatRender={chatRender} onChatRender={chatRendered} onChatStudio={setChatStudio} onAnalyze={analyze} onFrameActions={fn=>{frameActions.current=fn;}}/></div>
+    {analysisOpened.current&&<div className="studio-generate-host" hidden={tab!=='analysis'}><Analysis active={studioActive&&tab==='analysis'} endpoint={endpoint} frameActions={item=>frameActions.current?.(item)??[]} roots={roots} root={environment?.root} incoming={toAnalyze} onSend={sendToGenerate}/></div>}
     {tveOpened.current&&<div className="studio-generate-host" hidden={tab!=='tve'}><TrueVideoEnhancer endpoint={endpoint} roots={roots}/></div>}
     {monitorOpened.current&&<div className="studio-generate-host" hidden={tab!=='monitor'}><Monitoring active={studioActive&&tab==='monitor'} root={environment?.root}/></div>}
     {forgeOpened.current&&<div className="studio-generate-host" hidden={tab!=='forge'}>{canvasSendError&&<p className="error-message" role="alert">{t(canvasSendError)}</p>}<div ref={setForgeHost} hidden={!h3ForgeAvailable}/><div hidden={h3ForgeAvailable}><PromptForge active={studioActive&&tab==='forge'&&!h3ForgeAvailable} endpoint={endpoint} root={environment?.root} inputDir={roots?.input} outputDir={roots?.output} onSend={sendToGenerate} canvasContext={forgeCanvasContext}/></div></div>}

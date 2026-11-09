@@ -1,5 +1,9 @@
 # News
 
+## 0.2.22 BETA (unreleased)
+
+- **New: Media Analysis.** Drop a picture on **Studio → Media Analysis** for its tags, the settings that made it and **Open in ComfyUI** for its workflow; press **Describe** for the picture in words from your vision LLM, with the characters it recognises and what the tagger missed. It uses the taggers you already have (WD14 node, animetimm ONNX, and others) and downloads one only if you have none and ask. Drop a video to get every frame in a strip: save frames, analyse one, or send it to Generate as a first/last frame or H3 picture (several picked frames at once as H3 references). Have animetimm taggers from ComfyUI's animetimm node? Media Analysis can convert them to ONNX for you, once, and use them. Describe has Temperature and Repeat penalty sliders, and you pick its model before it runs. [Media Analysis guide](MEDIA-ANALYSIS.md).
+
 ## 0.2.21 BETA
 
 - **AMD Radeon (Linux) can run the owned ComfyUI backend** — setup detects RDNA2–RDNA4 cards, installs the pinned ROCm environment and verifies with a real computation; RTX Video refine and RTX frame generation stay NVIDIA-only and are refused at submit with a named reason. First real RDNA hardware is still the acceptance gate. [Backend](BACKEND.md).

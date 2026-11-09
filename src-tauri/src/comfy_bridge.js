@@ -27,7 +27,8 @@
   if(event.source!==window.parent||!allowed.has(event.origin)||!data||typeof data.id!=='string'||!['deas:probe','deas:load'].includes(data.type))return;
   const reply=type=>event.source.postMessage({type,id:data.id},event.origin);
   try{
-   const {app}=await import(new URL('/scripts/app.js',location.origin).href);
+   // Frontend 1.57+ no longer exposes comfyAPI.app, so its /scripts/app.js shim throws; the live app is window.app.
+   const app=window.app?.canvas?window.app:(await import(new URL('/scripts/app.js',location.origin).href)).app;
    if(!app?.canvas)return;
    if(data.type==='deas:probe'){reply('deas:ready');return;}
    const w=data.workflow;

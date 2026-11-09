@@ -82,7 +82,7 @@ def session_round(model, request):
     for message in messages:
         for call in message.get("tool_calls") or []:
             call["function"]["arguments"] = json.loads(call["function"]["arguments"] or "{}")
-    options = {key: request[key] for key in ("temperature", "top_p", "max_tokens") if request.get(key) is not None}
+    options = {key: request[key] for key in ("temperature", "top_p", "presence_penalty", "max_tokens") if request.get(key) is not None}
     if tools:
         options.update(tools=tools, tool_choice="auto")
     # llama-cpp-python derives a fixed seed when given none, so Regenerate would repeat itself.

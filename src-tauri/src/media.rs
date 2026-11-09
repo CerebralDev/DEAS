@@ -6,7 +6,7 @@ use std::io::{BufReader, BufWriter};
 use std::path::{Path, PathBuf};
 
 #[path = "media_intake.rs"]
-mod intake;
+pub(crate) mod intake;
 pub use intake::{native_media_copy_in, native_media_paste};
 #[path = "media_star.rs"]
 pub(crate) mod star;

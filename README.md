@@ -10,6 +10,7 @@ A Rust/Tauri desktop workstation for ComfyUI and DaSiWa tools: generation, model
 | **Video & Music** | MiniMax H3, Wan and LTX pipelines; songs with YuE2 and ACE-Step |
 | **Prompt Forge** | Prompts written in your exact model's own style — presets, wildcards and spellcheck included |
 | **Chat** | Talks ideas through, searches the web, and on request *draws the picture* with your selected settings; on one GPU the chat model and ComfyUI step aside for each other |
+| **Media Analysis** | Reads a picture's tags with local ONNX taggers, shows how it was made, describes it with your vision LLM, and picks exact frames from videos |
 | **Library** | Finds and downloads models and LoRAs from Hugging Face and Civitai |
 | **TVE** | Upscales and remasters your videos on your own card — upscale model, NVIDIA RTX refine, frame generation |
 | **Backend** | Installs and runs the entire ComfyUI environment for you — CPU, NVIDIA, or AMD (Linux) |

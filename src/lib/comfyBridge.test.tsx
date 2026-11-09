@@ -42,3 +42,14 @@ test('each acknowledged import uses a distinct workflow name even for the same m
  expect(r.app.loadGraphData.mock.calls.map(c=>c[3])).toEqual(['DEAS a.png (one)','DEAS a.png (two)']);
  expect(r.parent.postMessage).toHaveBeenLastCalledWith({type:'deas:loaded',id:'two'},'tauri://localhost');
 });
+test('bridge uses the live window.app on frontends whose /scripts/app.js shim no longer exports it',async()=>{
+ let listener:((event:Record<string,unknown>)=>Promise<void>)|undefined;
+ const parent={postMessage:vi.fn()},app={canvas:{},loadGraphData:vi.fn().mockResolvedValue({})},importApp=vi.fn(async()=>{throw new TypeError("Cannot read properties of undefined (reading 'app')");});
+ const window={parent,app,addEventListener:vi.fn((_name:string,fn:typeof listener)=>listener=fn)};
+ new Function('window','location','importApp',source)(window,{protocol:'http:',hostname:'127.0.0.1',origin:'http://127.0.0.1:1234'},importApp);
+ await listener?.({source:parent,origin:'tauri://localhost',data:{type:'deas:probe',id:'p'}});
+ expect(parent.postMessage).toHaveBeenLastCalledWith({type:'deas:ready',id:'p'},'tauri://localhost');
+ await listener?.({source:parent,origin:'tauri://localhost',data:{type:'deas:load',id:'l',workflow,name:'a.png'}});
+ expect(parent.postMessage).toHaveBeenLastCalledWith({type:'deas:loaded',id:'l'},'tauri://localhost');
+ expect(importApp).not.toHaveBeenCalled();
+});

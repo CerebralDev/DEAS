@@ -40,7 +40,7 @@ fn clean_stem(stem: &str) -> String {
 }
 
 /// Writes `bytes` (already sniffed) as `<stem>.<ext>` into `root`, adding `-2`, `-3`… instead of overwriting.
-fn publish(root: &Path, stem: &str, ext: &str, bytes: &[u8]) -> Result<PathBuf, String> {
+pub(crate) fn publish(root: &Path, stem: &str, ext: &str, bytes: &[u8]) -> Result<PathBuf, String> {
     let anchor = Anchor::open(root)?;
     anchor.writable()?;
     let partial = format!(".deas-intake-{}.partial", uuid::Uuid::new_v4());

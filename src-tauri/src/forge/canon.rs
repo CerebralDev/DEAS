@@ -307,6 +307,28 @@ impl CanonTable {
         }
         Some(traits)
     }
+
+    /// A character's post count and usual look, as the table holds it (Media
+    /// Analysis' cast list, PromptForge server/charcast.mjs): the raw traits in
+    /// table order, without the hand corrections a prompt write applies.
+    pub fn cast_member(&self, tag: &str) -> Option<(i64, Vec<String>)> {
+        let (raw, posts): (String, Option<i64>) = self
+            .db
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .prepare_cached("SELECT traits, posts FROM characters WHERE tag = ?1")
+            .and_then(|mut s| {
+                s.query_row([tag], |r| Ok((r.get(0)?, r.get(1)?)))
+                    .optional()
+            })
+            .ok()
+            .flatten()?;
+        let items: Vec<Item> = serde_json::from_str(&raw).ok()?;
+        Some((
+            posts.unwrap_or(0),
+            items.into_iter().map(|i| i.tag).collect(),
+        ))
+    }
 }
 
 /// The block for the user turn: canon as fact, never clothing or props, and

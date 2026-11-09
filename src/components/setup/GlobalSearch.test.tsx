@@ -89,6 +89,8 @@ test('an Options dock card selects its dock tab first, then reveals the card; Ba
   expect(matchEntries(searchIndex, 'reinstall', text).map((entry) => entry.target)).toContain('[data-setup-action="reinstall"]');
   expect(matchEntries(searchIndex, 'spellcheck', text).map((entry) => entry.target)).toContain('[data-prompt-tool="spellcheck"]');
   expect(matchEntries(searchIndex, 'torch.compile', text).map((entry) => entry.target)).toContain('[data-option="compile"]');
+  expect(matchEntries(searchIndex, 'tagger', text).map((entry) => entry.target)).toContain('[data-analysis-tagger]');
+  expect(matchEntries(searchIndex, 'frame', text).map((entry) => entry.target)).toContain('[data-frame-use]');
 });
 
 test('matching uses the current language and English aliases, and stays read-only', () => {

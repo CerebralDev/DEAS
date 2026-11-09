@@ -386,7 +386,7 @@ Node-pack features and their intended DEAS destination (not yet planned in detai
 | System Monitor | Native telemetry |
 | Random String Picker | Prompt/seed services |
 | Node Status Switch | Planner stage enable/bypass |
-| LLM/VLM Analyze | Analysis/captioning plugin |
+| LLM/VLM Analyze | Analysis/captioning plugin — **Media Analysis landed in 0.2.22** (taggers, Describe, frame picker; [MEDIA-ANALYSIS.md](MEDIA-ANALYSIS.md)); LoRA captioning still open |
 
 A PromptForge port keeps per-model dialects, structured video sections, reference labels, tagger integration and review/apply. It uses DEAS's execution layer rather than its own ComfyUI queue, and licensing is verified first.
 

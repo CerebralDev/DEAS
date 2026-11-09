@@ -369,6 +369,7 @@ pub async fn write(
             tools: tools_left.then_some(offered.as_slice()),
             temperature,
             top_p,
+            presence_penalty: None,
             max_tokens,
             timeout: ROUND_TIMEOUT,
         })
@@ -553,6 +554,7 @@ pub async fn revise(
         tools: None,
         temperature: Some(0.3),
         top_p: None,
+        presence_penalty: None,
         max_tokens: p.max_tokens,
         timeout: ROUND_TIMEOUT,
     })
@@ -711,6 +713,7 @@ async fn read_references(
         tools: None,
         temperature: Some(refs::BLUEPRINT_TEMPERATURE),
         top_p: None,
+        presence_penalty: None,
         max_tokens: Some(refs::blueprint_budget(images.len())),
         timeout: ROUND_TIMEOUT,
     })
@@ -780,6 +783,7 @@ pub async fn reference_readback(
         tools: None,
         temperature: Some(0.2),
         top_p: None,
+        presence_penalty: None,
         max_tokens: Some(1200),
         timeout: ROUND_TIMEOUT,
     })
@@ -1008,6 +1012,7 @@ pub async fn layout_rewrite(
         tools: None,
         temperature: Some(0.25),
         top_p: None,
+        presence_penalty: None,
         max_tokens: Some(1200),
         timeout: ROUND_TIMEOUT,
     })
