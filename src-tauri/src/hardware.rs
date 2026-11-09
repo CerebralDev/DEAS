@@ -16,13 +16,14 @@ pub struct HardwareDetection {
 #[serde(rename_all = "lowercase")]
 pub enum DetectedBackend {
     Nvidia,
+    Amd,
 }
 
 impl HardwareDetection {
-    fn from_probe(result: Result<Hardware, String>) -> Self {
+    fn from_probe(result: Result<Hardware, String>, backend: DetectedBackend) -> Self {
         match result {
             Ok(hardware) => Self {
-                backend: Some(DetectedBackend::Nvidia),
+                backend: Some(backend),
                 hardware: Some(hardware),
                 warnings: vec![],
             },
@@ -35,27 +36,53 @@ impl HardwareDetection {
     }
 }
 
-async fn detect_with<F>(probe: F, timeout: std::time::Duration) -> HardwareDetection
+async fn detect_with<F>(
+    probe: F,
+    timeout: std::time::Duration,
+    backend: DetectedBackend,
+) -> HardwareDetection
 where
     F: FnOnce() -> Result<Hardware, String> + Send + 'static,
 {
     let task = tauri::async_runtime::spawn_blocking(probe);
     let result = match tokio::time::timeout(timeout, task).await {
         Ok(Ok(result)) => result,
-        Ok(Err(error)) => Err(format!("NVIDIA_GPU: discovery worker failed: {error}")),
-        Err(_) => Err("NVIDIA_GPU: hardware discovery timed out".into()),
+        Ok(Err(error)) => Err(format!("GPU: discovery worker failed: {error}")),
+        Err(_) => Err("GPU: hardware discovery timed out".into()),
     };
-    HardwareDetection::from_probe(result)
+    HardwareDetection::from_probe(result, backend)
 }
 
 /// No arguments, target paths, plan state, downloads or service changes.
-/// Uses the existing five-second, 16 KiB NVIDIA query only. Detection does not
-/// imply compatible wheels or verified GPU computation. A failed probe does not
-/// imply CPU, AMD or Intel. The worker retains its own process cleanup deadline
+/// Uses the existing five-second, 16 KiB NVIDIA query; when that fails on Linux it
+/// runs the read-only AMD lspci/amdgpu discovery once. Detection does not imply
+/// compatible wheels or verified GPU computation. A failed probe does not imply
+/// CPU or another backend. The worker retains its own process cleanup deadline
 /// even if the outer six-second response deadline expires.
 #[tauri::command]
 pub async fn native_detect_hardware() -> HardwareDetection {
-    detect_with(torch_profile::probe, std::time::Duration::from_secs(6)).await
+    let nvidia = detect_with(
+        torch_profile::probe,
+        std::time::Duration::from_secs(6),
+        DetectedBackend::Nvidia,
+    )
+    .await;
+    if nvidia.backend.is_some() {
+        return nvidia;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let amd = detect_with(
+            crate::amd::probe_amd,
+            std::time::Duration::from_secs(6),
+            DetectedBackend::Amd,
+        )
+        .await;
+        if amd.backend.is_some() {
+            return amd;
+        }
+    }
+    nvidia
 }
 
 #[cfg(test)]
@@ -71,6 +98,7 @@ mod tests {
                 torch_profile::parse("GPU-fixture, Fixture, 580.1, 12.0")
             },
             std::time::Duration::from_millis(10),
+            DetectedBackend::Nvidia,
         )
         .await;
         assert!(result.backend.is_none());
@@ -90,6 +118,7 @@ mod tests {
             let result = detect_with(
                 move || torch_profile::parse(output),
                 std::time::Duration::from_secs(1),
+                DetectedBackend::Nvidia,
             )
             .await;
             let value = serde_json::to_value(result).unwrap();
@@ -97,7 +126,8 @@ mod tests {
             assert!(value.get("hardware").is_none());
             assert_eq!(value["warnings"].as_array().unwrap().len(), 1);
         }
-        let failure = HardwareDetection::from_probe(Err("probe unavailable".into()));
+        let failure =
+            HardwareDetection::from_probe(Err("probe unavailable".into()), DetectedBackend::Nvidia);
         assert_eq!(
             serde_json::to_value(failure).unwrap(),
             serde_json::json!({
@@ -111,6 +141,7 @@ mod tests {
         let result = detect_with(
             || panic!("fixture worker failure"),
             std::time::Duration::from_secs(1),
+            DetectedBackend::Nvidia,
         )
         .await;
         assert!(result.backend.is_none());
@@ -163,7 +194,7 @@ mod tests {
     fn detected_nvidia_preserves_exact_existing_metadata() {
         // Discovery must not apply install-time driver/Torch gates.
         let hardware = torch_profile::parse("GPU-fixture, GTX 1080, 520.1.0, 6.1").unwrap();
-        let result = HardwareDetection::from_probe(Ok(hardware));
+        let result = HardwareDetection::from_probe(Ok(hardware), DetectedBackend::Nvidia);
         assert_eq!(
             serde_json::to_value(result).unwrap(),
             serde_json::json!({

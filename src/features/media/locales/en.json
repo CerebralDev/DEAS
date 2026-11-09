@@ -25,5 +25,9 @@
   "media.folders": "Folders",
   "media.expandFolder": "Expand {name}",
   "media.collapseFolder": "Collapse {name}",
-  "media.loadingFolders": "Loading folders…"
+  "media.loadingFolders": "Loading folders…",
+  "media.intake.label": "Paste or drop here",
+  "media.intake.hint": "Click here and press Ctrl+V to save a clipboard picture into Input, or drop a picture/video from Media or the file manager here to copy it there. The original stays where it is.",
+  "media.intake.done": "Copied to Input: {name}",
+  "media.intake.ignored": "Only pictures and videos can be copied in."
 }

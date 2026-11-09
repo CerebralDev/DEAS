@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { useI18n } from '../../i18n/I18nProvider';
-import { describeMedia, dropCssPoint, draggedItem, itemFromEntry, MEDIA_DRAG, normalizedMediaPath, relativeMediaPath, type MediaItem } from '../../lib/media';
+import { describeMedia, dropCssPoint, draggedItem, itemFromEntry, MEDIA_DRAG, normalizedMediaPath, pastedPictures, pasteToInput, relativeMediaPath, type MediaItem } from '../../lib/media';
 import type { RefModEntry } from '../../lib/jobs';
 import { labelCharacters, readPeopleBoxes, type PeopleBox, type H3Reference } from '../../lib/forge';
 import type { H3Context } from '../forge/ForgeButton';
@@ -10,6 +10,7 @@ import {PeopleBoxes} from './PeopleBoxes';
 import {PeopleDetector} from './PeopleDetector';
 import {ReferenceMedia} from './ReferenceMedia';
 import {ReferenceEditorDialog} from './ReferenceEditorDialog';
+import {RefModCreate} from './RefModCreate';
 import {ReferenceThumbnail} from './ReferenceThumbnail';
 
 /** A Multi-reference → Video pick: LTX uses images at a second with a guide strength; H3 (REF2VA) also takes videos/audio, optionally trimmed (seconds). */
@@ -161,9 +162,9 @@ export function ReferencePeople({r,label,onChange,endpoint,root,inputRoot,output
   :<details className="wb-ref-more" data-ref-people onToggle={e=>setOpen(e.currentTarget.open)}><summary>{t('forge.people')}</summary>{body}</details>;
 }
 
-export interface ReferencesPanelProps { endpoint?:string; root?:string; refs:VideoRef[]; onChange:(refs:VideoRef[])=>void; family:'ltx-2'|'minimax-h3'|'minimax-h3-hyperflow'; /** Video length: LTX reference seconds stay inside it. */ seconds:number; /** Adds references in order (dropped tiles/files, loaded packs); `replace` starts from an empty list. */ onAdd:(adds:RefAdd[],replace?:boolean)=>void; /** ComfyUI input folder: Director packs name files relative to it. */ inputRoot?:string; outputRoot?:string; label:(r:VideoRef,i:number)=>string; /** Append a Director label such as `<Picture 1>` to the prompt. */ onInsert:(label:string)=>void; /** H3 RefMod rows (Director slots 1–8 in order). */ refmods?:RefMod[]; onRefmods?:(rows:RefMod[])=>void; /** Reads the backend's RefMod library on demand. */ library?:()=>Promise<RefModEntry[]> }
+export interface ReferencesPanelProps { endpoint?:string; root?:string; refs:VideoRef[]; onChange:(refs:VideoRef[])=>void; family:'ltx-2'|'minimax-h3'|'minimax-h3-hyperflow'; /** Video length: LTX reference seconds stay inside it. */ seconds:number; /** Adds references in order (dropped tiles/files, loaded packs); `replace` starts from an empty list. */ onAdd:(adds:RefAdd[],replace?:boolean)=>void; /** ComfyUI input folder: Director packs name files relative to it. */ inputRoot?:string; outputRoot?:string; label:(r:VideoRef,i:number)=>string; /** Append a Director label such as `<Picture 1>` to the prompt. */ onInsert:(label:string)=>void; /** H3 RefMod rows (Director slots 1–8 in order). */ refmods?:RefMod[]; onRefmods?:(rows:RefMod[])=>void; /** Reads the backend's RefMod library on demand. */ library?:()=>Promise<RefModEntry[]>; /** Enables *Create RefMod*: the H3 VAEs and the upload into the backend input folder. */ refmodCreate?:{vae:string;audioVae:string;upload:(path:string)=>Promise<string>} }
 /** Multi-reference → Video editor in Director lanes; used inside the References overlay. */
-export function ReferencesPanel({endpoint='',root,refs,onChange,family,seconds,label,onAdd,onInsert,inputRoot,outputRoot,refmods=[],onRefmods,library}:ReferencesPanelProps){
+export function ReferencesPanel({endpoint='',root,refs,onChange,family,seconds,label,onAdd,onInsert,inputRoot,outputRoot,refmods=[],onRefmods,library,refmodCreate}:ReferencesPanelProps){
  const {t}=useI18n();
  const box=useRef<HTMLDivElement>(null);const [error,setError]=useState('');const [hovering,setHovering]=useState(false);
  const [editing,setEditing]=useState<string|null>(null);
@@ -180,11 +181,24 @@ export function ReferencesPanel({endpoint='',root,refs,onChange,family,seconds,l
   }).then(stop=>{if(alive)unlisten=stop;else stop();},err=>{if(alive)setError(String(err));});
   return()=>{alive=false;unlisten?.();};
  },[]);
+ // Ctrl+V of a picture while focus is in this tab: saved into Input first (pastes have no path), then added like a drop.
+ useEffect(()=>{
+  if(!isTauri()||!inputRoot)return;
+  const paste=(event:ClipboardEvent)=>{
+   const el=box.current,target=event.target;
+   if(event.defaultPrevented||!el||el.closest('[hidden]')||!(target instanceof Node)||!el.contains(target))return;
+   const pictures=pastedPictures(event);if(!pictures.length)return;
+   event.preventDefault();setError('');
+   void pasteToInput(pictures).then(describeMedia).then(entries=>add.current(entries.map(itemFromEntry).flatMap(item=>item?[{item}]:[])),err=>setError(String(err)));
+  };
+  document.addEventListener('paste',paste);return()=>document.removeEventListener('paste',paste);
+ },[inputRoot]);
  const dragged=useRef(-1); // card being reordered by drag
  const [status,setStatus]=useState('');
  // RefMod library: read on demand (a backend round trip), then picked from a list.
  const [entries,setEntries]=useState<RefModEntry[]|null>(null);const [pick,setPick]=useState('');
- const readLibrary=()=>{setError('');library?.().then(list=>{setEntries(list);setPick(list[0]?.name??'');
+ const [creating,setCreating]=useState(false);
+ const readLibrary=(select?:string)=>{setError('');library?.().then(list=>{setEntries(list);setPick(select&&list.some(e=>e.name===select)?select:list[0]?.name??'');
   // Rows from a pack learn their media kinds here (the prefill needs them).
   if(refmods.some(r=>!r.kinds))onRefmods?.(refmods.map(r=>({...r,kinds:r.kinds??list.find(e=>e.name===r.name)?.kinds})));},e=>setError(String(e)));};
  const setRow=(n:number,x:Partial<RefMod>)=>onRefmods?.(refmods.map((r,m)=>m===n?{...r,...x}:r));
@@ -266,10 +280,11 @@ export function ReferencesPanel({endpoint='',root,refs,onChange,family,seconds,l
   </section>)}
   {h3&&onRefmods&&<section className="wb-lane" aria-label={t('studio.run.video.refmods')} data-refmods>
    <h4>{t('studio.run.video.refmods')} · {`${refmods.length}/8`}</h4>
-   <div className="wb-ref-toolbar">{entries===null?<button type="button" className="wb-dock-action" disabled={!library} onClick={readLibrary}>{t('studio.run.video.refmodsRead')}</button>
+   <div className="wb-ref-toolbar">{entries===null?<button type="button" className="wb-dock-action" disabled={!library} onClick={()=>readLibrary()}>{t('studio.run.video.refmodsRead')}</button>
     :entries.length===0?<span>{t('studio.run.video.refmodsNone')}</span>
     :<><select aria-label={t('studio.run.video.refmods')} value={pick} onChange={e=>setPick(e.target.value)}>{entries.map(e=><option key={e.name} value={e.name}>{e.name} ({e.kinds.join(' + ')})</option>)}</select>
-     <button type="button" className="wb-dock-action" disabled={!pick||refmods.length>=8} onClick={()=>onRefmods([...refmods,{name:pick,strength:1,description:entries.find(e=>e.name===pick)?.description??'',kinds:entries.find(e=>e.name===pick)?.kinds}])}>{t('studio.run.video.refmodAdd')}</button></>}</div>
+     <button type="button" className="wb-dock-action" disabled={!pick||refmods.length>=8} onClick={()=>onRefmods([...refmods,{name:pick,strength:1,description:entries.find(e=>e.name===pick)?.description??'',kinds:entries.find(e=>e.name===pick)?.kinds}])}>{t('studio.run.video.refmodAdd')}</button></>}
+    {refmodCreate&&endpoint&&<button type="button" className="wb-dock-action" data-refmod-create disabled={!refs.length&&!refmods.length} onClick={()=>setCreating(true)}>{t('studio.run.video.refmodCreate')}</button>}</div>
    <ul>{refmods.map((r,n)=><li key={n} className="wb-ref" data-refmod={r.name}>
     <strong title={r.name}><span className="media-mark">{`<RefMod ${n+1}>`}</span> {r.name}</strong>
     <span className="wb-ref-actions"><button type="button" aria-label={t('studio.run.video.insertLabel',{label:`<RefMod ${n+1}>`})} onClick={()=>onInsert(`<RefMod ${n+1}>`)}>{t('studio.run.video.insert')}</button>
@@ -279,6 +294,9 @@ export function ReferencesPanel({endpoint='',root,refs,onChange,family,seconds,l
    </li>)}</ul>
   </section>}
   </div>
+  {creating&&refmodCreate&&<ReferenceEditorDialog name="" heading={t('studio.run.video.refmodCreateTitle')} restoreFocus={()=>box.current?.querySelector<HTMLButtonElement>('[data-refmod-create]')??null} onClose={()=>setCreating(false)}>
+   <RefModCreate endpoint={endpoint} refs={refs} tags={tags} saved={refmods.map(r=>r.name)} {...refmodCreate} onSaved={name=>readLibrary(name)}/>
+  </ReferenceEditorDialog>}
   {h3&&editIndex>=0&&<ReferenceEditorDialog name={refs[editIndex].item.name} restoreFocus={()=>Array.from(box.current?.querySelectorAll<HTMLButtonElement>('[data-edit-reference]')??[]).find(b=>b.dataset.editReference===editing)??null} onClose={()=>setEditing(null)}>{editor(refs[editIndex],editIndex)}</ReferenceEditorDialog>}
  </div>;
 }

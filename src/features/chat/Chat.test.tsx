@@ -53,6 +53,19 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.resetAllMocks(); });
 
+it('lists local GGUFs like Prompt Forge and sends them with their local: prefix', async () => {
+  const base = vi.mocked(invoke).getMockImplementation()!;
+  vi.mocked(invoke).mockImplementation(async (command, args) => command === 'native_llm_read' ? { provider: 'local', baseUrl: '' }
+    : command === 'native_llm_models' ? { models: [{ provider: 'local', id: 'gemma.gguf', name: 'gemma.gguf' }], warnings: [] } : base(command, args));
+  render(<I18nProvider><Chat endpoint="http://127.0.0.1:8188" root="/env" onSend={vi.fn()}/></I18nProvider>);
+  const option = await screen.findByRole('option', { name: 'gemma.gguf' }) as HTMLOptionElement;
+  expect(option.disabled).toBe(false);
+  fireEvent.change(screen.getByRole('textbox', { name: 'Message' }), { target: { value: 'hi' } });
+  await waitFor(() => expect((screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+  await waitFor(() => expect(sends()[0]).toMatchObject({ model: 'local:gemma.gguf' }));
+});
+
 it('opens a saved conversation, streams a reply with a prompt card and sends that prompt to Generate', async () => {
   const onSend = vi.fn();
   localStorage.setItem('deas.pref.studio.run.positive', JSON.stringify('1girl, rain'));
@@ -188,4 +201,95 @@ it('web search is chosen in settings, then offered as a toggle; deleting asks on
   expect(vi.mocked(invoke).mock.calls.some(([c]) => c === 'native_chat_delete')).toBe(false);
   fireEvent.click(screen.getByRole('button', { name: 'Delete?' }));
   await waitFor(() => expect(vi.mocked(invoke)).toHaveBeenCalledWith('native_chat_delete', { root: '/env', id: ID }));
+});
+
+it('draws a render_picture answer with Generate, shows its progress and the picture, and records it on the message', async () => {
+  const prompt = { target: 'anima', label: 'Anima', prompt: 'a fox in snow', negative: 'blurry', render: { aspect: '16:9' } };
+  const job = { id: 'job1', baseUrl: 'http://127.0.0.1:8188', promptId: 'p', state: 'running', outputs: [], error: null, generationReady: false, progress: { value: 3, max: 20 } };
+  let polls = 0;
+  const base = vi.mocked(invoke).getMockImplementation()!;
+  vi.mocked(invoke).mockImplementation(async (command, args) => {
+    const a = args as Record<string, any>;
+    if (command === 'native_chat_send') {
+      a.onEvent.onmessage({ event: 'chat', id: ID, title: 't' });
+      return { role: 'assistant', content: 'Anima prompt, written by the Anima prompt writer:\n\na fox in snow\n\nDrawing it with anima.safetensors in Studio\'s Generate.', pictures: 0, prompts: [prompt], citations: [], tools: ['render_picture: Anima'], at: 7 };
+    }
+    if (command === 'native_workbench_poll') {
+      polls++;
+      return { jobs: [polls < 2 ? job : { ...job, state: 'succeeded', progress: undefined, outputRoot: 'C:\\env\\output\\', outputs: [{ filename: 'fox.png', subfolder: 'DEAS', type: 'output' }], metadata: { startedAt: 1, generationMs: 9100 } }], preparing: 0, capacity: 1, stopAvailable: true, admissionEpoch: 0, stopping: false };
+    }
+    if (command === 'native_chat_render_result') return { role: 'assistant', content: 'x', pictures: 0, prompts: [{ ...prompt, picture: a.result }], citations: [], tools: [], at: 7 };
+    return base(command, args);
+  });
+  const onRender = vi.fn(async () => ({ job, width: 1344, height: 768, seed: 42, checkpoint: 'anima.safetensors' }));
+  render(<I18nProvider><Chat endpoint="http://127.0.0.1:8188" root="/env" onSend={vi.fn()} studio={{ checkpoint: 'anima.safetensors', dialect: 'Anima' }} onRender={onRender as never}/></I18nProvider>);
+  await waitFor(() => expect((screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement).disabled).toBe(false), { timeout: 3000 }).catch(() => {});
+  fireEvent.change(screen.getByRole('textbox', { name: 'Message' }), { target: { value: 'draw a fox in the snow, 16:9' } });
+  fireEvent.keyDown(screen.getByRole('textbox', { name: 'Message' }), { key: 'Enter' });
+  // Generate's settings travel with the message, so the LLM knows what draws.
+  await waitFor(() => expect(sends()[0]?.studio).toMatchObject({ checkpoint: 'anima.safetensors', dialect: 'Anima', endpoint: 'http://127.0.0.1:8188', writerModel: 'openai:qwen' }));
+  await waitFor(() => expect(onRender).toHaveBeenCalledWith(expect.objectContaining({ positive: 'a fox in snow', negative: 'blurry', aspect: '16:9' })));
+  // The chat LLM is asked to step aside before the picture is handed over.
+  const calls = vi.mocked(invoke).mock.calls.map(([c]) => c);
+  expect(calls.indexOf('native_chat_free_llm')).toBeGreaterThan(calls.indexOf('native_chat_send'));
+  await screen.findByText('Drawing… step 3 of 20');
+  expect(screen.getByRole('button', { name: 'Stop' })).toBeTruthy();
+  const img = await screen.findByRole('img', { name: 'a fox in snow' }, { timeout: 3000 });
+  expect(img.getAttribute('src')).toBe('C:\\env\\output\\DEAS\\fox.png');
+  expect(screen.getByText('1344×768 · anima · seed 42 · 9.1 s')).toBeTruthy();
+  expect(vi.mocked(invoke)).toHaveBeenCalledWith('native_chat_render_result', { root: '/env', id: ID, at: 7, index: 0, result: { path: 'C:\\env\\output\\DEAS\\fox.png', width: 1344, height: 768, seed: 42, checkpoint: 'anima.safetensors', ms: 9100 } });
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Send' })).toBeTruthy());
+});
+
+it('says why a picture was not drawn when Generate refuses it', async () => {
+  const prompt = { target: 'anima', label: 'Anima', prompt: 'a fox', negative: null, render: {} };
+  const base = vi.mocked(invoke).getMockImplementation()!;
+  vi.mocked(invoke).mockImplementation(async (command, args) => {
+    const a = args as Record<string, any>;
+    if (command === 'native_chat_send') { a.onEvent.onmessage({ event: 'chat', id: ID, title: 't' }); return { role: 'assistant', content: 'Anima prompt, written by the Anima prompt writer:\n\na fox', pictures: 0, prompts: [prompt], citations: [], tools: [], at: 8 }; }
+    if (command === 'native_chat_render_result') return { role: 'assistant', content: 'x', pictures: 0, prompts: [{ ...prompt, picture: a.result }], citations: [], tools: [], at: 8 };
+    return base(command, args);
+  });
+  const onRender = vi.fn(async () => ({ error: 'The backend is not running. Start it under Backend, then ask again.' }));
+  render(<I18nProvider><Chat endpoint="http://127.0.0.1:8188" root="/env" onSend={vi.fn()} studio={{ checkpoint: 'anima.safetensors', dialect: 'Anima' }} onRender={onRender as never}/></I18nProvider>);
+  await waitFor(() => expect((screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement).disabled).toBe(true));
+  fireEvent.change(screen.getByRole('textbox', { name: 'Message' }), { target: { value: 'draw a fox' } });
+  await waitFor(() => expect((screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.keyDown(screen.getByRole('textbox', { name: 'Message' }), { key: 'Enter' });
+  await screen.findByText('Not drawn: The backend is not running. Start it under Backend, then ask again.');
+  expect(screen.getByRole('button', { name: 'Draw again' })).toBeTruthy();
+});
+
+it('right-click opens Rename, Pin to top and Delete; pinned chats show a pin', async () => {
+  let pinned = false;
+  const base = vi.mocked(invoke).getMockImplementation()!;
+  vi.mocked(invoke).mockImplementation(async (command, args) => {
+    const a = args as Record<string, any>;
+    if (command === 'native_chat_list') return [{ id: ID, title: old.title, updated: 2, count: 2, pinned }];
+    if (command === 'native_chat_pin') { pinned = a.pinned; return undefined; }
+    return base(command, args);
+  });
+  render(<I18nProvider><Chat endpoint="http://127.0.0.1:8188" root="/env" onSend={vi.fn()}/></I18nProvider>);
+  const row = await screen.findByRole('button', { name: old.title });
+  fireEvent.contextMenu(row);
+  const menu = await screen.findByRole('menu');
+  expect([...menu.querySelectorAll('button')].map(b => b.textContent)).toEqual(['Rename', 'Pin to top', 'Delete']);
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Pin to top' }));
+  await waitFor(() => expect(vi.mocked(invoke)).toHaveBeenCalledWith('native_chat_pin', { root: '/env', id: ID, pinned: true }));
+  expect(screen.queryByRole('menu')).toBeNull();
+  await screen.findByLabelText('Pinned');
+  // Unpin is offered once pinned; Escape closes without acting.
+  fireEvent.contextMenu(screen.getByRole('button', { name: /how does LTX/ }));
+  expect(await screen.findByRole('menuitem', { name: 'Unpin' })).toBeTruthy();
+  fireEvent.keyDown(window, { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+  // Rename puts the title in an edit box; Delete still asks first.
+  fireEvent.contextMenu(screen.getByRole('button', { name: /how does LTX/ }));
+  fireEvent.click(await screen.findByRole('menuitem', { name: 'Rename' }));
+  expect((await screen.findByRole('textbox', { name: 'Rename' }) as HTMLInputElement).value).toBe(old.title);
+  fireEvent.keyDown(screen.getByRole('textbox', { name: 'Rename' }), { key: 'Escape' });
+  fireEvent.contextMenu(screen.getByRole('button', { name: /how does LTX/ }));
+  fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
+  expect(screen.getByRole('button', { name: 'Delete?' })).toBeTruthy();
+  expect(vi.mocked(invoke).mock.calls.some(([c]) => c === 'native_chat_delete')).toBe(false);
 });

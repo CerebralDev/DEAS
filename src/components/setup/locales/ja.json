@@ -84,7 +84,7 @@
   "setup.backend.nvidia.label": "NVIDIA / CUDA",
   "setup.backend.nvidia.description": "NVIDIA 対応をリクエストします。ネイティブの互換性検証条件が適用されます。",
   "setup.backend.amd.label": "AMD / ROCm",
-  "setup.backend.amd.description": "AMD 対応をリクエストします。ネイティブの互換性検証条件が適用されます。",
+  "setup.backend.amd.description": "RDNA2〜RDNA4 Radeonカード向けのLinux ROCmバックエンド。RTX VideoステージはNVIDIA専用です。",
   "setup.backend.intel.label": "Intel / XPU",
   "setup.backend.intel.description": "Intel 対応をリクエストします。ネイティブの互換性検証条件が適用されます。",
   "setup.execution.idle": "待機中",

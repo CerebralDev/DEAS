@@ -66,7 +66,7 @@ export interface LayoutRewriteRequest { task: 'scene' | 'item'; width: number; h
 export const layoutRewrite = (root: string, model: string, request: LayoutRewriteRequest) => invoke<string>('native_forge_layout_rewrite', { root, model, request });
 export const nativeForgeTargets = (root: string) => invoke<NativeTargets>('native_forge_targets', { root });
 /** Family dialect -> native writer key; dialects without one stay on the node pack. */
-export const nativeTarget = (dialect?: string) => ({ Illustrious: 'illustrious', Anima: 'anima', Krea2: 'krea2', MOSS: 'moss' } as Record<string, string>)[dialect ?? ''];
+export const nativeTarget = (dialect?: string) => ({ Illustrious: 'illustrious', Anima: 'anima', Krea2: 'krea2', MOSS: 'moss', 'Qwen Image 2.1': 'qwen_image' } as Record<string, string>)[dialect ?? ''];
 /** Discovery qualifies model ids by provider; native requests take the bare id. */
 export const nativeModelId = (id: string) => id.replace(/^(local|openai|ollama):/, '');
 /** The native writer runs a local GGUF itself, so it keeps the `local:` prefix that says so. */

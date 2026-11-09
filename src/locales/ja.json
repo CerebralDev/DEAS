@@ -1,5 +1,7 @@
 {
   "app.home": "DEAS ホーム",
+  "app.confirm": "確定",
+  "app.cancel": "キャンセル",
   "app.brand": "DEAS",
   "app.brandCaption": "Dark Engine AI Studio",
   "app.language": "言語",

@@ -175,6 +175,10 @@ impl Jobs {
                     .into(),
             );
         }
+        let plan_backend = engine
+            .and_then(|e| e.approved_plan())
+            .map(|p| p.request.backend);
+        crate::jobs_video_post::validate_rtx_hardware(&intent, plan_backend.as_ref())?;
         let held = Arc::new(Jobs(
             Arc::new(Mutex::new(Session {
                 studio: true,

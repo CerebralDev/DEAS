@@ -24,6 +24,15 @@ pub fn is_local(model: &str) -> bool {
     model.starts_with(LOCAL_PREFIX)
 }
 
+/// Whether a `local:` model's GGUF has a vision projector beside it (Prompt Forge
+/// degrades to brief-only writing without one instead of failing the whole write).
+pub fn local_has_vision(model: &str) -> bool {
+    is_local(model)
+        && RUNNER
+            .try_with(|runner| runner.has_vision(&model[LOCAL_PREFIX.len()..]))
+            .unwrap_or(false)
+}
+
 const MAX_RESPONSE: usize = 4 * 1024 * 1024;
 const MAX_TOOL_CALLS: usize = 128;
 /// Ollama loads context at request time; PromptForge runs prompts at 32k.
@@ -255,9 +264,8 @@ fn local_reply(text: &str, finish: Option<&str>) -> Reply {
 
 async fn local_round(r: &Round<'_>) -> Result<Reply, String> {
     let model = &r.model[LOCAL_PREFIX.len()..];
-    if r.messages.iter().any(|m| m["content"].is_array()) {
-        return Err("The local GGUF runner cannot read pictures.".into());
-    }
+    // Picture rounds load the paired mmproj projector; without one the worker
+    // answers `no_vision` with the actionable reason instead of misreading.
     let runner = RUNNER
         .try_with(Arc::clone)
         .map_err(|_| "Local GGUF models are not available here")?;
@@ -266,6 +274,7 @@ async fn local_round(r: &Round<'_>) -> Result<Reply, String> {
         "tools": r.tools.filter(|t| !t.is_empty()),
         "temperature": r.temperature,
         "top_p": r.top_p,
+        "presence_penalty": r.presence_penalty,
         "max_tokens": r.max_tokens,
     });
     let (text, finish) = runner.round(model, request.clone(), r.timeout).await?;
@@ -309,6 +318,18 @@ pub async fn stream_round(
     on_text: &mut (dyn FnMut(&str) + Send),
     stop: &std::sync::atomic::AtomicBool,
 ) -> Result<Reply, String> {
+    // The managed GGUF worker answers a round at once; Stop drops the round (and the worker with it).
+    if is_local(r.model) {
+        let reply = tokio::select! {
+            biased;
+            _ = cancelled(stop) => return Ok(Reply { content: String::new(), calls: vec![], truncated: false }),
+            reply = local_round(&r) => reply?,
+        };
+        if !reply.content.is_empty() {
+            on_text(&reply.content);
+        }
+        return Ok(reply);
+    }
     let (url, body, ollama) = request(&r, true)?;
     let mut parser = StreamParser::new(ollama);
     let receive = async {
@@ -678,7 +699,7 @@ pub(super) mod tests {
     }
 
     #[tokio::test]
-    async fn local_rounds_need_a_runner_and_refuse_pictures() {
+    async fn local_rounds_need_a_runner_and_pair_pictures_via_mmproj() {
         let config = &LlmConfig::default();
         let round = |messages: Vec<Value>| async move {
             let r = Round {
@@ -694,13 +715,50 @@ pub(super) mod tests {
             };
             local_round(&r).await.map(|_| ())
         };
+        // Outside a runner scope both rounds fail the same way; the worker itself
+        // answers `no_vision` for unpaired picture rounds (see llm_worker).
         let picture = user_with_images("look", &["data:image/png;base64,AA".into()], false);
-        assert!(round(vec![picture]).await.unwrap_err().contains("pictures"));
+        assert!(round(vec![picture])
+            .await
+            .unwrap_err()
+            .contains("not available"));
         let text = json!({ "role": "user", "content": "write" });
         assert!(round(vec![text])
             .await
             .unwrap_err()
             .contains("not available"));
+        assert!(!local_has_vision("local:model.gguf"));
+        assert!(!local_has_vision("server:model"));
+    }
+
+    #[tokio::test]
+    async fn streamed_chat_rounds_route_local_models_to_the_worker_and_honor_stop() {
+        // LlmConfig::default() is the Local provider: a server round would fail with "No LLM server is set".
+        let config = &LlmConfig::default();
+        let messages = vec![json!({ "role": "user", "content": "hi" })];
+        let r = || Round {
+            config,
+            model: "local:model.gguf",
+            messages: &messages,
+            tools: None,
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            max_tokens: None,
+            timeout: Duration::from_secs(1),
+        };
+        let mut seen = String::new();
+        let running = std::sync::atomic::AtomicBool::new(false);
+        let error = stream_round(r(), &mut |t: &str| seen.push_str(t), &running)
+            .await
+            .unwrap_err();
+        assert!(error.contains("not available"), "{error}");
+        let stopped = std::sync::atomic::AtomicBool::new(true);
+        let reply = stream_round(r(), &mut |t: &str| seen.push_str(t), &stopped)
+            .await
+            .unwrap();
+        assert!(reply.content.is_empty() && reply.calls.is_empty());
+        assert!(seen.is_empty());
     }
 
     #[tokio::test]

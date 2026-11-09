@@ -22,8 +22,11 @@ mod history;
 mod observer;
 #[path = "jobs_preview.rs"]
 pub(crate) mod preview;
+#[path = "jobs_refmod.rs"]
+mod refmod;
 #[path = "jobs_stop.rs"]
 mod stop;
+pub use refmod::{native_h3_refmod_cancel, native_h3_refmod_status, native_h3_refmod_submit};
 #[path = "jobs_workbench.rs"]
 mod workbench;
 pub use cancel::{native_workbench_cancel_pending, native_workbench_interrupt_running};
@@ -2761,7 +2764,7 @@ fn refmod_entries(v: &Value) -> Value {
                 .filter_map(Value::as_str)
                 .collect();
             (!members.is_empty()
-                && members.len() <= 16
+                && members.len() <= 256
                 && members.iter().all(|k| kinds.contains(k)))
             .then(|| {
                 let description: String = e["description"]

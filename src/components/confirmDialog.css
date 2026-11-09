@@ -1,0 +1,4 @@
+.confirm-dialog { color: inherit; background: var(--panel); border: 1px solid var(--line); border-radius: .7rem; padding: 1.2rem; width: min(30rem, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem); overflow: auto; }
+.confirm-dialog::backdrop { background: #0009; }
+.confirm-dialog p { margin: 0; white-space: pre-wrap; }
+.confirm-actions { display: flex; gap: .6rem; justify-content: flex-end; margin-top: 1rem; }

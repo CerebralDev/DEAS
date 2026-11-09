@@ -15,11 +15,11 @@ export async function readAudioEnhanceInstallStatus(): Promise<AudioEnhanceInsta
 }
 export const cancelAudioEnhanceInstall = (): Promise<void> => invoke('native_audio_enhance_install_cancel');
 export const cancelAudioEnhance = (): Promise<void> => invoke('native_audio_enhance_cancel');
-export interface AudioEnhanceCapabilities { clean: boolean; deep: boolean; stems: boolean; cuda?: boolean }
+export interface AudioEnhanceCapabilities { clean: boolean; deep: boolean; stems: boolean; cuda?: boolean; gpuRepair?: boolean }
 export async function readAudioEnhanceCapabilities(): Promise<AudioEnhanceCapabilities> {
   const value = await invoke<AudioEnhanceCapabilities>('native_audio_enhance_capabilities');
-  if (!value || !['clean', 'deep', 'stems'].every(k => typeof value[k as keyof AudioEnhanceCapabilities] === 'boolean') || value.cuda !== undefined && typeof value.cuda !== 'boolean') throw new Error('Invalid audio enhancement capabilities');
-  return { ...value, cuda: value.cuda ?? false };
+  if (!value || !['clean', 'deep', 'stems'].every(k => typeof value[k as keyof AudioEnhanceCapabilities] === 'boolean') || ['cuda', 'gpuRepair'].some(k => value[k as keyof AudioEnhanceCapabilities] !== undefined && typeof value[k as keyof AudioEnhanceCapabilities] !== 'boolean')) throw new Error('Invalid audio enhancement capabilities');
+  return { ...value, cuda: value.cuda ?? false, gpuRepair: value.gpuRepair ?? false };
 }
 /** Native-held source authority only; the frontend supplies neither paths nor executable/filter strings. */
 export async function exportEnhancedAudio(source: AudioEnhanceSource, mode: Exclude<AudioEnhanceMode, 'off'>, profile: AudioEnhanceProfile, title: string, device: AudioEnhanceDevice = 'auto'): Promise<JobExport | null> {

@@ -75,6 +75,50 @@ it('modal native drops go only to the picker, not retained background browsers o
  await act(async()=>{for(const [handler] of nativeDrop.mock.calls)(handler as (e:unknown)=>void)(event(120));});
  expect(picker).toHaveBeenCalledTimes(1);expect(background).not.toHaveBeenCalled();
 });
+it('copy-in field: pasted pictures and dropped files land in Input and get selected; text and other files are ignored',async()=>{
+ vi.mocked(isTauri).mockReturnValue(true);nativeDrop.mockImplementation(async()=>()=>{});
+ const input='/env/input';
+ mockMediaInvoke(async(command,args)=>{
+  const a=args as {path?:string;paths?:string[]};
+  if(command==='native_media_paste')return `${input}/pasted-20261108-153000.png`;
+  if(command==='native_media_copy_in')return `${input}/clip.mp4`;
+  if(command==='native_media_describe')return a.paths!.map(p=>({...entry(p.split('/').at(-1)!,'file',p.endsWith('.mp4')?'video':'image'),path:p}));
+  return {path:a.path??input,parent:null,entries:[],truncated:false};
+ });
+ const onSelect=vi.fn();
+ render(<I18nProvider><MediaLibrary selected={null} onSelect={onSelect} roots={{input}}/></I18nProvider>);
+ await waitFor(()=>expect(nativeDrop).toHaveBeenCalledTimes(1));
+ const field=screen.getByRole('textbox',{name:'Paste or drop here'}) as HTMLInputElement;
+ expect(field.readOnly).toBe(true);
+ const paste=(target:Element,files:File[])=>{const e=new Event('paste',{bubbles:true,cancelable:true});Object.defineProperty(e,'clipboardData',{value:{files}});target.dispatchEvent(e);return e;};
+ // A text field keeps its own paste; a non-picture clipboard file only reports a status.
+ const text=document.createElement('textarea');document.body.append(text);
+ expect(paste(text,[new File(['x'],'p.png',{type:'image/png'})]).defaultPrevented).toBe(false);
+ paste(field,[new File(['x'],'a.txt',{type:'text/plain'})]);
+ expect(await screen.findByRole('status')).toHaveProperty('textContent','Only pictures and videos can be copied in.');
+ expect(vi.mocked(invoke).mock.calls.some(([c])=>c==='native_media_paste')).toBe(false);
+ const pasted=await act(async()=>paste(field,[Object.assign(new File(['x'],'shot.png',{type:'image/png'}),{arrayBuffer:async()=>new Uint8Array([137,80]).buffer})]));
+ expect(pasted.defaultPrevented).toBe(true);
+ await waitFor(()=>expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({name:'pasted-20261108-153000.png'})));
+ const call=vi.mocked(invoke).mock.calls.find(([c])=>c==='native_media_paste')![1] as {bytes:number[];stamp:string};
+ expect(call.bytes).toEqual([137,80]);expect(call.stamp).toMatch(/^\d{8}-\d{6}$/);
+ expect(screen.getByRole('status').textContent).toBe('Copied to Input: pasted-20261108-153000.png');
+ expect(lists().at(-1)).toMatchObject({path:input});
+ // An OS drop onto the field copies; elsewhere in the panel it only browses.
+ visibleDropBox(screen.getByRole('complementary',{name:'Media'}));
+ vi.spyOn(field,'getBoundingClientRect').mockReturnValue({left:20,top:20,right:60,bottom:40,width:40,height:20,x:20,y:20,toJSON:()=>({})});
+ const drop=nativeDrop.mock.calls[0][0] as (e:unknown)=>void;
+ await act(async()=>drop({payload:{type:'drop',paths:['/home/u/clip.mp4'],position:{x:30,y:30}}}));
+ await waitFor(()=>expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({path:`${input}/clip.mp4`})));
+ expect(vi.mocked(invoke).mock.calls.filter(([c])=>c==='native_media_copy_in')).toEqual([['native_media_copy_in',{path:'/home/u/clip.mp4'}]]);
+ await act(async()=>drop({payload:{type:'drop',paths:['/home/u/other.mp4'],position:{x:90,y:90}}}));
+ expect(vi.mocked(invoke).mock.calls.filter(([c])=>c==='native_media_copy_in')).toHaveLength(1);
+ // A Media tile dragged onto the field is copied too, and does not land in the dropped list.
+ fireEvent.drop(field,{dataTransfer:{types:['application/x-deas-media'],getData:(type:string)=>type==='application/x-deas-media'?JSON.stringify({name:'b.png',src:'asset://b',media:'image',path:'/home/u/b.png'}):''}});
+ await waitFor(()=>expect(vi.mocked(invoke).mock.calls.filter(([c])=>c==='native_media_copy_in').at(-1)).toEqual(['native_media_copy_in',{path:'/home/u/b.png'}]));
+ expect(within(screen.getByRole('list',{name:'Dropped media'})).queryByText('b.png')).toBeNull();
+ text.remove();
+});
 it('a file description completing after unmount never mutates the authoring selection',async()=>{
  vi.mocked(isTauri).mockReturnValue(true);nativeDrop.mockImplementation(async()=>()=>{});
  let finish!:(entries:MediaEntry[])=>void;
@@ -300,6 +344,20 @@ describe('media library plugin — IPC fixtures, not real filesystem access',()=
  });
  it('omits starred without an output root',()=>{
   mount();expect(screen.queryByRole('switch')).toBeNull();expect(screen.queryByRole('button',{name:'Starred'})).toBeNull();
+ });
+ it('video tiles show a cached first-frame still with a ▶ badge and keep the glyph when extraction fails',async()=>{
+ vi.mocked(isTauri).mockReturnValue(true);
+ const listing={path:'/home/u',parent:null,entries:[{...entry('clip.mp4','file','video'),modified:7},{...entry('broken.mp4','file','video'),modified:7}],truncated:false};
+ mockMediaInvoke(async(c,a)=>c==='native_media_reference_thumbnail'?((a as {path:string}).path.endsWith('clip.mp4')?'/cache/clip.png':Promise.reject(new Error('no frame'))):listing);
+ mount();
+ const clip=await screen.findByRole('button',{name:'clip.mp4'});
+ await waitFor(()=>expect(clip.querySelector('img')?.getAttribute('src')).toBe('asset://localhost//cache/clip.png'));
+ expect(clip.querySelector('.media-video-badge')?.textContent).toBe('▶');
+ const broken=screen.getByRole('button',{name:'broken.mp4'});
+ await waitFor(()=>expect(vi.mocked(invoke).mock.calls.filter(([c])=>c==='native_media_reference_thumbnail')).toHaveLength(2));
+ expect(broken.querySelector('img')).toBeNull();expect(broken.querySelector('.media-glyph')?.textContent).toBe('▶');
+ expect(vi.mocked(invoke).mock.calls.find(([c])=>c==='native_media_reference_thumbnail')![1]).toEqual({path:'/home/u/clip.mp4',seconds:0});
+ expect(document.querySelector('video')).toBeNull();
  });
  it('keeps drop guidance inline after Depth instead of overlaying the file view',async()=>{
   vi.mocked(isTauri).mockReturnValue(true);

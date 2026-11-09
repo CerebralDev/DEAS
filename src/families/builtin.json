@@ -254,7 +254,7 @@
     "defaults": { "width": 1024, "height": 1024, "steps": 8, "cfg": 1, "sampler": "euler", "scheduler": "simple" }
   },
   {
-    "id": "qwen-image-2.1-turbo", "imagePrompting": "qwen-image-2.1", "multiple": 16, "name": "Qwen Image 2.1 Turbo", "loader": "diffusion", "pipelines": ["t2i", "i2i"],
+    "id": "qwen-image-2.1-turbo", "imagePrompting": "qwen-image-2.1", "multiple": 16, "name": "Qwen Image 2.1 Turbo", "forge": "Qwen Image 2.1", "loader": "diffusion", "pipelines": ["t2i", "i2i"],
     "components": {"textEncoders": ["qwen3-vl-8b"], "vaes": ["qwen-image-2.1-vae"]},
     "clipType": "qwen_image", "textEncoders": ["qwen3vl_8b", "qwen3-vl-8b", "qwen_3_vl_8b"], "vaes": ["qwen_image_2.1_vae"],
     "architectures": ["qwen-image-2.1"], "bases": [], "fileMatch": ["turbo"], "loraFamily": "qwen-image-2.1",
@@ -264,7 +264,7 @@
     "sigmas": [1.0, 0.978453, 0.95418, 0.926626, 0.89508, 0.845148, 0.704534, 0.414568, 0]
   },
   {
-    "id": "qwen-image-2.1", "imagePrompting": "qwen-image-2.1", "multiple": 16, "name": "Qwen Image 2.1", "loader": "diffusion", "pipelines": ["t2i", "i2i"],
+    "id": "qwen-image-2.1", "imagePrompting": "qwen-image-2.1", "multiple": 16, "name": "Qwen Image 2.1", "forge": "Qwen Image 2.1", "loader": "diffusion", "pipelines": ["t2i", "i2i"],
     "components": {"textEncoders": ["qwen3-vl-8b"], "vaes": ["qwen-image-2.1-vae"]},
     "clipType": "qwen_image", "textEncoders": ["qwen3vl_8b", "qwen3-vl-8b", "qwen_3_vl_8b"], "vaes": ["qwen_image_2.1_vae"],
     "architectures": ["qwen-image-2.1"], "bases": ["Qwen Image 2.1"],

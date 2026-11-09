@@ -38,7 +38,7 @@ ACE-Step shares the native FLAC saver, job queue, optional audio post-processing
 
 Music replaces the positive/negative prompt pair with two independent editors. **Style** is required (genre, mood, instruments, vocal description, language); **Lyrics** is optional and may use section tags such as `[Verse]` and `[Chorus]`; leave it empty for an instrumental. Each editor has its own expand, copy and clear buttons and its own Prompt Forge hammer: Style writes with the DaSiWa `YuE2 Song Style` dialect, Lyrics with `YuE2 Lyrics`. There is no negative prompt and no image reference.
 
-Music texts are stored separately from image prompts (`studio.run.music.*`). Switching to an image or video pipeline and back restores each pipeline's own draft; the Prompt Forge "Send to Generate" handoff is refused while a music pipeline is active because it carries image prompts. Projects (image drafts) never serialize music settings.
+Music texts are stored separately from image prompts (`studio.run.music.*`). Switching to an image or video pipeline and back restores each pipeline's own draft (Text → Music ↔ Cover keeps the texts on screen); the Prompt Forge "Send to Generate" handoff is refused while a music pipeline is active because it carries image prompts. Projects (image drafts) never serialize music settings.
 
 Without a configured LLM the hammers stay disabled and point to LLM setup, like the image hammers.
 

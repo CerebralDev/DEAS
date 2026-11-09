@@ -1,5 +1,7 @@
 {
   "app.home": "DEAS-Startseite",
+  "app.confirm": "Bestätigen",
+  "app.cancel": "Abbrechen",
   "app.brand": "DEAS",
   "app.brandCaption": "Dark Engine AI Studio",
   "app.language": "Sprache",

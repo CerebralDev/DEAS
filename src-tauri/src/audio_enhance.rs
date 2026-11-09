@@ -171,6 +171,9 @@ pub struct Capabilities {
     deep: bool,
     stems: bool,
     cuda: bool,
+    /// Stems installed CPU-only while an owned environment could lend CUDA Torch.
+    #[serde(rename = "gpuRepair")]
+    gpu_repair: bool,
 }
 
 pub(crate) fn capabilities() -> Capabilities {
@@ -195,6 +198,7 @@ pub(crate) fn capabilities() -> Capabilities {
         deep: clean && crate::audio_runtime::available("deep"),
         stems: clean && crate::audio_runtime::available("stems"),
         cuda: clean && crate::audio_runtime::gpu_ready(),
+        gpu_repair: clean && crate::audio_runtime::gpu_repairable(),
     }
 }
 

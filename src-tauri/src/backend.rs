@@ -836,7 +836,16 @@ impl Lifecycle {
             command.env(name, root.join(folder));
         }
         if let Some(hardware) = &approved.plan.hardware {
-            command.env("CUDA_VISIBLE_DEVICES", &hardware.uuid);
+            match approved.plan.request.backend {
+                // shortcut: ROCm has no CUDA-style UUID pin; HIP_VISIBLE_DEVICES=0 is
+                // correct on the single-GPU hosts DEAS admits (multi-GPU is a PLAN.md item).
+                crate::install::Backend::Amd => {
+                    command.env("HIP_VISIBLE_DEVICES", "0");
+                }
+                _ => {
+                    command.env("CUDA_VISIBLE_DEVICES", &hardware.uuid);
+                }
+            }
         }
         command
             .current_dir(root.join("ComfyUI"))

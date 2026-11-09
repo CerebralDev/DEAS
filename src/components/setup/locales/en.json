@@ -84,7 +84,7 @@
   "setup.backend.nvidia.label": "NVIDIA / CUDA",
   "setup.backend.nvidia.description": "Request NVIDIA support; native compatibility gates apply.",
   "setup.backend.amd.label": "AMD / ROCm",
-  "setup.backend.amd.description": "Request AMD support; native compatibility gates apply.",
+  "setup.backend.amd.description": "Linux ROCm backend for RDNA2–RDNA4 Radeon cards; RTX Video stages stay NVIDIA-only.",
   "setup.backend.intel.label": "Intel / XPU",
   "setup.backend.intel.description": "Request Intel support; native compatibility gates apply.",
   "setup.execution.idle": "Idle",

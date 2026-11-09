@@ -12,6 +12,7 @@ pub mod chat;
 pub mod clean;
 pub mod data;
 pub mod engine;
+pub mod gpu_swap;
 pub mod message;
 pub mod pack;
 pub mod picker;
@@ -31,9 +32,22 @@ mod bundle_tests {
         let root = tempfile::tempdir().unwrap();
         let dir = root.path().join("forge-data");
         let data = super::engine::Data::load(&dir).unwrap();
-        for model in ["illustrious", "anima", "krea2", "moss"] {
+        for model in ["illustrious", "anima", "krea2", "moss", "qwen_image"] {
             assert!(data.pack.models.contains_key(model), "{model}");
         }
+        // DEAS-owned writer: base shared rules + its own guide, base controls, no negative.
+        let qwen = &data.pack.models["qwen_image"];
+        assert!(qwen.system.starts_with("# PromptForge — Shared Rules"));
+        assert!(qwen
+            .system
+            .contains("# Qwen Image 2.1 — Observer description"));
+        assert!(!qwen.system.contains("# Krea2"));
+        assert_eq!(qwen.str("base"), Some("krea2"));
+        assert_eq!(qwen.optional(), ["What changed"]);
+        assert_eq!(qwen.expected(None), ["Enhanced prompt", "What changed"]);
+        assert!(qwen.entry["styles"]["Photorealistic"].is_array());
+        assert!(qwen.entry["style_placement"].is_null());
+        assert!(qwen.segment_blocks["What changed"].contains("Qwen Image 2.1"));
         assert!(data
             .pack
             .shared

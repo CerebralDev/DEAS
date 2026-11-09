@@ -1,6 +1,20 @@
 # News
 
-## 0.2.20 BETA (unreleased)
+## 0.2.21 BETA
+
+- **AMD Radeon (Linux) can run the owned ComfyUI backend** — setup detects RDNA2–RDNA4 cards, installs the pinned ROCm environment and verifies with a real computation; RTX Video refine and RTX frame generation stay NVIDIA-only and are refused at submit with a named reason. First real RDNA hardware is still the acceptance gate. [Backend](BACKEND.md).
+- **MiniMax H3 auto-picks the clean video VAE.** Installing the fast `minimax_h3_sol_vae_*` no longer silently makes it the default and repaints every frame with 128/256-pixel seam lines; the proven blending VAE is chosen per family order and the Sol decoder stays selectable by hand.
+- **The enhanced video preview plays as a video again.** The companion's fragmented-MP4 animated previews are accepted by the preview guard and fed to the looping player instead of silently falling back to a still image.
+- **Consent popups now sit on top of the video preview.** Install confirmations and other asks use a real in-app dialog — no more half-unreadable confirmations blended behind the preview pixels; the preview steps aside while a dialog is open.
+- **Comparing models in the same family keeps your settings.** Switching between two H3 (or other same-family) checkpoints no longer resets steps/CFG/sampler/scheduler/size; each model's own remembered draft still wins, and family switches still apply that family's defaults.
+
+## 0.2.20 BETA
+
+- **Local GGUF models can now see your reference pictures (#28).** Put the matching `*.mmproj*.gguf` projector file next to the model in DEAS's LLM folder and Prompt Forge sends pictures through DEAS's built-in runner; a model without one says so honestly instead of guessing.
+
+- **Chat now makes pictures and writes prompts itself.** Ask Chat for a picture: it writes the prompt with the Prompt Forge writer of the checkpoint selected in Studio → Generate and draws it there with your current settings — edits across messages ("make the highlights teal"), asked sizes (`16:9`, `1080p`), and a conversation list with right-click Rename, Pin and Delete. On one GPU, the chat model and ComfyUI step aside for each other. Video models still write through their Prompt Forge mode. [Usage](CHAT.md#making-pictures).
+
+- **Prompt Forge stops runaway writers.** A write with Length on Default now has an 8,192-token ceiling, and a write that runs past it is refused instead of kept half-finished. A Length you set still cuts off exactly as before.
 
 - **New: Media Analysis.** Drop a picture on **Studio → Media Analysis** for its tags, the settings that made it and **Open in ComfyUI** for its workflow; press **Describe** for the picture in words from your vision LLM, with the characters it recognises and what the tagger missed. It uses the taggers you already have (WD14 node, animetimm ONNX, and others) and downloads one only if you have none and ask. Drop a video to get every frame in a strip: save frames, analyse one, or send it to Generate as a first/last frame or H3 picture (several picked frames at once as H3 references). Have animetimm taggers from ComfyUI's animetimm node? Media Analysis can convert them to ONNX for you, once, and use them. Describe has Temperature and Repeat penalty sliders, and you pick its model before it runs. [Media Analysis guide](MEDIA-ANALYSIS.md).
 

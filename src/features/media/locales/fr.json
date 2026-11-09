@@ -25,5 +25,9 @@
   "media.folders": "Dossiers",
   "media.expandFolder": "Développer {name}",
   "media.collapseFolder": "Réduire {name}",
-  "media.loadingFolders": "Chargement des dossiers…"
+  "media.loadingFolders": "Chargement des dossiers…",
+  "media.intake.label": "Coller ou déposer ici",
+  "media.intake.hint": "Cliquez ici et appuyez sur Ctrl+V pour enregistrer une image du presse-papiers dans Input, ou déposez ici une image/vidéo depuis Médias ou le gestionnaire de fichiers pour l’y copier. L’original reste à sa place.",
+  "media.intake.done": "Copié dans Input : {name}",
+  "media.intake.ignored": "Seules les images et les vidéos peuvent être copiées."
 }

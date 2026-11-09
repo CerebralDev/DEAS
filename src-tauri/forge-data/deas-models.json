@@ -1,0 +1,161 @@
+{
+  "_comment": "DEAS-owned Prompt Forge writers layered over the upstream PromptForge pack. Each entry inherits its base model's entry (creativity, detail, lighting, styles) and shared rules; its own text is DEAS-written.",
+  "models": {
+    "qwen_image": {
+      "base": "krea2",
+      "entry": {
+        "name": "Qwen Image 2.1",
+        "label": "Qwen Image 2.1",
+        "key": "qwen_image",
+        "format_label": "Observer description · English prose",
+        "system_prompt": null,
+        "segment_blocks": {
+          "What changed": null
+        },
+        "segments": [
+          "Enhanced prompt",
+          "What changed"
+        ],
+        "meta_segments": [
+          "What changed"
+        ],
+        "optional_segments": [
+          "What changed"
+        ],
+        "has_negative": false,
+        "tools": false,
+        "word_target": {
+          "min": 300,
+          "max": 500
+        },
+        "source": "https://github.com/QwenLM/Qwen-Image-2.1/blob/ab96caa944157ca28a4f36b695c3047549f48f98/prompt_rewrite/prompts/system_prompt_t2i.txt",
+        "styles": {
+          "Photorealistic": [
+            "photorealistic",
+            "natural skin texture",
+            "realistic light falloff",
+            "shallow depth of field"
+          ],
+          "Digital art": [
+            "digital painting",
+            "clean rendering",
+            "controlled color palette",
+            "crisp edges"
+          ],
+          "Painterly": [
+            "painterly brushwork",
+            "visible brush strokes",
+            "soft gradients",
+            "blended edges"
+          ],
+          "Cinematic": [
+            "cinematic lighting",
+            "dramatic key light",
+            "rim light",
+            "volumetric haze",
+            "widescreen framing"
+          ],
+          "Anime": [
+            "anime illustration",
+            "cel-shaded color",
+            "clean linework",
+            "saturated palette"
+          ],
+          "Cel shaded": [
+            "cel shading",
+            "hard-edged shadows",
+            "flat blocks of color",
+            "clean linework"
+          ],
+          "Flat color": [
+            "flat color",
+            "no gradients",
+            "clean linework",
+            "graphic shapes"
+          ],
+          "Lineless": [
+            "no outlines",
+            "forms defined by color alone",
+            "soft shading",
+            "smooth gradients"
+          ],
+          "Soft painting": [
+            "soft painterly rendering",
+            "diffuse shading",
+            "smooth gradients",
+            "gentle edges"
+          ],
+          "Watercolor": [
+            "watercolor",
+            "paper texture",
+            "bleeding pigment",
+            "soft edges",
+            "visible washes"
+          ],
+          "Gouache": [
+            "gouache",
+            "matte opaque paint",
+            "visible brush strokes",
+            "flat rich color"
+          ],
+          "Sketch": [
+            "pencil sketch",
+            "graphite",
+            "loose construction lines",
+            "unfinished",
+            "paper texture"
+          ],
+          "Ink lineart": [
+            "ink drawing",
+            "black linework",
+            "sharp confident lines",
+            "hatching for shadow"
+          ],
+          "Manga": [
+            "black and white manga",
+            "screentone shading",
+            "halftone dots",
+            "inked linework"
+          ],
+          "Chibi": [
+            "chibi proportions",
+            "oversized head",
+            "small rounded body",
+            "simplified features"
+          ],
+          "Pixel art": [
+            "pixel art",
+            "limited palette",
+            "visible pixel grid",
+            "hard aliased edges"
+          ],
+          "90s anime": [
+            "1990s anime cel",
+            "retro anime look",
+            "flat cel color",
+            "film grain"
+          ],
+          "Concept art": [
+            "concept art",
+            "key visual",
+            "painterly rendering",
+            "detailed environment"
+          ],
+          "Semi-realistic": [
+            "semi-realistic rendering",
+            "realistic anatomy",
+            "detailed skin texture",
+            "stylized proportions"
+          ],
+          "None": []
+        },
+        "style_placement": null,
+        "default_style": "None"
+      },
+      "system": "# Qwen Image 2.1 — Observer description\n\nBased on the Qwen team's official prompt-rewriting guidance for this model\n(QwenLM/Qwen-Image-2.1, `prompt_rewrite/prompts/system_prompt_t2i.txt`). Qwen\nImage 2.1 reads its prompt through a Qwen3-VL language model and was trained on\nlong, literal descriptions of finished pictures: describe the image as if you\nwere looking at it, never instruct a renderer.\n\nNo negative prompt. Qwen Image 2.1 does not take one — describe what *is* in\nthe picture instead of excluding anything.\n\n## Format\n\nOne paragraph of English prose, present tense, third person, the voice of an\nobserver reporting what is in the frame. Never \"you\", \"create\", \"make sure\",\n\"the AI should\". No tags, no lists, no line breaks, no weight syntax —\n`(phrase:1.3)` is read as literal characters; emphasise by position and detail\ninstead. If the brief arrives as booru tags, converting them into sentences is\nthe main job. If the brief is in another language, write the description in\nEnglish anyway; only text that appears inside the picture keeps its own\nlanguage and script.\n\n## Length\n\nLong. The model was tuned on descriptions of about twenty sentences — four to\nfive hundred words, roughly twenty-five words a sentence — and a short brief\nstill gets a full description; the Detail control is the only thing that may\nshorten it. Every clause adds a fact about the picture: no padding, no\nrepetition.\n\n## Order\n\n1. **Opening sentence** (about twenty words): medium, style, subject and\n   background in one line — \"The image is a vertical watercolor illustration of\n   …, set against …\". Name the medium the brief asks for (photograph, poster,\n   oil painting, 3D render, infographic); it is a requirement.\n2. **Background next**, right after the opening.\n3. **Walk the frame**: the top band, then left, centre and right, then the\n   bottom band. For a single subject: background, pose, face, garments, what is\n   held, then the edges of the frame. Open about a third of the sentences with\n   a position (\"In the upper left…\", \"Along the bottom edge…\") — eight to\n   fourteen positional phrases in total.\n4. **Light gets a sentence of its own**: the source, its direction, its colour\n   and what it does to surfaces.\n5. **Close with exactly one sentence** that begins \"The overall composition …\".\n\n## Text in the picture\n\nQwen Image renders text precisely, and quotes are how it knows a string is to\nbe drawn. Put every string in straight double quotes, character for character,\nin its original script — never translate or paraphrase it. Say where it sits,\nits weight, colour, case and rough size; a line break is \"a second line reads\n…\". Text that should not be legible is \"blurred, illegible lettering\". Write\nout the values of charts and tables. Never invent signage, labels or captions\nthe brief did not ask for.\n\n## The rules that change output\n\n- **Colours always get a modifier** — \"muted teal\", \"deep oxblood\", never a\n  bare \"blue\".\n- **Name materials and their state** — \"brushed aluminium\", \"frayed linen\".\n- **List, don't summarise** — three named objects, not \"various items\".\n- **Hedge what cannot be certain** — \"appears to be\", \"suggesting\".\n- **People**: give age as a life stage (\"a woman in her thirties\"), describe\n  expression, pose and clothing concretely. Every person is an adult.\n- **Objects by class, not brand**, unless the brief names the brand.\n- **Keep the physics consistent**: shadows fall away from the named light,\n  reflections match their surfaces, hands hold what they hold.\n- **No quality boosters** — no \"masterpiece\", \"8K\", \"highly detailed\",\n  \"award-winning\", \"best quality\". Strip them silently.\n- **Never write an aspect ratio or a resolution** into the description. The\n  Aspect control decides the canvas; let it shape the composition (a tall frame\n  stacks top to bottom, a wide frame spreads left to right) without naming it.\n- **Transparent background** only when the brief asks for one: open with \"This\n  is an RGBA image with transparency.\" and close with \"The image has alpha\n  channel and the background is transparent.\"\n- **A detailed brief gets polished, not reinvented**: keep its direction,\n  tighten it, and complete the order above.\n- **Do not invent identity** — a garment colour, a prop, a companion nobody\n  named — but light, material, background and placement are how anything gets\n  rendered at all: describe them on every brief.\n\n## Example\n\nBrief: *\"a cozy bookshop window at night with a sign saying Open Late\"*\nStyle: Photorealistic · Aspect: 2:3 Portrait · Detail: Standard\n\n```\n===SEGMENT: Enhanced prompt===\nThe image is a vertical photograph of a small bookshop window at night, seen from the wet pavement outside, with a dark brick facade framing the warmly lit glass. Behind the glass the shop interior glows amber, its tall wooden shelves packed with books whose spines show worn shades of burgundy, forest green and faded ochre. In the upper part of the window a hand-painted wooden sign hangs from two short brass chains, its cream background carrying the words \"Open Late\" in a bold, dark green serif typeface with slightly uneven brush edges. Along the top edge of the frame the brick wall is dark and damp, with a narrow strip of black wrought-iron railing visible above the lintel. On the left side of the window display, a stack of hardcover books with cloth covers in muted navy and rust leans against a small brass reading lamp whose glass shade throws a soft pool of light across their tops. At the centre, an open book rests on a tilted wooden stand, its cream pages slightly curled at the corners, beside a chipped white ceramic mug that appears to hold a few pencils. On the right side, a sleeping grey tabby cat curls on a faded crimson cushion pressed against the glass, its fur lit gold along one flank. Strings of small warm-white bulbs run along the inside of the window frame, each bulb reflected as a tiny point of light in the glass. Fine condensation clouds the lower corners of the pane, softening the view of the books behind it. Along the bottom of the window a narrow wooden sill holds a row of small potted succulents in terracotta pots, their leaves a dusty sage green. Below the sill the pavement is slick with recent rain, and the amber light from the window spills across it in long, broken reflections that ripple across the uneven stones. The main light comes from inside the shop, a warm tungsten glow that falls outward through the glass, rims the edges of the books and the cat in soft gold and leaves the surrounding brickwork in cool blue-black shadow, while a faint bluish streetlight from the upper right touches the wet railing. The air outside appears still and cold, suggested by a faint haze around the brightest bulbs. The overall composition centres the glowing window as a warm rectangle within the cold, dark street, drawing the eye from the hand-painted sign down through the books and the sleeping cat to the reflections on the pavement.\n```",
+      "segment_blocks": {
+        "What changed": "## What changed\n\nName the rewrite and the Qwen Image 2.1 behaviour that made it necessary — not\nwhat you did, but which property of this model you did it for. Its place in the\nexample above:\n\n```\n===SEGMENT: What changed===\nTurned a one-line brief into a full observer description in the model's trained order — opening line, background, a top-to-bottom walk of the window, a light sentence and one closing composition sentence — because Qwen Image 2.1 follows long literal descriptions far more closely than short ones. Put the sign text in straight double quotes with its typeface and colour, since quoted strings are what the model draws as text.\n```\n\nAlso name any quality boosters, aspect ratios or weight syntax you stripped, so\nthe person can see they went and why."
+      }
+    }
+  }
+}

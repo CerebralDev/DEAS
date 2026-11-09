@@ -2,7 +2,21 @@
 
 A Rust/Tauri desktop workstation for ComfyUI and DaSiWa tools: generation, model-aware prompting, model/resource browsing and image editing in one interface. Studio, Library, Prompt Forge, Chat, TVE, Run Plan and the original Comfy editor share the same owned backend; installation, provider authorization and settings live in the Backend tab, diagnostics in Logs.
 
-**0.2.19 BETA.** SAM 3.1 text/point/box masking with opt-in Auto Refine, a Stop choice (selected item, all Workbench work or cancel), Original-first image refinement and corrected MiniMax H3 reference scaling (Fill-and-crop default; the scaling option *Auto* is now named Native · ShortEdge 2048) ship in this Beta; HyperFlow H3 Flash GGUF video generation, Prompt Forge access to output pictures and instant audio-enhancement readiness continue from 0.2.18; ACE-Step Text to Music recipes and the refined Beginner workspace continue from 0.2.17; utility tabs are grouped on the right. Linux CPU/NVIDIA provisioning and individual model runs are recorded; Windows builds do not establish Windows runtime acceptance. SAM masking and automatic refinement are integrated but not yet real-model or native-platform accepted. Image, video, YuE2 and resolved ACE-Step music recipes exist; Linux video plays through embedded libmpv, but real-model quality and native playback acceptance are still open. TVE enhances videos through the owned ComfyUI backend (upscale model, NVIDIA RTX refine, frame generation); synchronized comparison, assembly and training are planned integrations, not completed ports. See [current status and limitations](docs/PLAN.md).
+**Beta.** DEAS puts the whole ComfyUI workflow in one desktop app — no JSON, no browser tabs:
+
+| Tab | What you get |
+| --- | --- |
+| **Studio** | Images with the checkpoint you choose (Illustrious, Anima, Krea 2, MOSS, SDXL) at model-exact sizes, with LoRAs and a Beginner mode; SAM 3.1 masking that understands words, points and boxes, plus opt-in Auto Refine against the original |
+| **Video & Music** | MiniMax H3, Wan and LTX pipelines; songs with YuE2 and ACE-Step |
+| **Prompt Forge** | Prompts written in your exact model's own style — presets, wildcards and spellcheck included |
+| **Chat** | Talks ideas through, searches the web, and on request *draws the picture* with your selected settings; on one GPU the chat model and ComfyUI step aside for each other |
+| **Library** | Finds and downloads models and LoRAs from Hugging Face and Civitai |
+| **TVE** | Upscales and remasters your videos on your own card — upscale model, NVIDIA RTX refine, frame generation |
+| **Backend** | Installs and runs the entire ComfyUI environment for you — CPU, NVIDIA, or AMD (Linux) |
+| **Media & Monitoring** | Every result kept with its full generation metadata for one-click reuse; live CPU/RAM/GPU telemetry |
+| **Comfy** | The original workflow editor, one tab away when you need it |
+
+Six languages, themed throughout. Beta software — see [current status and limitations](docs/PLAN.md).
 
 [Documentation](docs/README.md) · [Getting started](docs/GETTING-STARTED.md) · [News](docs/NEWS.md) · [Changelog](docs/CHANGELOG.md) · [Credits](docs/CREDITS.md)
 

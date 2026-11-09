@@ -1,3 +1,4 @@
+pub(crate) mod amd;
 pub mod analysis;
 pub mod analysis_convert;
 pub mod analysis_describe;
@@ -50,13 +51,13 @@ pub mod jobs_sam3;
 pub mod jobs_video;
 pub mod jobs_video_post;
 pub use jobs::{
-    native_auto_refine, native_h3_refmods, native_h3_session, native_h3_video_prepare,
-    native_h3_video_upload, native_input_upload, native_job_current, native_job_export,
-    native_job_output, native_job_prepare, native_job_status, native_job_submit,
-    native_jobs_history, native_jobs_history_outputs, native_logs_history_error,
-    native_mask_upload, native_workbench_cancel_pending, native_workbench_current,
-    native_workbench_interrupt_running, native_workbench_poll, native_workbench_run,
-    native_workbench_stop,
+    native_auto_refine, native_h3_refmod_cancel, native_h3_refmod_status, native_h3_refmod_submit,
+    native_h3_refmods, native_h3_session, native_h3_video_prepare, native_h3_video_upload,
+    native_input_upload, native_job_current, native_job_export, native_job_output,
+    native_job_prepare, native_job_status, native_job_submit, native_jobs_history,
+    native_jobs_history_outputs, native_logs_history_error, native_mask_upload,
+    native_workbench_cancel_pending, native_workbench_current, native_workbench_interrupt_running,
+    native_workbench_poll, native_workbench_run, native_workbench_stop,
 };
 pub mod model_families;
 pub mod recipe_prerequisites;
@@ -83,7 +84,8 @@ pub mod media;
 pub mod media_metadata;
 mod media_reference;
 pub use media::{
-    native_media_describe, native_media_list, native_media_reveal, native_media_star,
+    native_media_copy_in, native_media_describe, native_media_list, native_media_paste,
+    native_media_reveal, native_media_star,
     native_media_star_notice, native_media_star_status, native_media_thumbnail,
     native_media_unstar,
 };

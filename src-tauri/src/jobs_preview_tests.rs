@@ -33,6 +33,29 @@ fn mp4_is_immutable_leased_and_removed_after_last_reader() {
     drop(lease);
     assert!(!path.exists());
 }
+// The KJ producer encodes animated previews with PyAV movflags frag_keyframe+empty_moov+default_base_moof.
+#[test]
+fn accepts_pyav_fragmented_mp4_and_rejects_its_truncations() {
+    let bytes = include_bytes!("../test-data/preview/fragmented.mp4");
+    let payload = json!({"node_id":"unique-node","w":64,"h":64,"fps":8.0,"mime":"video/mp4","image":base64::engine::general_purpose::STANDARD.encode(bytes)});
+    let preview = parse(&payload, "job", 2, BUDGET).unwrap();
+    assert_eq!(preview.data["video"]["previewRevision"], 2);
+    assert!(preview.data.get("frames").is_none());
+    let lease = preview.video.clone().unwrap();
+    assert_eq!(std::fs::read(lease.path()).unwrap(), bytes);
+    for n in 0..bytes.len() {
+        assert!(
+            parse(
+                &json!({"node_id":"unique-node","w":64,"h":64,"fps":8.0,"mime":"video/mp4","image":base64::engine::general_purpose::STANDARD.encode(&bytes[..n])}),
+                "job",
+                1,
+                BUDGET
+            )
+            .is_none(),
+            "prefix {n}"
+        );
+    }
+}
 #[test]
 fn rejects_truncation_base64_budget_dimensions_and_timing() {
     for (bytes, mime) in [

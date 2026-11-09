@@ -4,6 +4,7 @@ import { invoke, isTauri } from '@tauri-apps/api/core';
 import { useI18n } from '../../i18n/I18nProvider';
 import { applyStudioSettings, captureStudioSettings, checkStudioSettings, studioDefaults } from '../../lib/preferences';
 import { changedCount, equal, getAt, leaves, overrides, resolve, setAt, type Settings } from '../../lib/presetSettings';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 import './presets.css';
 
 type Preset={name:string;settings:Settings};
@@ -11,7 +12,7 @@ type Preset={name:string;settings:Settings};
 export function PresetPanel({disabled}:{disabled:boolean}){
  const {t}=useI18n();const [presets,setPresets]=useState<Preset[]|null>(null),[selected,setSelected]=useState(''),[error,setError]=useState(''),[status,setStatus]=useState(''),[saving,setSaving]=useState(false);
  // `editing.name===''` is a new preset: the editor shows the current overrides and asks for the name.
- const [menu,setMenu]=useState<{name:string;x:number;y:number}|null>(null),[editing,setEditing]=useState<Preset|null>(null);
+ const [menu,setMenu]=useState<{name:string;x:number;y:number}|null>(null),[editing,setEditing]=useState<Preset|null>(null),[ask,setAsk]=useState<{name:string;run:()=>void}|null>(null);
  const live=useRef(false),lock=useRef(false),firstItem=useRef<HTMLButtonElement>(null),list=useRef<HTMLUListElement>(null);const native=isTauri();
  useEffect(()=>{live.current=true;if(native)invoke<Preset[]>('native_presets_read').then(p=>{if(live.current)setPresets(p);},e=>{if(live.current)setError(String(e));});return()=>{live.current=false;};},[native]);
  useEffect(()=>{if(!menu)return;firstItem.current?.focus();const dismiss=(e:PointerEvent)=>{if(!(e.target as Element).closest?.('.preset-menu'))setMenu(null);};document.addEventListener('pointerdown',dismiss);return()=>document.removeEventListener('pointerdown',dismiss);},[menu]);
@@ -31,8 +32,8 @@ export function PresetPanel({disabled}:{disabled:boolean}){
  };
  const current=()=>overrides(captureStudioSettings(),studioDefaults());
  const overwrite=(target:string)=>{
-  if(!presets||disabled||!window.confirm(t('presets.confirm',{name:target})))return;
-  void persist(presets.map(p=>p.name===target?{name:target,settings:current()}:p),target);
+  if(!presets||disabled)return;
+  setAsk({name:target,run:()=>void persist(presets.map(p=>p.name===target?{name:target,settings:current()}:p),target)});
  };
  const apply=(preset:Preset)=>{
   if(disabled||saving)return;
@@ -68,6 +69,7 @@ export function PresetPanel({disabled}:{disabled:boolean}){
    onSave={edited=>void persist(editing.name?presets.map(p=>p.name===editing.name?edited:p):[...presets,edited],edited.name).then(ok=>{if(ok&&live.current){setEditing(null);setTimeout(()=>focusTile(edited.name));}})}/>,document.body)}
   {error&&<p role="alert" className="error-message">{error}</p>}
   {status&&<p role="status">{status}</p>}
+  {ask&&<ConfirmDialog message={t('presets.confirm',{name:ask.name})} onDone={accepted=>{const run=ask.run;setAsk(null);if(accepted)run();}}/>}
  </section>;
 }
 

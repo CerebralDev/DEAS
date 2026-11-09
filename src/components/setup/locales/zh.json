@@ -84,7 +84,7 @@
   "setup.backend.nvidia.label": "NVIDIA / CUDA",
   "setup.backend.nvidia.description": "请求 NVIDIA 支持；需通过原生兼容性检查。",
   "setup.backend.amd.label": "AMD / ROCm",
-  "setup.backend.amd.description": "请求 AMD 支持；需通过原生兼容性检查。",
+  "setup.backend.amd.description": "适用于 RDNA2–RDNA4 Radeon 显卡的 Linux ROCm 后端；RTX Video 阶段仅限 NVIDIA。",
   "setup.backend.intel.label": "Intel / XPU",
   "setup.backend.intel.description": "请求 Intel 支持；需通过原生兼容性检查。",
   "setup.execution.idle": "空闲",

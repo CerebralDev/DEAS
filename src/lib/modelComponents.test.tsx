@@ -42,3 +42,13 @@ test('component overrides default off and restored values require every boolean 
  expect(isComponentOverrides({...defaultComponentOverrides,textEncoders:true})).toBe(true);
  for(const value of [null,{},[],{...defaultComponentOverrides,textEncoders:'true'},{...defaultComponentOverrides,other:true}])expect(isComponentOverrides(value)).toBe(false);
 });
+
+test('auto-selection ranks by family pattern order: H3 defaults to the blending video VAE, not the windowed Sol decoder',()=>{
+ const h3=families.find(f=>f.id==='minimax-h3')!;
+ const files=[model('vae','MiniMaxH3/minimax_h3_audio_vae_fp32.safetensors'),model('vae','MiniMaxH3/minimax_h3_sol_vae_fp16.safetensors'),model('vae','MiniMaxH3/minimax_h3_video_vae_int8_convrot.safetensors'),model('vae','MiniMaxH3/minimax_h3_video_vae_fp16.safetensors')];
+ const vaes=componentFiles(files,h3,'vaes');
+ expect(vaes[0]).toContain('minimax_h3_video_vae_fp16');
+ expect(vaes[1]).toContain('minimax_h3_video_vae_int8');
+ expect(vaes[2]).toContain('minimax_h3_sol_vae');
+ expect(componentFiles(files,h3,'audioVaes')).toEqual(['MiniMaxH3/minimax_h3_audio_vae_fp32.safetensors']);
+});

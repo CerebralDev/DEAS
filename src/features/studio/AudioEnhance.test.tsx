@@ -9,6 +9,7 @@ import { exportEnhancedAudio, readAudioEnhanceCapabilities } from '../../lib/aud
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(), isTauri: vi.fn(() => true) }));
 beforeEach(() => {
+  Object.defineProperty(HTMLDialogElement.prototype, 'showModal', { configurable: true, value: function (this: HTMLDialogElement) { this.open = true; } });
   localStorage.setItem(LOCALE_STORAGE_KEY, 'en');
   vi.mocked(isTauri).mockReturnValue(true);
   vi.mocked(invoke).mockImplementation(async command => command === 'native_audio_enhance_capabilities' ? { clean: true, deep: false, stems: false } : command === 'native_audio_enhance_install_status' ? { running: false, mode: '', stage: '', downloaded: 0, total: 0 } : null);
@@ -16,6 +17,8 @@ beforeEach(() => {
 afterEach(() => { cleanup(); localStorage.clear(); vi.resetAllMocks(); });
 const mode = () => document.querySelector('[data-audio-enhance-mode]') as HTMLSelectElement;
 const run = () => document.querySelector('[data-audio-enhance-run]') as HTMLButtonElement;
+const consentDialog = () => document.querySelector('dialog.confirm-dialog');
+const acceptConsent = async () => { await act(async () => { fireEvent.click(document.querySelector('[data-confirm-dialog]')!); }); };
 async function mount(source?: { sourceId: string }) {
   await act(async () => { render(<I18nProvider><AudioEnhance scope="tve" source={source}/></I18nProvider>); });
   await act(async () => { fireEvent.focus(mode()); });
@@ -126,7 +129,6 @@ test('restored Clean probes without selector interaction; probe failure is not r
 });
 
 test('installation needs explicit consent and never reports readiness before a successful capability probe', async () => {
-  const consent = vi.spyOn(window, 'confirm').mockReturnValue(false);
   let finish!: () => void;
   let installed = false;
   vi.mocked(invoke).mockImplementation(async command => {
@@ -138,9 +140,9 @@ test('installation needs explicit consent and never reports readiness before a s
   await mount({ sourceId: 'retained' });
   const button = document.querySelector('[data-audio-enhance-install="deep"]') as HTMLButtonElement;
   fireEvent.click(button);
+  expect(consentDialog()).not.toBeNull();
   expect(invoke).not.toHaveBeenCalledWith('native_audio_enhance_install', expect.anything());
-  consent.mockReturnValue(true);
-  await act(async () => { fireEvent.click(button); });
+  await acceptConsent();
   expect(invoke).toHaveBeenCalledWith('native_audio_enhance_install', { mode: 'deep', confirmed: true });
   expect(button.disabled).toBe(true);
   expect(mode().disabled).toBe(true);
@@ -150,11 +152,30 @@ test('installation needs explicit consent and never reports readiness before a s
   expect(mode().querySelector<HTMLOptionElement>('[value="deep"]')!.disabled).toBe(false);
   expect((document.querySelector('[data-audio-enhance-install="deep"]') as HTMLButtonElement).disabled).toBe(true);
   expect(mode().value).toBe('off');
-  consent.mockRestore();
+});
+
+test('running install reports the real localized stage and stays honest without byte totals', async () => {
+  let status = { running: true, mode: 'stems', stage: 'python-environment', downloaded: 0, total: 0 };
+  vi.mocked(invoke).mockImplementation(async command => {
+    if (command === 'native_audio_enhance_install_status') return status;
+    if (command === 'native_audio_enhance_capabilities') return { clean: true, deep: true, stems: false };
+    if (command === 'native_audio_enhance_install') return new Promise(() => {}); // the install stays in flight for this test
+    return null;
+  });
+  await mount({ sourceId: 'retained' });
+  const line = () => document.querySelector('[data-audio-enhance-install-status]')!.textContent!;
+  await act(async () => { fireEvent.click(document.querySelector('[data-audio-enhance-install="stems"]') as HTMLButtonElement); }); // already installing: the button is blocked, the poller reports the running stage
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 900)); }); // one 750 ms poll tick
+  expect(line()).toContain('Creating the Python environment');
+  expect(line()).not.toContain('bytes');
+  status = { running: true, mode: 'stems', stage: 'packages', downloaded: 2048, total: 4096 };
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 900)); });
+  expect(line()).toContain('Installing packages');
+  expect(line()).toContain('2048 / 4096');
+  expect((document.querySelector('[data-audio-enhance-install-cancel]') as HTMLButtonElement).disabled).toBe(false);
 });
 
 test('failed install remains unavailable and can be retried with fresh consent', async () => {
-  const consent = vi.spyOn(window, 'confirm').mockReturnValue(true);
   vi.mocked(invoke).mockImplementation(async command => {
     if (command === 'native_audio_enhance_install_status') return { running: false, mode: '', stage: '', downloaded: 0, total: 0 };
     if (command === 'native_audio_enhance_install') throw new Error('AUDIO_INSTALL_FAILED: offline');
@@ -165,29 +186,30 @@ test('failed install remains unavailable and can be retried with fresh consent',
   expect(button.disabled).toBe(false);
   expect(document.querySelector('[data-audio-enhance-weights-ack]')).toBeNull();
   await act(async () => { fireEvent.click(button); });
+  expect(consentDialog()).not.toBeNull();
+  await acceptConsent();
   expect(screen.getByRole('alert').textContent).toContain('offline');
   expect(mode().querySelector<HTMLOptionElement>('[value="stems"]')!.disabled).toBe(true);
   expect(button.disabled).toBe(false);
   await act(async () => { fireEvent.click(button); });
+  expect(consentDialog()).not.toBeNull(); // retry requires fresh consent
+  await acceptConsent();
   expect(invoke).toHaveBeenCalledWith('native_audio_enhance_install', { mode: 'stems', confirmed: true });
-  expect(consent).toHaveBeenCalledTimes(2);
   expect(vi.mocked(invoke).mock.calls.filter(([c]) => c === 'native_audio_enhance_install')).toHaveLength(2);
-  consent.mockRestore();
 });
 
 test.each(['en', 'de', 'fr', 'ja', 'tr', 'zh'])('Stems uses explicit Smule MIT code + checkpoint consent in %s, without a legacy weights gate', async locale => {
   localStorage.setItem(LOCALE_STORAGE_KEY, locale);
-  const consent = vi.spyOn(window, 'confirm').mockReturnValue(false);
   await mount({ sourceId: 'retained' });
   const button = document.querySelector('[data-audio-enhance-install="stems"]') as HTMLButtonElement;
   expect(button.disabled).toBe(false);
   expect(document.querySelector('[data-audio-enhance-weights-ack]')).toBeNull();
   fireEvent.click(button);
-  expect(consent.mock.lastCall?.[0]).toContain('Smule Labs Windowed RoFormer');
-  expect(consent.mock.lastCall?.[0]).toContain('MIT');
+  const message = consentDialog()!.textContent!;
+  expect(message).toContain('Smule Labs Windowed RoFormer');
+  expect(message).toContain('MIT');
   expect(invoke).not.toHaveBeenCalledWith('native_audio_enhance_install', expect.anything());
   expect(document.body.textContent).not.toMatch(/Demucs|HTDemucs|unclear|rights are/i);
-  consent.mockRestore();
 });
 
 test('Smule installation is searchable in both locations and returns readiness only after probing', async () => {
@@ -196,7 +218,6 @@ test('Smule installation is searchable in both locations and returns readiness o
     '[data-audio-enhance="post"] [data-audio-enhance-install="stems"]',
     '[data-audio-enhance="tve"] [data-audio-enhance-install="stems"]',
   ]);
-  const consent = vi.spyOn(window, 'confirm').mockReturnValue(true);
   let finish!: () => void;
   let installed = false;
   vi.mocked(invoke).mockImplementation(async command => {
@@ -207,6 +228,7 @@ test('Smule installation is searchable in both locations and returns readiness o
   });
   await mount({ sourceId: 'retained' });
   await act(async () => { fireEvent.click(document.querySelector('[data-audio-enhance-install="stems"]')!); });
+  await acceptConsent();
   expect(invoke).toHaveBeenCalledWith('native_audio_enhance_install', { mode: 'stems', confirmed: true });
   expect(run().disabled).toBe(true);
   expect(mode().disabled).toBe(true);
@@ -215,7 +237,6 @@ test('Smule installation is searchable in both locations and returns readiness o
   expect(mode().value).toBe('off');
   fireEvent.change(mode(), { target: { value: 'stems' } });
   expect(run().disabled).toBe(false);
-  consent.mockRestore();
 });
 
 test('reopened installation observes real progress and cancellation without inferring readiness', async () => {
@@ -243,7 +264,6 @@ test('reopened installation observes real progress and cancellation without infe
 
 test('terminal install polling preserves the concrete compiler failure', async () => {
   vi.useFakeTimers();
-  const consent = vi.spyOn(window, 'confirm').mockReturnValue(true);
   let running = false;
   let fail!: (error: Error) => void;
   vi.mocked(invoke).mockImplementation(async command => {
@@ -255,12 +275,13 @@ test('terminal install polling preserves the concrete compiler failure', async (
   try {
     await mount({ sourceId: 'retained' });
     await act(async () => { fireEvent.click(document.querySelector('[data-audio-enhance-install="stems"]')!); });
+    await acceptConsent();
     await act(async () => { await vi.advanceTimersByTimeAsync(800); });
     await act(async () => { running = false; fail(new Error('AUDIO_RUNTIME: C++ compiler missing')); });
     await act(async () => { await vi.advanceTimersByTimeAsync(800); });
     expect(screen.getByRole('alert').textContent).toContain('C++ compiler missing');
     expect(mode().querySelector<HTMLOptionElement>('[value="stems"]')!.disabled).toBe(true);
-  } finally { consent.mockRestore(); vi.useRealTimers(); }
+  } finally { vi.useRealTimers(); }
 });
 
 test('IPC rejects malformed capabilities and malformed success receipts', async () => {
@@ -335,8 +356,27 @@ test('mount does not install, export, upload or submit; optional CUDA is validat
   await act(async () => { render(<I18nProvider><AudioEnhance scope="tve"/></I18nProvider>); });
   expect(vi.mocked(invoke).mock.calls.map(([command]) => command).sort()).toEqual(['native_audio_enhance_capabilities', 'native_audio_enhance_install_status']); // Mount may only read: install status plus the read-only capability probe that enables the options immediately.
   vi.mocked(invoke).mockResolvedValue({ clean: true, deep: true, stems: true });
-  expect(await readAudioEnhanceCapabilities()).toEqual({ clean: true, deep: true, stems: true, cuda: false });
+  expect(await readAudioEnhanceCapabilities()).toEqual({ clean: true, deep: true, stems: true, cuda: false, gpuRepair: false });
   vi.mocked(invoke).mockResolvedValue({ clean: true, deep: true, stems: true, cuda: 'yes' });
   await expect(readAudioEnhanceCapabilities()).rejects.toThrow('Invalid');
+  vi.mocked(invoke).mockResolvedValue({ clean: true, deep: true, stems: true, gpuRepair: 'yes' });
+  await expect(readAudioEnhanceCapabilities()).rejects.toThrow('Invalid');
+});
+
+test('installed CPU-only Stems offers a consented GPU reinstall; GPU-bound or unrepairable Stems stays blocked', async () => {
+  let caps: Record<string, boolean> = { clean: true, deep: true, stems: true, cuda: false, gpuRepair: true };
+  vi.mocked(invoke).mockImplementation(async command => command === 'native_audio_enhance_capabilities' ? caps
+    : command === 'native_audio_enhance_install_status' ? { running: false, mode: '', stage: '', downloaded: 0, total: 0 }
+    : command === 'native_audio_enhance_install' ? (caps = { ...caps, cuda: true, gpuRepair: false }) : null);
+  await mount();
+  const stems = () => document.querySelector<HTMLButtonElement>('[data-audio-enhance-install="stems"]')!;
+  expect(stems().disabled).toBe(false);
+  expect(stems().textContent).toBe('Reinstall Stems — vocals + instrumental with GPU…');
+  fireEvent.click(stems());
+  expect(consentDialog()?.textContent).toContain('Add GPU support');
+  await acceptConsent();
+  expect(invoke).toHaveBeenCalledWith('native_audio_enhance_install', { mode: 'stems', confirmed: true });
+  expect(stems().disabled).toBe(true);
+  expect(stems().textContent).toMatch(/^Install \/ retry/);
 });
 

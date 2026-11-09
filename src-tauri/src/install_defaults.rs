@@ -33,6 +33,24 @@ fn recommend(
                 (Backend::Cpu, Some(hardware))
             }
         },
+        #[cfg(target_os = "linux")]
+        Err(nvidia_error) => match crate::amd::probe_amd() {
+            Ok(found) => {
+                warnings.push(format!(
+                    "AMD ROCm recommended from the detected GPU ({}); verify the amdgpu driver and /dev/kfd access before installing",
+                    found.compute_capability
+                ));
+                (Backend::Amd, Some(found))
+            }
+            Err(_) => {
+                warnings.push(format!(
+                    "CPU recommended as the conservative supported baseline; no compatible NVIDIA or AMD device was verified: {}",
+                    nvidia_error
+                ));
+                (Backend::Cpu, None)
+            }
+        },
+        #[cfg(not(target_os = "linux"))]
         Err(error) => {
             warnings.push(format!("CPU recommended as the conservative supported baseline; no compatible NVIDIA device was verified: {error}"));
             (Backend::Cpu, None)

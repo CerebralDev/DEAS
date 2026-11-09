@@ -194,6 +194,8 @@ pub(crate) fn backend_configuration(root: &Path) -> Result<(Vec<String>, Vec<Pat
         model_yaml(&mut yaml, Path::new(models))?;
         // The node pack's Prompt Forge reads `llm`; not in MODEL_FOLDERS so model scans skip LLM weights.
         yaml.push_str("  llm: llm\n");
+        // Director RefMods (read and Create RefMod's write target, first registered root); without this they stay under ComfyUI/models.
+        yaml.push_str("  refmods: refmods\n");
     }
     for (index, extra) in folders.extra_models.iter().enumerate() {
         yaml.push_str(&format!(
@@ -291,6 +293,7 @@ mod tests {
         );
         assert!(extra.contains("  checkpoints: checkpoints\n"));
         assert!(yaml.contains("  llm: llm\n"));
+        assert!(yaml.contains("  refmods: refmods\n"));
     }
 
     fn junction_configuration_fixture(root: &Path) -> Vec<(&'static str, String)> {

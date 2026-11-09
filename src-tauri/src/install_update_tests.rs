@@ -162,16 +162,17 @@ fn reinstall_records_driver_update_but_refuses_other_compute_capability() {
         serde_json::from_value(serde_json::json!({"vendor":"NVIDIA","name":"NVIDIA GeForce RTX 4090","uuid":uuid,"driverVersion":driver,"computeCapability":cc})).unwrap()
     };
     let recorded = gpu("GPU-a", "580.10", "8.9");
-    let updated = refreshed_hardware(&recorded, gpu("GPU-b", "595.02", "8.9")).unwrap();
+    let updated =
+        refreshed_hardware(&recorded, gpu("GPU-b", "595.02", "8.9"), &Backend::Nvidia).unwrap();
     assert_eq!(
         (updated.uuid.as_str(), updated.driver_version.as_str()),
         ("GPU-b", "595.02")
     );
     assert!(
-        refreshed_hardware(&recorded, gpu("GPU-a", "595.02", "12.0"))
+        refreshed_hardware(&recorded, gpu("GPU-a", "595.02", "12.0"), &Backend::Nvidia)
             .unwrap_err()
             .contains("compute capability changed (8.9 -> 12.0)")
     );
     // The fresh-install driver gate still applies.
-    assert!(refreshed_hardware(&recorded, gpu("GPU-a", "570.1", "8.9")).is_err());
+    assert!(refreshed_hardware(&recorded, gpu("GPU-a", "570.1", "8.9"), &Backend::Nvidia).is_err());
 }

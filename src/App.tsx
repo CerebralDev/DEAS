@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { backendErrorText } from './lib/backendErrors';
 import { useI18n } from './i18n/I18nProvider';
 import { inspectBackend, type BackendSnapshot } from './lib/comfy';
@@ -16,6 +16,7 @@ import { Analysis } from './features/analysis/Analysis';
 import type { MediaItem } from './lib/media';
 import type { MediaAction } from './features/media/MediaLibrary';
 import type { Folders } from './lib/settings';
+import type { ChatRenderOutcome, ChatRenderRequest, ChatStudio } from './lib/chat';
 import type { ForgeCanvasContext, ForgeSendCanvas } from './lib/forgeCanvas';
 import { oneOf, usePref } from './lib/preferences';
 import {type Experience,type BeginnerPage} from './features/beginner/Experience';
@@ -84,6 +85,12 @@ export default function App(){
   setCanvasSendError('');setSent(s=>({positive,negative,n:(s?.n??0)+1,...(canvas?{canvas}: {})}));setTab('generate');return true;
  };
  const [sent,setSent]=useState<{positive:string;negative:string;n:number;canvas?:ForgeSendCanvas}>();
+ // Chat draws through Generate: it asks, Workbench runs it with its own settings and answers by id.
+ const [chatStudio,setChatStudio]=useState<ChatStudio>();
+ const [chatRender,setChatRender]=useState<ChatRenderRequest>();
+ const chatWaiting=useRef(new Map<string,(outcome:ChatRenderOutcome)=>void>());
+ const renderForChat=useCallback((ask:ChatRenderRequest)=>new Promise<ChatRenderOutcome>(resolve=>{chatWaiting.current.set(ask.id,resolve);setChatRender(ask);}),[]);
+ const chatRendered=useCallback((id:string,outcome:ChatRenderOutcome)=>{const resolve=chatWaiting.current.get(id);chatWaiting.current.delete(id);resolve?.(outcome);},[]);
  const [pendingConnectionFocus,setPendingConnectionFocus]=useState(false);
  useEffect(()=>{if(pendingConnectionFocus&&active==='engine'){document.getElementById('endpoint')?.focus();setPendingConnectionFocus(false);}},[pendingConnectionFocus,active]);
  const shellRef=useRef<HTMLDivElement>(null);
@@ -112,12 +119,12 @@ export default function App(){
    <AiOSetup experience={experience} onExperience={setExperience} beginnerPage={beginnerPage} onBeginnerPage={setBeginnerPage} studioTab={tab} onStudioTab={setTab} onStudioActiveChange={setStudioActive} onConnectExisting={connectExisting} onEnvironment={setEnvironment} studio={<div id="studio-workspace" className="studio-workspace">
     <div className="studio-columns">
     <div className="studio-main">
-    <div className="studio-generate-host" hidden={tab==='forge'||tab==='chat'||tab==='analysis'||tab==='tve'||tab==='monitor'}><Workbench beginner={beginner} beginnerPage={beginnerPage} onBeginnerPage={setBeginnerPage} planVisible={tab==='map'} endpoint={endpoint} roots={roots} root={environment?.root} incoming={sent} onCanvasContext={setForgeCanvasContext} onOpenVideoPost={()=>setTab('tve')} forgeHost={forgeHost} forgeActive={studioActive&&tab==='forge'} onOpenPromptForge={()=>setTab('forge')} onH3ForgeAvailable={setH3ForgeAvailable} onAnalyze={analyze} onFrameActions={fn=>{frameActions.current=fn;}}/></div>
+    <div className="studio-generate-host" hidden={tab==='forge'||tab==='chat'||tab==='analysis'||tab==='tve'||tab==='monitor'}><Workbench beginner={beginner} beginnerPage={beginnerPage} onBeginnerPage={setBeginnerPage} planVisible={tab==='map'} endpoint={endpoint} roots={roots} root={environment?.root} incoming={sent} onCanvasContext={setForgeCanvasContext} onOpenVideoPost={()=>setTab('tve')} forgeHost={forgeHost} forgeActive={studioActive&&tab==='forge'} onOpenPromptForge={()=>setTab('forge')} onH3ForgeAvailable={setH3ForgeAvailable} chatRender={chatRender} onChatRender={chatRendered} onChatStudio={setChatStudio} onAnalyze={analyze} onFrameActions={fn=>{frameActions.current=fn;}}/></div>
     {analysisOpened.current&&<div className="studio-generate-host" hidden={tab!=='analysis'}><Analysis active={studioActive&&tab==='analysis'} endpoint={endpoint} frameActions={item=>frameActions.current?.(item)??[]} roots={roots} root={environment?.root} incoming={toAnalyze} onSend={sendToGenerate}/></div>}
     {tveOpened.current&&<div className="studio-generate-host" hidden={tab!=='tve'}><TrueVideoEnhancer endpoint={endpoint} roots={roots}/></div>}
     {monitorOpened.current&&<div className="studio-generate-host" hidden={tab!=='monitor'}><Monitoring active={studioActive&&tab==='monitor'} root={environment?.root}/></div>}
     {forgeOpened.current&&<div className="studio-generate-host" hidden={tab!=='forge'}>{canvasSendError&&<p className="error-message" role="alert">{t(canvasSendError)}</p>}<div ref={setForgeHost} hidden={!h3ForgeAvailable}/><div hidden={h3ForgeAvailable}><PromptForge active={studioActive&&tab==='forge'&&!h3ForgeAvailable} endpoint={endpoint} root={environment?.root} inputDir={roots?.input} outputDir={roots?.output} onSend={sendToGenerate} canvasContext={forgeCanvasContext}/></div></div>}
-    {chatOpened.current&&<div className="studio-generate-host" hidden={tab!=='chat'}><Chat active={studioActive&&tab==='chat'} endpoint={endpoint} root={environment?.root} onSend={sendToGenerate}/></div>}
+    {chatOpened.current&&<div className="studio-generate-host" hidden={tab!=='chat'}><Chat active={studioActive&&tab==='chat'} endpoint={endpoint} root={environment?.root} onSend={sendToGenerate} studio={chatStudio} onRender={renderForChat}/></div>}
     {tab==='map'&&<details className="run-plan-diagnostics" open={active!==null}><summary>{t('studio.plan.diagnostics')}</summary>
     <section className="neural-field" aria-label={t('studio.features')}><div className="field-caption"><span className="crosshair" aria-hidden="true">+</span>{t('studio.map')} <span>{t('studio.select')}</span></div>
      <NeuralGraph nodes={nodes} edges={edges} selectedId={active} label={t('studio.features')} onSelect={id=>setActive(active===id?null:id)}/>

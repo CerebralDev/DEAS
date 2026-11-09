@@ -117,6 +117,24 @@ test('native OS file drops add references only when dropped over the tab',async(
  expect(invoke).toHaveBeenCalledWith('native_media_describe',{paths:['/os/v.wav']});
 });
 
+test('a picture pasted inside the tab is saved into Input and added; text-field and outside pastes are left alone',async()=>{
+ vi.mocked(isTauri).mockReturnValue(true);
+ vi.mocked(invoke).mockImplementation(async(command,args)=>command==='native_media_paste'?'/env/in/pasted-20261108-153000.png'
+ :command==='native_media_describe'?(args as {paths:string[]}).paths.map(path=>({name:path.split('/').at(-1),path,kind:'file',symlink:false,media:'image',size:1,modified:1})):null);
+ const {onAdd}=mount([]);
+ await waitFor(()=>expect(os.drop).not.toBeNull());
+ const picture=Object.assign(new File(['x'],'shot.png',{type:'image/png'}),{arrayBuffer:async()=>new Uint8Array([1,2]).buffer}); // jsdom Files lack arrayBuffer
+ const paste=(target:Element)=>{const e=new Event('paste',{bubbles:true,cancelable:true});Object.defineProperty(e,'clipboardData',{value:{files:[picture]}});target.dispatchEvent(e);return e;};
+ expect(paste(document.body).defaultPrevented).toBe(false);
+ const panel=document.querySelector('[data-references]')!;
+ const field=document.createElement('textarea');panel.append(field);
+ expect(paste(field).defaultPrevented).toBe(false);field.remove();
+ expect(invoke).not.toHaveBeenCalledWith('native_media_paste',expect.anything());
+ expect(paste(panel).defaultPrevented).toBe(true);
+ await waitFor(()=>expect(onAdd).toHaveBeenCalledWith([{item:expect.objectContaining({name:'pasted-20261108-153000.png',path:'/env/in/pasted-20261108-153000.png',media:'image'})}]));
+ expect(invoke).toHaveBeenCalledWith('native_media_paste',{bytes:[1,2],stamp:expect.stringMatching(/^\d{8}-\d{6}$/)});
+});
+
 const at=(name:string,media:MediaItem['media'],dir='/env/in')=>({name,media,src:`asset://${dir}/${name}`,path:`${dir}/${name}`});
 const refAt=(name:string,media:MediaItem['media'],x:Partial<VideoRef>={},dir='/env/in'):VideoRef=>({item:at(name,media,dir),second:0,strength:1,mediaMode:'video',...x});
 
@@ -177,6 +195,55 @@ test('RefMods: read the library on demand, add, edit strength/description, inser
  expect(onInsert).toHaveBeenCalledWith('<RefMod 1>');
  fireEvent.click(screen.getByRole('button',{name:'Remove reference chars/hero'}));
  expect(onRefmods).toHaveBeenLastCalledWith([]);
+});
+
+const createRefs=()=>[ref('a.png','image',{description:'face'}),ref('clip.mp4','video',{mediaMode:'video_audio',trimStart:1,trimEnd:4})];
+const createPanel=(vae='MiniMaxH3/video.safetensors')=>{
+ vi.mocked(isTauri).mockReturnValue(true);
+ const upload=vi.fn(async(path:string)=>`deas-inputs/up-${path.split('/').pop()}`);
+ const library=vi.fn(async()=>[{name:'old',kinds:['video' as const],description:''},{name:'hero',kinds:['image' as const,'video' as const,'audio' as const],description:''}]);
+ render(<I18nProvider><ReferencesPanel endpoint="http://127.0.0.1:7801" refs={createRefs()} onChange={vi.fn()} family="minimax-h3" seconds={5} label={()=>''} onAdd={vi.fn()} onInsert={vi.fn()} refmods={[{name:'old',strength:1,description:''}]} onRefmods={vi.fn()} library={library} refmodCreate={{vae,audioVae:'MiniMaxH3/audio.safetensors',upload}}/></I18nProvider>);
+ fireEvent.click(screen.getByRole('button',{name:'Create RefMod…'}));
+ return {upload,library};
+};
+test('Create RefMod uploads the checked references, submits one export with Director semantics and selects the saved file',async()=>{
+ vi.mocked(invoke).mockImplementation(async c=>c==='native_h3_refmod_submit'?{promptId:'p1'}:c==='native_h3_refmod_status'?{state:'done',result:{name:'hero',members:3,counts:{image:1,video:1,audio:1},warnings:['Item 2: H3 frame grid kept 56/60 frames.']}}:undefined);
+ const {upload,library}=createPanel();
+ expect(screen.getByRole('heading',{name:'Create RefMod'})).toBeTruthy();
+ fireEvent.change(screen.getByPlaceholderText('Automatic unique name'),{target:{value:'hero'}});
+ fireEvent.change(screen.getByRole('combobox',{name:'Concept'}),{target:{value:'identity'}});
+ fireEvent.change(screen.getByLabelText('Description of clip.mp4'),{target:{value:'walks'}});
+ fireEvent.click(screen.getByRole('checkbox',{name:/old$/}));
+ fireEvent.click(screen.getByRole('button',{name:'Create'}));
+ await screen.findByText('Saved hero (3 members). It is now in the RefMod list.');
+ expect(upload.mock.calls.map(c=>c[0])).toEqual(['/in/a.png','/in/clip.mp4']);
+ expect(vi.mocked(invoke)).toHaveBeenCalledWith('native_h3_refmod_submit',{baseUrl:'http://127.0.0.1:7801',request:{name:'hero',description:'',conceptType:'identity',refmods:[],
+  vae:'MiniMaxH3/video.safetensors',audioVae:'MiniMaxH3/audio.safetensors',
+  media:[{type:'image',file:'deas-inputs/up-a.png',slot:0,description:'face'},{type:'video',file:'deas-inputs/up-clip.mp4',slot:0,mediaMode:'video_audio',trimStart:1,trimEnd:4,description:'walks'}]}});
+ expect(screen.getByText('Item 2: H3 frame grid kept 56/60 frames.')).toBeTruthy();
+ // The library refreshes and preselects the new file; nothing else in the panel changed.
+ await waitFor(()=>expect(library).toHaveBeenCalledTimes(1));
+ await waitFor(()=>expect(screen.getByRole('combobox',{name:'RefMods'})).toHaveProperty('value','hero'));
+ expect(screen.getByRole('button',{name:'Create'}).hasAttribute('disabled')).toBe(true);
+});
+test('Create RefMod names a missing H3 VAE instead of submitting',()=>{
+ createPanel('');
+ const create=screen.getByRole('button',{name:'Create'});
+ expect(create.hasAttribute('disabled')).toBe(true);expect(create.title).toBe('Pictures and videos need the MiniMax H3 video VAE.');
+ fireEvent.click(screen.getByRole('checkbox',{name:/a\.png$/}));fireEvent.click(screen.getByRole('checkbox',{name:/clip\.mp4$/}));
+ expect(create.hasAttribute('disabled')).toBe(false); // the saved RefMod alone is already encoded
+ expect(vi.mocked(invoke).mock.calls.some(c=>c[0]==='native_h3_refmod_submit')).toBe(false);
+});
+test('Create RefMod cancels only its own queued export',async()=>{
+ let cancelled=false;
+ vi.mocked(invoke).mockImplementation(async c=>{if(c==='native_h3_refmod_submit')return {promptId:'p1'};if(c==='native_h3_refmod_cancel'){cancelled=true;return {cancelled:'running'};}if(c==='native_h3_refmod_status')return {state:cancelled?'cancelled':'running'};return undefined;});
+ createPanel();
+ fireEvent.click(screen.getByRole('button',{name:'Create'}));
+ await screen.findByText('Encoding references…');
+ fireEvent.click(screen.getByRole('button',{name:'Cancel export'}));
+ expect(vi.mocked(invoke)).toHaveBeenCalledWith('native_h3_refmod_cancel',{baseUrl:'http://127.0.0.1:7801',promptId:'p1'});
+ await screen.findByText('Export cancelled. Nothing was saved.',undefined,{timeout:2500});
+ expect(screen.queryByRole('button',{name:'Cancel export'})).toBeNull();
 });
 
 test.each([false,true])('a pack loaded after the library hydrates RefMod kinds from cached entries (replace=%s)',async replace=>{

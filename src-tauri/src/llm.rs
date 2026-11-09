@@ -346,6 +346,56 @@ fn local_models(root: &Path) -> Result<Vec<Model>, String> {
     models.sort_by(|a, b| a.id.cmp(&b.id));
     Ok(models)
 }
+/// The GGUF vision projector belonging to a chat GGUF: a sibling `*mmproj*.gguf` whose
+/// name carries the model's file name; otherwise a lone projector in the folder. A set
+/// of non-matching projectors pairs nothing — a wrong projector would misread pictures.
+pub(crate) fn vision_projector(model: &Path) -> Option<std::path::PathBuf> {
+    let dir = model.parent()?;
+    let name = model.file_name()?.to_string_lossy().to_ascii_lowercase();
+    let stem = name
+        .strip_suffix(".gguf")
+        .unwrap_or(name.as_str())
+        .to_owned();
+    let mut matches: Vec<std::path::PathBuf> = Vec::new();
+    let mut others: Vec<std::path::PathBuf> = Vec::new();
+    for entry in std::fs::read_dir(dir).ok()? {
+        let path = entry.ok()?.path();
+        if path == model
+            || !path
+                .file_name()?
+                .to_string_lossy()
+                .to_ascii_lowercase()
+                .ends_with(".gguf")
+            || !path
+                .file_name()?
+                .to_string_lossy()
+                .to_ascii_lowercase()
+                .contains("mmproj")
+            || std::fs::symlink_metadata(&path)
+                .map(|m| m.file_type().is_symlink())
+                .unwrap_or(true)
+        {
+            continue;
+        }
+        if path
+            .file_name()?
+            .to_string_lossy()
+            .to_ascii_lowercase()
+            .contains(&stem)
+        {
+            matches.push(path);
+        } else {
+            others.push(path);
+        }
+    }
+    matches.sort();
+    match matches.into_iter().next() {
+        Some(projector) => Some(projector),
+        None if others.len() == 1 => others.pop(),
+        None => None,
+    }
+}
+
 fn resolve_local(root: &Path, id: &str) -> Result<std::path::PathBuf, String> {
     model_id(id, Provider::Local)?;
     if !local_models(root)?.iter().any(|m| m.id == id) {
@@ -758,6 +808,7 @@ impl LocalWorker {
             Some("memory") => Err("Not enough free GPU memory for this local model. Close other apps using the GPU, stop the backend, or pick a smaller GGUF.".into()),
             Some("runtime") => Err("The local LLM runtime did not start. Use Backend → Re-run installation to repair it.".into()),
             Some("load") => Err("The local model did not load. It may be too large for the free memory, so stop the backend or pick a smaller GGUF.".into()),
+            Some("no_vision") => Err("The local GGUF runner cannot read pictures: no matching *.mmproj*.gguf projector file sits next to this model. Place the projector beside the GGUF, or pick your server's copy of the model under Backend → LLM.".into()),
             Some(_) => Err(LOCAL_FAILED.into()),
             None => Ok(value),
         }
@@ -776,6 +827,13 @@ impl LocalRunner {
             root: root.to_path_buf(),
             worker: tokio::sync::Mutex::new(None),
         }
+    }
+
+    /// True when the local model has a vision projector pairing next to its GGUF.
+    pub fn has_vision(&self, model: &str) -> bool {
+        resolve_local(&self.root, model)
+            .ok()
+            .is_some_and(|path| vision_projector(&path).is_some())
     }
 
     async fn open(&self, model: &str) -> Result<LocalWorker, String> {
@@ -810,7 +868,10 @@ impl LocalRunner {
             stdin,
             stdout: tokio::io::BufReader::new(stdout),
         };
-        worker.exchange(&json!({ "modelPath": path })).await?;
+        let projector = vision_projector(&path);
+        worker
+            .exchange(&json!({ "modelPath": path, "mmproj": projector }))
+            .await?;
         Ok(worker)
     }
 
@@ -1154,7 +1215,12 @@ async fn forge_images(
     Ok(())
 }
 
-async fn forge(base_url: &str, root: &str, route: &str, mut body: Value) -> Result<Value, String> {
+pub(crate) async fn forge(
+    base_url: &str,
+    root: &str,
+    route: &str,
+    mut body: Value,
+) -> Result<Value, String> {
     let path = forge_route(route)?;
     if !body.is_object() {
         return Err("Invalid Prompt Forge request".into());

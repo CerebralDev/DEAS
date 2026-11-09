@@ -683,6 +683,54 @@ fn local_fixture(root: &Path) -> std::path::PathBuf {
     base
 }
 #[test]
+fn vision_projector_pairs_rename_friendly_names_and_refuses_ambiguity() {
+    let dir = tempfile::tempdir().unwrap();
+    let model = dir.path().join("Qwen3-VL.gguf");
+    std::fs::write(&model, b"gguf").unwrap();
+    assert!(vision_projector(&model).is_none());
+    // The common suffix form: <model>.mmproj-Q8_0.gguf (issue #28's files).
+    std::fs::write(dir.path().join("Qwen3-VL.mmproj-Q8_0.gguf"), b"gguf").unwrap();
+    assert_eq!(
+        vision_projector(&model).unwrap(),
+        dir.path().join("Qwen3-VL.mmproj-Q8_0.gguf")
+    );
+    std::fs::remove_file(dir.path().join("Qwen3-VL.mmproj-Q8_0.gguf")).unwrap();
+    // The prefix form the reporter renamed to: mmproj-<model>-f16.gguf.
+    std::fs::write(dir.path().join("mmproj-Qwen3-VL-f16.gguf"), b"gguf").unwrap();
+    assert_eq!(
+        vision_projector(&model).unwrap(),
+        dir.path().join("mmproj-Qwen3-VL-f16.gguf")
+    );
+    // A lone unrelated projector pairs (the short-rename case)...
+    std::fs::rename(
+        dir.path().join("mmproj-Qwen3-VL-f16.gguf"),
+        dir.path().join("mmproj-any.gguf"),
+    )
+    .unwrap();
+    assert_eq!(
+        vision_projector(&model).unwrap(),
+        dir.path().join("mmproj-any.gguf")
+    );
+    // ...but two unrelated projectors have no deterministic pairing: pair nothing.
+    std::fs::write(dir.path().join("mmproj-other.gguf"), b"gguf").unwrap();
+    assert!(vision_projector(&model).is_none());
+    // A name-matching projector still wins over the ambiguous set.
+    std::fs::write(dir.path().join("Qwen3-VL.mmproj-f16.gguf"), b"gguf").unwrap();
+    assert_eq!(
+        vision_projector(&model).unwrap(),
+        dir.path().join("Qwen3-VL.mmproj-f16.gguf")
+    );
+    #[cfg(unix)]
+    {
+        std::fs::remove_file(dir.path().join("mmproj-any.gguf")).unwrap();
+        std::fs::remove_file(dir.path().join("mmproj-other.gguf")).unwrap();
+        std::fs::remove_file(dir.path().join("Qwen3-VL.mmproj-f16.gguf")).unwrap();
+        std::os::unix::fs::symlink("/etc/passwd", dir.path().join("mmproj-link.gguf")).unwrap();
+        assert!(vision_projector(&model).is_none()); // symlinked projectors never pair
+    }
+}
+
+#[test]
 fn model_scan_filters_projectors_hidden_invalid_and_traversal() {
     let root = tempfile::tempdir().unwrap();
     let base = local_fixture(root.path());

@@ -25,5 +25,9 @@
   "media.folders": "フォルダー",
   "media.expandFolder": "{name} を展開",
   "media.collapseFolder": "{name} を折りたたむ",
-  "media.loadingFolders": "フォルダーを読み込み中…"
+  "media.loadingFolders": "フォルダーを読み込み中…",
+  "media.intake.label": "ここに貼り付け／ドロップ",
+  "media.intake.hint": "ここをクリックして Ctrl+V を押すとクリップボードの画像を Input に保存します。メディアやファイルマネージャーから画像・動画をここにドロップすると Input にコピーします。元のファイルはそのままです。",
+  "media.intake.done": "Input にコピーしました: {name}",
+  "media.intake.ignored": "コピーできるのは画像と動画のみです。"
 }

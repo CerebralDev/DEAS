@@ -97,7 +97,55 @@ impl Pack {
         pack.role_order = serde_json::from_slice::<Order>(&bytes)
             .map(|o| o.defaults.image_reference_roles.0)
             .unwrap_or_default();
+        pack.add_deas_models(&path.with_file_name("deas-models.json"))?;
         Ok(pack)
+    }
+
+    /// DEAS-owned writers (`deas-models.json`) for models the upstream pack lacks: each
+    /// inherits its `base` model's entry and shared rules, then overrides them with its own.
+    fn add_deas_models(&mut self, path: &Path) -> Result<(), String> {
+        #[derive(Deserialize)]
+        struct Extra {
+            base: String,
+            entry: serde_json::Map<String, Value>,
+            system: String,
+            #[serde(default)]
+            segment_blocks: HashMap<String, String>,
+        }
+        #[derive(Deserialize)]
+        struct Extras {
+            models: HashMap<String, Extra>,
+        }
+        let bytes = super::data::read(path)
+            .map_err(|e| format!("Prompt Forge DEAS writers unavailable: {e}"))?;
+        let extras: Extras = serde_json::from_slice(&bytes)
+            .map_err(|e| format!("Prompt Forge DEAS writers are invalid: {e}"))?;
+        for (key, extra) in extras.models {
+            if self.models.contains_key(&key) {
+                continue; // Upstream gained its own writer: it wins.
+            }
+            // A pack without the base (test fixtures, partial overrides) simply lacks this writer.
+            let Some(base) = self.models.get(&extra.base) else {
+                continue;
+            };
+            let mut entry = base.entry.as_object().cloned().unwrap_or_default();
+            entry.extend(extra.entry);
+            entry.insert("base".into(), Value::String(extra.base.clone()));
+            // The base system is the shared rules, the separator, then its own model file.
+            let shared = base.system.split(SEPARATOR).next().unwrap_or_default();
+            let model = PackModel {
+                entry: Value::Object(entry),
+                layout_rewrite: None,
+                system: format!("{shared}{SEPARATOR}{}", extra.system),
+                system_by_mode: HashMap::new(),
+                segment_blocks: extra.segment_blocks,
+                guidance_tool: vec![],
+                guidance_docs: HashMap::new(),
+                search_tool: vec![],
+            };
+            self.models.insert(key, model);
+        }
+        Ok(())
     }
 }
 
