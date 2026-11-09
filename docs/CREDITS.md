@@ -44,7 +44,7 @@ DEAS — Dark Engine AI Studio is maintained under the [darksidewalker GitHub pr
 
 Tests/builds also rely on Node/npm, Vitest/Testing Library, Playwright and their dependencies. Manifests/lockfiles identify packages and versions; this credits list is not an exhaustive legal notice inventory. Model weights, vendor SDKs and gated assets carry separate terms.
 
-## SAM segmentation integration (unreleased)
+## SAM segmentation integration (0.2.19)
 
 Meta's [Segment Anything Model 3](https://github.com/facebookresearch/sam3) provides the SAM 3/3.1 segmentation model; ComfyUI exposes the core `SAM3_Detect` integration used by the in-progress DEAS adapter. Check the upstream [SAM License](https://github.com/facebookresearch/sam3/blob/main/LICENSE) and applicable checkpoint terms before obtaining or using weights. `sam3.1_multiplex_fp16.safetensors` is manually installed by the user after license acceptance; DEAS does not bundle or automatically download SAM weights. This attribution does not imply real-model or target-platform acceptance.
 

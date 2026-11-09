@@ -1,6 +1,13 @@
 # DEAS verification — native baseline, optional capabilities and languages
 
-## Seamless loop with audio and Beat-aware (0.2.22, unreleased; DaSiWa nodes 0.5.41 local)
+## Media Analysis (PR #30 merged, 0.2.22)
+
+- Contributor branch `feat/media-analysis` (7 commits, 53 files) merged into `main` as merge commit `5a5a4e3fce794c865f5aec66eba28355405fc7c1` (parents `6da6065` and PR head `051ae3f`); conflicts in `docs/CHANGELOG.md`, `MediaLibrary.tsx` and `Workbench.tsx` resolved by keeping both sides. GitHub marked the PR MERGED; a review comment lists the folded-in fixes; the source branch was deleted.
+- Integration fixes folded into the merge commit: 23 global-search entries plus a Spaces anchor; live Logs streaming and mid-step Cancel for setup/conversion children; `spawn_blocking` for `native_analysis_overview`/`stage` with scan-skipping polls gated on `active`; frame-picker playback on Linux through the existing libmpv `NativeVideo`; frames copied into the owned Input root before hand-off to Generate; no-clobber frame saves and downloads with `.part` cleanup; `-X utf8` plus `--only-binary :all:` and a cleared child environment for the hash-locked uv installs; consent text with the true total; i18n literal, fmt and clippy fixes; `onFrameActions` moved out of render; the env-mutating test parameterised.
+- Gates on the merged tree (Linux, before the release run): `tsc --noEmit` clean; vitest 83 files / 1668 tests; `test:core` 151; `cargo fmt --check` clean; `cargo clippy --locked --all-targets -- -D warnings` clean; serial `cargo test --lib` 892 passed, 0 failed, 66 ignored.
+- Not accepted: tagger runtimes, the libmpv frame-picker playback and Describe in the real app; the Windows lock files under `--only-binary` (the first real Windows build of this merge is the acceptance test); `character_series.json` (304 KB, PromptForge-derived) has no separate license line in CREDITS beyond the existing PromptForge/Danbooru paragraph.
+
+## Seamless loop with audio and Beat-aware (0.2.22)
 
 - Node pack (`/data/GitHub/ComfyUI-DaSiWa-Nodes`, uncommitted 0.5.41): `DaSiWa_SeamlessLoop` gains optional `audio`/`frame_rate`/`audio_loop` and an `AUDIO` output; sample boundaries `round(f·sr/fps)` from absolute frame indices, equal-power tail→head crossfade; Beat-aware = torch spectral-flux tempo (60–200 BPM, confidence ≥0.2) biasing the loop span to whole beats within 1.25× of the best visual cost. CPU: 65 tests passed (9 CUDA-only skipped), incl. a golden 0.5.40 no-audio byte-identity fixture, exact lengths at 24/48k, 25/44.1k, 30000/1001, sine wrap continuity, 100/120/150 BPM within 2 %, a 5.17-beat visual best moved to 7 beats at 1.07× cost, noise falling back to Crossfade.
 - DEAS: `videoPost.loop` (`rife` + `.safetensors` model | `rtx`, audio `crossfade|beat`) runs first in the chain (`LP`); generation pipelines route its audio through the gate's lazy `audio` input (`PG[1]`) to saver `7`, TVE (no `B7`) straight to `7`. Discovery lists the loop only with the audio-aware schema; core `.pth` interpolators are refused for the loop because the node lists `.safetensors` only.
@@ -8,7 +15,7 @@
 - Gates: full Vitest 1643 passed + 1 unrelated `FoldersPanel.test.tsx` failure that passes alone (7/7); typecheck, `test:core`, `cargo fmt --check`, `cargo clippy --locked --all-targets -- -D warnings` PASS; serial `cargo test --lib` 875 passed / 1 failed (a stale `.pth` loop fixture, aligned to the `.safetensors` rule; `jobs_video_post` 6/6 after the fix) / 66 ignored.
 - Not accepted: real music tempo detection, GPU RIFE/FILM/RTX loop runs, the node pack's publication (DEAS installs pack `main` from GitHub), native WebKitGTK/WebView2.
 
-## Video baseline-first PP1c (0.2.22, unreleased)
+## Video baseline-first PP1c (0.2.22)
 
 - Source: `DaSiWa_EnhancedVideoCombine` returns `(IMAGE, STRING filename)` only after writing (`nodes/nodes_enhanced_video_combine.py:460,604`, owned pack 0.5.40 `062d1a0`), so the filename is the completion socket; no node-pack change. `image_postprocess.py` registers `DEAS_VideoPostprocessGate` (same class/lazy ABI as the image gate); `jobs_video.rs::post` emits `PG{baseline:["B7",1], image:<chain out>}` and feeds saver `7` from `PG`. Gate at the chain's END: a first version at the chain start failed the probe because post-model loaders have no gate input and ran before `B7`.
 - Discovery (`recipe_prerequisites.rs`) advertises the video gate only with the lazy interface and saver `output[1]=="STRING"`; `jobs.rs` admission refuses `videoPost` without it. TVE `video-enhance` (no `B7`) unchanged.
@@ -16,14 +23,14 @@
 - Graph identity: `dump_video_graphs` and `dump_latent_upscale_graphs` byte-identical before/after; `dump_tve_graphs` differs only in `7`/`PG` of the six ltx/wan/h3 graphs. `tools/validate_video_graphs.py` (owned env, CPU): `{ltx,wan,h3}_tve_rtx` valid; `*_rife`/`enhance` fail only on the empty `frame_interpolation` folder (unrelated).
 - Open: learned latent upscale (PP1c2, H3 audio from upscaled `SD[1]`), real GPU RTX/RIFE runs, native cancel/history with `PG`. A running owned backend refuses post-processed video jobs until restarted with the new adapter.
 
-## Export without metadata, step ETA, viewer previous/next (0.2.22, unreleased)
+## Export without metadata, step ETA, viewer previous/next (0.2.22)
 
 - `media_export.rs`: `cargo test --lib media_export` 7/7 incl. a real FFmpeg remux (tags/chapters gone, `framemd5` stream-copy hashes equal, broken input returns FFmpeg's reason without leftovers); PNG text/eXIf stripped with iCCP and decoded pixels kept and `media_metadata::read_metadata` empty; JPEG/WebP (VP8X flags + RIFF size) filters; refusals outside the Output root, symlink, traversal, destination==source, existing destination.
 - Frontend: `stepEta.test.tsx` 5, `ImageViewer.test.tsx` 10 (2 new), `Workbench.test.tsx` 418 (3 new: ETA, viewer navigation without upload/prompt change, export entries/cancel).
 - Combined gates on the integrated tree: `npm run typecheck` PASS, `npm run test:core` 151, full Vitest **81 files / 1643 tests passed**; `cargo fmt --check`, `cargo clippy --locked --all-targets -- -D warnings` PASS; serial `cargo test --locked --lib -- --test-threads=1` **873 passed / 66 ignored**.
 - Not accepted: native WebKitGTK/WebView2 save dialog and viewer keys, six-locale browser gate (`tools/verify_languages.py`), Windows.
 
-## Director Create RefMod W2e3 (0.2.22, unreleased)
+## Director Create RefMod W2e3 (0.2.22)
 
 - Source check (pack 0.5.40, `nodes/refmod_export.py`): `DaSiWaH3RefModExport(timeline_data, request_id, name, description, concept_type, vae?, audio_vae?)`, Director item contract (`type`, `value` input-relative, `media_mode`, `trim_start/trim_end`, `description`), saved rows `{name}`, output `ui.dasiwa_refmod_export[0] = {name, members, counts, warnings}`; writes a v5 bundle into the first RefMod root with `os.link` (never overwrites) and checks interruption before publishing. Upstream ComfyUI-MiniMaxH3Mod since the pack's 09-19 v5 integration: format unchanged (v5); its 17k+5 grid fix is already the pack's/core's grid (core truncates the tail; upstream samples uniformly across the clip — the pack keeps core parity and reports the trim as a warning); its `comfy.audio.resample` fix is covered because export audio goes through core `_encode_ref_audio`; its MPS pooling fix applies to Compressed Reference only. No pack change needed.
 - Native: `jobs_refmod.rs` compiles one `VAELoader`(s) + `DaSiWaH3RefModExport` graph (VAEs only for the needed modality), validates media with the REF2VA `validate_h3_media` rules (this app's `deas-inputs/` uploads only), safe names, concept enum; `native_h3_refmod_submit/status/cancel` act only on prompts this app queued (registry with the exact graph); cancel deletes a pending prompt (owned backend) or uses the authenticated `deas/jobs/interrupt` adapter — never core `/interrupt`. Tests: `cargo test --lib refmod` 9 passed (graph contract, VAE selection, rejects, history/queue parsing, rejection reasons, unknown-prompt refusal, command registration/permission).

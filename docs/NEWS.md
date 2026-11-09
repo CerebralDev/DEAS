@@ -1,8 +1,20 @@
 # News
 
-## 0.2.22 BETA (unreleased)
+## 0.2.22 BETA
 
 - **New: Media Analysis.** Drop a picture on **Studio → Media Analysis** for its tags, the settings that made it and **Open in ComfyUI** for its workflow; press **Describe** for the picture in words from your vision LLM, with the characters it recognises and what the tagger missed. It uses the taggers you already have (WD14 node, animetimm ONNX, and others) and downloads one only if you have none and ask. Drop a video to get every frame in a strip: save frames, analyse one, or send it to Generate as a first/last frame or H3 picture (several picked frames at once as H3 references). Have animetimm taggers from ComfyUI's animetimm node? Media Analysis can convert them to ONNX for you, once, and use them. Describe has Temperature and Repeat penalty sliders, and you pick its model before it runs. [Media Analysis guide](MEDIA-ANALYSIS.md).
+
+- **Videos can loop seamlessly.** In the video Post-Processing dock (and TVE) **Seamless loop** trims the clip to its best loop span and morphs the end into the start; the audio is cut and faded with exactly the same frame mapping, and **Beat-aware** picks a loop length of whole beats when the music has a clear tempo. The unprocessed Original is kept. Needs a node-pack update in Backend. [Studio](STUDIO.md).
+- **Post-processed videos never lose the Original.** The unprocessed video is now encoded before any post-processing node starts, so a failing or cancelled post chain cannot cost you the take. [Studio](STUDIO.md).
+- **A time-left estimate next to the step count** while sampling, measured from the job's own pace.
+- **Arrow keys in the full-window viewer** step through the finished pictures of the queue, Original and Processed included.
+- **Export without metadata…** saves a copy with no prompt, workflow or settings; pixels stay byte-identical, videos and audio are remuxed without re-encoding.
+- **Open in ComfyUI and the metadata pane work again with newer ComfyUI frontends** (frontend 1.57 changed its app export).
+- **Create RefMods from the References tab**, and RefMods in your own models folder are now found by the owned backend. [H3](VIDEO-MINIMAX-H3.md).
+- **Stop asks only when there is more than one thing to stop**, and its first item stops the run that is generating.
+- **Switching between pipelines of the same kind keeps your prompt.**
+- **Chat can run on your local GGUF models**, and SAM Auto Refine shows its passes in the queue.
+- **Small fixes:** videos show a thumbnail instead of ▶, dock tabs count what is switched on, the Denoise slider no longer shows "?" for videos, pictures can be pasted into Media and References, Beginner shows Steps and CFG, and Comfy prompt text is sharp at every zoom level.
 
 ## 0.2.21 BETA
 

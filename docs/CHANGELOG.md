@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.22 BETA (unreleased)
+## 0.2.22 BETA
 
 - **Seamless loop for videos.** LTX, Wan and MiniMax H3 Post-Processing (and the TVE tab) gain a **Seamless loop** stage, off by default. It runs first in the post chain with the DaSiWa Seamless Loop node (RIFE/FILM `.safetensors` model or RTX Frame Generation), turns the clip into a loop by trimming and morphing its end into its start, and cuts the generated audio with exactly the same frame mapping, so picture and sound stay in sync. **Loop audio → Beat-aware** additionally picks a loop length of whole beats when the music has a clear tempo, so the beats line up across the wrap; without a clear tempo it falls back to the plain crossfade. The loop shortens the video; the Original stays saved. Needs DaSiWa nodes 0.5.41 (Backend → Upgrade → ComfyUI and node packs) and a backend restart.
 - **Video post-processing saves the Original first.** With TVE stages enabled in a video pipeline, the unprocessed video is now encoded before any post-processing node (including its upscale/interpolation model loaders) starts, so a failing or stopped post chain can no longer cost you the Original. Works for LTX, Wan and MiniMax H3; videos without post-processing get exactly the same graph as before. Restart the owned backend once to load the updated DEAS adapter; until then such jobs are refused with a reason. The learned latent upscale is not covered yet.
