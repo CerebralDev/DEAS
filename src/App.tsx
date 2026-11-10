@@ -63,6 +63,9 @@ export default function App(){
  function closePanel(){document.querySelector<HTMLButtonElement>(`[data-node="${active}"] button`)?.focus();setActive(null);}
  const [tab,setTab]=usePref('studio.tab','generate',oneOf(...studioTabs));
  const [studioActive,setStudioActive]=useState(false);
+ const [workspaceArea,setWorkspaceArea]=useState('backend');
+ const [lastContext,setLastContext]=useState('Studio');
+ useEffect(()=>{const area=workspaceArea==='studio'?({generate:'Studio',forge:'Forge',analysis:'Analysis',tve:'Video',monitor:'Monitoring',map:'Studio'} as Record<string,string>)[tab]:({downloads:'Library',backend:'Backend',logs:'Logs',comfy:'ComfyUI'} as Record<string,string>)[workspaceArea];if(area)setLastContext(area);},[workspaceArea,tab]);
  const [focusStudio,setFocusStudio]=useState(0);
  const [chatDock,setChatDock]=usePref('workspace.chat.position','full',oneOf('full','left','right','bottom'));
  const [chatCollapsed,setChatCollapsed]=usePref('workspace.chat.collapsed',false,isBoolean);
@@ -138,7 +141,7 @@ export default function App(){
   </div>
   <div className="workspace-stage">
   <main id="workspace">
-   <AiOSetup experience={experience} onExperience={setExperience} beginnerPage={beginnerPage} onBeginnerPage={setBeginnerPage} studioTab={tab} onStudioTab={setTab} onStudioActiveChange={setStudioActive} focusStudio={focusStudio} onConnectExisting={connectExisting} onEnvironment={setEnvironment} studio={<div id="studio-workspace" className="studio-workspace">
+   <AiOSetup experience={experience} onExperience={setExperience} beginnerPage={beginnerPage} onBeginnerPage={setBeginnerPage} studioTab={tab} onStudioTab={setTab} onStudioActiveChange={setStudioActive} onWorkspaceChange={setWorkspaceArea} focusStudio={focusStudio} onConnectExisting={connectExisting} onEnvironment={setEnvironment} studio={<div id="studio-workspace" className="studio-workspace">
     <div className="studio-columns">
     <div className="studio-main">
     <div className="studio-generate-host" hidden={tab==='forge'||tab==='chat'||tab==='analysis'||tab==='tve'||tab==='monitor'}><Workbench beginner={beginner} beginnerPage={beginnerPage} onBeginnerPage={setBeginnerPage} planVisible={tab==='map'} endpoint={endpoint} roots={roots} root={environment?.root} incoming={sent} onCanvasContext={setForgeCanvasContext} onOpenVideoPost={()=>setTab('tve')} forgeHost={forgeHost} forgeActive={studioActive&&tab==='forge'} onOpenPromptForge={()=>setTab('forge')} onH3ForgeAvailable={setH3ForgeAvailable} chatRender={chatRender} onChatRender={chatRendered} onChatStudio={setChatStudio} onAnalyze={analyze} onFrameActions={fn=>{frameActions.current=fn;}}/></div>
@@ -180,7 +183,7 @@ export default function App(){
    <div className="workspace-dock-head"><button title={t('workspace.monitorHelp')} onClick={()=>setMonitorCompact(v=>!v)}>{t(monitorCompact?'workspace.expandMonitoring':'workspace.collapseMonitoring')}</button></div>
    <div className="workspace-slot" ref={setMonitorBottomHost}/>
   </aside>
-  {chatOpened.current&&<RetainedPane target={chatDock==='full'?chatFullHost:chatDock==='bottom'?chatBottomHost:chatSideHost}><Chat active={chatDock==='full'?studioActive&&tab==='chat':!chatCollapsed} endpoint={endpoint} root={environment?.root} onSend={sendToGenerate} studio={chatStudio} onRender={renderForChat} docked={chatDock!=='full'}/></RetainedPane>}
+  {chatOpened.current&&<RetainedPane target={chatDock==='full'?chatFullHost:chatDock==='bottom'?chatBottomHost:chatSideHost}><Chat active={chatDock==='full'?studioActive&&tab==='chat':!chatCollapsed} endpoint={endpoint} root={environment?.root} onSend={sendToGenerate} studio={chatStudio} onRender={renderForChat} workspaceArea={lastContext} docked={chatDock!=='full'}/></RetainedPane>}
   {monitorOpened.current&&<RetainedPane target={monitorDock?monitorBottomHost:monitorFullHost}><Monitoring active={monitorDock||studioActive&&tab==='monitor'} compact={monitorDock&&monitorCompact} root={environment?.root}/></RetainedPane>}
  </div>;
 }

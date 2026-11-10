@@ -44,7 +44,7 @@ export function chatRenderSize(ask: RenderAsk, model: Size, current: Size, grid:
   const size = { width: snap(width, grid), height: snap(height, grid) };
   return validCanvas(size) ? size : null;
 }
-export interface ChatMessage { role: 'user' | 'assistant'; content: string; pictures: number; prompts: WrittenPrompt[]; citations: ChatHit[]; tools: string[]; at: number }
+export interface ChatMessage { context?:string|null; role: 'user' | 'assistant'; content: string; pictures: number; prompts: WrittenPrompt[]; citations: ChatHit[]; tools: string[]; at: number }
 export interface ChatThread { id: string; title: string; model: string; created: number; updated: number; messages: ChatMessage[] }
 export interface ChatSummary { id: string; title: string; updated: number; count: number; pinned?: boolean }
 export interface ChatSettings { search: 'off' | 'duckduckgo' | 'searxng'; searxngUrl: string }

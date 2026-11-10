@@ -7,6 +7,9 @@ import { Chat } from './Chat';
 
 function StudioControls() {
   const [positive, setPositive] = usePref('studio.run.positive', '', isString);
+  const [negative] = usePref('studio.run.negative', '', isString);
+  const [pipeline] = usePref('studio.run.pipeline', 't2i', isString);
+  void negative;void pipeline;
   const [checkpoint] = usePref('studio.run.checkpoint', '', isString);
   return <><input aria-label="Studio draft" value={positive} onChange={e => setPositive(e.target.value)}/><span>{checkpoint}</span></>;
 }
@@ -39,6 +42,7 @@ beforeEach(() => {
     if (command === 'native_chat_settings') return settings;
     if (command === 'native_chat_settings_write') { settings = a.settings; return settings; }
     if (command === 'native_chat_delete' || command === 'native_chat_rename') return undefined;
+    if(command==='native_workspace_validate_suggestion')return a.proposed;
     if (command === 'native_chat_send') {
       const emit = (e: unknown) => a.onEvent.onmessage(e);
       const prompt = { target: 'illustrious', label: 'Illustrious XL', prompt: 'frieren, reading, under tree', negative: null };
@@ -77,17 +81,18 @@ it('opens a saved conversation, streams a reply with a prompt card and sends tha
   // Search stays hidden while it is switched off.
   expect(screen.queryByRole('button', { name: 'Search' })).toBeNull();
   await waitFor(() => expect((screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement).disabled).toBe(true));
-  fireEvent.click(screen.getByRole('checkbox', { name: "Include what I'm working on" }));
   fireEvent.change(screen.getByRole('textbox', { name: 'Message' }), { target: { value: 'write me an illustrious prompt: frieren reading' } });
   fireEvent.keyDown(screen.getByRole('textbox', { name: 'Message' }), { key: 'Enter' });
   await screen.findByText('Here it is.');
   expect(sends()[0]).toMatchObject({ id: ID, message: 'write me an illustrious prompt: frieren reading', model: 'qwen', pictures: [], search: false });
-  expect(sends()[0].context).toContain('Studio positive prompt:\n1girl, rain');
-  expect(sends()[0].context).toContain('Model / checkpoint: waiIllustrious.safetensors');
+  expect(JSON.parse(String(sends()[0].context)).values.positive).toBe('1girl, rain');
+  expect(JSON.parse(String(sends()[0].context)).values.checkpoint).toBe('waiIllustrious.safetensors');
   // The prompt shows once, as a card, not again in the reply text.
   expect(screen.getAllByText('frieren, reading, under tree')).toHaveLength(1);
-  fireEvent.click(screen.getByRole('button', { name: 'Send to Generate' }));
-  expect(onSend).toHaveBeenCalledWith('frieren, reading, under tree', '');
+  fireEvent.click(screen.getByRole('button',{name:'Review changes'}));
+  fireEvent.click(screen.getByRole('button',{name:'Apply'}));
+  await waitFor(()=>expect((screen.getByRole('textbox',{name:'Studio draft'}) as HTMLInputElement).value).toBe('frieren, reading, under tree'));
+  expect(onSend).not.toHaveBeenCalled();
   expect((screen.getByRole('textbox', { name: 'Message' }) as HTMLTextAreaElement).value).toBe('');
 });
 
@@ -96,11 +101,10 @@ it('includes live project controls rather than the global Studio defaults', asyn
   render(<I18nProvider><PreferencePersistenceContext.Provider value={false}><StudioControls/></PreferencePersistenceContext.Provider><Chat endpoint="http://127.0.0.1:8188" root="/env" onSend={vi.fn()}/></I18nProvider>);
   fireEvent.change(screen.getByRole('textbox', { name: 'Studio draft' }), { target: { value: 'unsaved project prompt' } });
   expect(JSON.parse(localStorage.getItem('deas.pref.studio.run.positive')!)).toBe('global default');
-  fireEvent.click(screen.getByRole('checkbox', { name: "Include what I'm working on" }));
   fireEvent.change(screen.getByRole('textbox', { name: 'Message' }), { target: { value: 'help me with this' } });
   await waitFor(() => expect((screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement).disabled).toBe(false));
   fireEvent.click(screen.getByRole('button', { name: 'Send' }));
-  expect(sends()[0].context).toContain('Studio positive prompt:\nunsaved project prompt');
+  expect(JSON.parse(String(sends()[0].context)).values.positive).toBe('unsaved project prompt');
   expect(sends()[0].context).not.toContain('global default');
   await screen.findByText('Here it is.');
 });
@@ -224,6 +228,7 @@ it('draws a render_picture answer with Generate, shows its progress and the pict
   const onRender = vi.fn(async () => ({ job, width: 1344, height: 768, seed: 42, checkpoint: 'anima.safetensors' }));
   render(<I18nProvider><Chat endpoint="http://127.0.0.1:8188" root="/env" onSend={vi.fn()} studio={{ checkpoint: 'anima.safetensors', dialect: 'Anima' }} onRender={onRender as never}/></I18nProvider>);
   await waitFor(() => expect((screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement).disabled).toBe(false), { timeout: 3000 }).catch(() => {});
+  fireEvent.click(screen.getByRole('checkbox',{name:'Allow image generation for this message'}));
   fireEvent.change(screen.getByRole('textbox', { name: 'Message' }), { target: { value: 'draw a fox in the snow, 16:9' } });
   fireEvent.keyDown(screen.getByRole('textbox', { name: 'Message' }), { key: 'Enter' });
   // Generate's settings travel with the message, so the LLM knows what draws.
@@ -253,6 +258,7 @@ it('says why a picture was not drawn when Generate refuses it', async () => {
   const onRender = vi.fn(async () => ({ error: 'The backend is not running. Start it under Backend, then ask again.' }));
   render(<I18nProvider><Chat endpoint="http://127.0.0.1:8188" root="/env" onSend={vi.fn()} studio={{ checkpoint: 'anima.safetensors', dialect: 'Anima' }} onRender={onRender as never}/></I18nProvider>);
   await waitFor(() => expect((screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement).disabled).toBe(true));
+  fireEvent.click(screen.getByRole('checkbox',{name:'Allow image generation for this message'}));
   fireEvent.change(screen.getByRole('textbox', { name: 'Message' }), { target: { value: 'draw a fox' } });
   await waitFor(() => expect((screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement).disabled).toBe(false));
   fireEvent.keyDown(screen.getByRole('textbox', { name: 'Message' }), { key: 'Enter' });

@@ -110,6 +110,7 @@ fn main() {
             deas::native_models_scan,
             deas::native_model_info,
             deas::native_logs_workspace_error,
+            deas::native_workspace_validate_suggestion,
             deas::native_model_family_write,
             deas::native_model_scan_start,
             deas::native_model_scan_status,
