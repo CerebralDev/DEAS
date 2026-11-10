@@ -1049,3 +1049,13 @@ it('Prompt Forge tab sends reference pictures with their roles, analyzes one and
   expect(nativeCalls().at(-1)!.request.controls).toMatchObject({ imageReferences: [{ role: 'pose', fidelity: 'close', note: 'the arms and the gaze', character: '', image: expect.stringMatching(/^data:image\/png;base64,/) }] });
   expect(screen.getByText(/What the pictures were read as/)).toBeTruthy();
 });
+
+it('Apply & return uses the guarded apply path and only navigates after success',async()=>{
+ const onApply=vi.fn(()=>false),onReturn=vi.fn();
+ render(<I18nProvider><ForgeButton inline endpoint="http://127.0.0.1:8188" root="/env" dialect="MiniMax H3" value="turn left" onApply={onApply} onReturn={onReturn} h3={{mode:'I2VA',duration:10,canvas:{width:768,height:512},references:[],easy:false}}/></I18nProvider>);
+ await screen.findByRole('option',{name:'qwen'});fireEvent.click(screen.getByRole('button',{name:'Write'}));await screen.findByRole('textbox',{name:'Result'});
+ fireEvent.click(screen.getByRole('button',{name:'Apply & return'}));expect(onReturn).not.toHaveBeenCalled();
+ onApply.mockReturnValue(true);fireEvent.click(screen.getByRole('button',{name:'Apply'}));expect(onReturn).not.toHaveBeenCalled();
+ fireEvent.click(screen.getByRole('button',{name:'Apply & return'}));expect(onReturn).toHaveBeenCalledTimes(1);expect(onApply).toHaveBeenLastCalledWith('H3 structured prompt');
+ expect(vi.mocked(invoke).mock.calls.some(([c])=>/render|submit|workbench_start/.test(c))).toBe(false);
+});

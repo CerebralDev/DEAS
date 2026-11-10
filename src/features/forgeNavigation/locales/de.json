@@ -1,0 +1,5 @@
+{
+  "workspace.applyReturn": "Anwenden und zurück",
+  "workspace.applyHelp": "Geprüfte Werte anwenden, ohne Generierung.",
+  "workspace.applyReturnHelp": "Prompt anwenden und zu Studio zurückkehren. Keine Generierung."
+}
