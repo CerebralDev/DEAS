@@ -180,6 +180,8 @@ fn main() {
             deas::native_app_restart,
             deas::native_settings_read,
             deas::native_presets_read,
+            deas::native_model_library_read,
+            deas::native_model_library_write,
             deas::native_presets_write,
             deas::native_presets_invalid,
             deas::native_settings_write,

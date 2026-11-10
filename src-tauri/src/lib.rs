@@ -105,6 +105,8 @@ pub mod environment_move;
 pub use environment_move::native_environment_move;
 pub mod folder_operations;
 pub mod presets;
+pub mod model_library;
+pub use model_library::{native_model_library_read, native_model_library_write};
 pub mod settings;
 pub use folder_operations::{native_settings_move, FolderOperations};
 pub use presets::{native_presets_invalid, native_presets_read, native_presets_write};

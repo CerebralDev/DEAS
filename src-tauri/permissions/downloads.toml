@@ -1,7 +1,7 @@
 [[permission]]
 identifier = "allow-download-plugins"
 description = "Explicit data-only catalogs, provider browsing and confirmed staged downloads in the local main webview."
-commands.allow = ["native_download_catalog", "native_download_import_catalog", "native_download_browse", "native_download_plan", "native_download_start", "native_download_status", "native_download_cancel", "native_models_scan", "native_model_info", "native_model_family_write", "native_model_scan_start", "native_model_scan_status", "native_logs_workspace_error"]
+commands.allow = ["native_download_catalog", "native_download_import_catalog", "native_download_browse", "native_download_plan", "native_download_start", "native_download_status", "native_download_cancel", "native_models_scan", "native_model_info", "native_model_family_write", "native_model_scan_start", "native_model_scan_status", "native_logs_workspace_error", "native_model_library_read", "native_model_library_write"]
 
 [[permission]]
 identifier = "allow-auth-plugins"

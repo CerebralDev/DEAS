@@ -20,6 +20,7 @@ import { ReferencesOverlay } from './ReferencesOverlay';
 import { defaultPlan, isContinuityPlan, nextStep, resolveClip, continuitySource, type ContinuityPlan } from '../../lib/continuity';
 import { checkRecipePrerequisites } from '../../lib/recipePrerequisites';
 import { scanModels, type LocalModel } from '../../lib/models';
+import { OrganizedModels } from '../../components/models/ModelLibrary';
 import { ModelMetadataTarget, ModelDeclaredBadge, useModelMetadataUpdates } from '../../components/models/ModelMetadataEditor';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { componentFiles, componentFilesNamed, defaultComponentOverrides, isComponentOverrides, type ComponentFamily, type ComponentSlot } from '../../lib/modelComponents';
@@ -392,16 +393,6 @@ const loadChoices=()=>{if(native&&!choices&&endpoint.trim())void refreshChoices(
  // Dock search/sort are display-only: the pick logic keeps the name-sorted lists. Models have no date, so that option exists for media only.
  const sorts=dockTab==='media'?['date','name','size'] as const:['name','size'] as const;
  const sort=(sorts as readonly string[]).includes(sortPref)?sortPref:sorts[0];
- const [folders,setFolders]=useState<Record<string,string>>({});const folder=folders[dockTab]??'';
- const match=(m:LocalModel)=>(!folder||m.name.replace(/\\/g,'/').startsWith(folder+'/'))&&m.name.toLowerCase().includes(query.trim().toLowerCase());
- // Model names carry their subfolders (`sdxl/base.safetensors`); the tree is those prefixes, always open, filtering the tiles beside it.
- const folderTree=(list:LocalModel[])=>{
-  const dirs=new Set(list.flatMap(m=>m.name.split(/[\\/]/).slice(0,-1).map((_,i,p)=>p.slice(0,i+1).join('/'))));
-  const node=(path:string,label:string):React.ReactNode=><li key={path}><div className="media-folder-row"><button type="button" className="media-folder-name" aria-current={folder===path?'location':undefined} onClick={()=>setFolders({...folders,[dockTab]:path})}>{label}</button></div>
-   <ul>{[...dirs].filter(d=>d.slice(0,Math.max(d.lastIndexOf('/'),0))===path).sort().map(d=>node(d,d.slice(d.lastIndexOf('/')+1)))}</ul></li>;
-  return dirs.size>0&&<nav className="media-folders" aria-label={t('media.folders')}><ul>{node('',t(`studio.run.dock.${dockTab}`))}</ul></nav>;
- };
- const bySort=(a:LocalModel,b:LocalModel)=>sort==='size'?b.size-a.size:byName(a,b);
  // ComfyUI's LoadImage reads its input folder, and its output folder through the `name [output]` annotation (resolved and contained by ComfyUI).
  const under=(item:MediaItem|null,root?:string)=>item?.media==='image'&&item.path&&root?relativeMediaPath(item.path,root):'';
  // The overview names the picture only; the full ComfyUI name (folders, `[output]`) stays in the tooltip.
@@ -1794,8 +1785,8 @@ const promptTools=forgeContext&&<>
    {dockTab==='options'&&<section className="wb-dock-panel" aria-label={t('studio.run.dock.options')}><OptionsPanel value={optionsPref} onChange={setOptions} allow={choices} family={family?.id} video={isVideo} imageInput={pipeline==='i2i'} onRead={loadChoices} canRead={native&&!!endpoint.trim()}/></section>}
    {(dockTab==='models'||dockTab==='loras')&&<section className="wb-dock-panel" aria-label={t(`studio.run.dock.${dockTab}`)}>
     {!models&&<p className="media-help">{t(modelsDir?'studio.run.scanHelp':'studio.run.loadHelp')}</p>}
-    {models&&dockTab==='models'&&(allModels.length===0?<p className="media-help">{t('studio.run.noModels')}</p>:<div className="media-browser">{folderTree(allModels)}<ul className="wb-tiles" data-run-checkpoint>{allModels.filter(match).sort(bySort).map(m=>tile(m,m===model,()=>pickModel(m),undefined,blocked(m,pipeline)))}</ul></div>)}
-    {models&&dockTab==='loras'&&(loraNames.length===0?<p className="media-help">{t('studio.run.noLoras')}</p>:<div className="media-browser">{folderTree(loraModels)}<ul className="wb-tiles wb-loras">{loraModels.filter(match).sort(bySort).map(m=>{const on=loras.find(l=>l.name===m.name);return tile(m,!!on,()=>toggleLora(m.name,!on),on&&<input type="number" aria-label={t('studio.run.strength',{name:m.name})} value={on.strength} min={-10} max={10} step={0.05} onChange={e=>{const n=Number(e.target.value);if(Number.isFinite(n)&&Math.abs(n)<=10)setLoras(loras.map(l=>l.name===m.name?{...l,strength:n}:l));}}/>);})}</ul></div>)}
+    {models&&dockTab==='models'&&(allModels.length===0?<p className="media-help">{t('studio.run.noModels')}</p>:<OrganizedModels onQueryChange={setQuery} models={allModels} scope="models" query={query} sort={sort} onRefresh={()=>void load()} renderTile={m=>tile(m,!!model&&identity(m)===identity(model),()=>pickModel(m),undefined,blocked(m,pipeline))}/>)}
+    {models&&dockTab==='loras'&&(loraNames.length===0?<p className="media-help">{t('studio.run.noLoras')}</p>:<OrganizedModels onQueryChange={setQuery} models={loraModels} scope="loras" query={query} sort={sort} listClass="wb-tiles wb-loras" onRefresh={()=>void load()} renderTile={m=>{const on=loras.find(l=>l.name===m.name);return tile(m,!!on,()=>toggleLora(m.name,!on),on&&<input type="number" aria-label={t('studio.run.strength',{name:m.name})} value={on.strength} min={-10} max={10} step={0.05} onChange={e=>{const n=Number(e.target.value);if(Number.isFinite(n)&&Math.abs(n)<=10)setLoras(loras.map(l=>l.name===m.name?{...l,strength:n}:l));}}/>);}}/>)}
    </section>}
   </div>
  </div>

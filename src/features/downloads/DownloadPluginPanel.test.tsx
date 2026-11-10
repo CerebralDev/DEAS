@@ -325,7 +325,7 @@ it('offers Edit meta on installed cards without fetching or downloading and disa
  vi.mocked(invoke).mockImplementation(async c=>c==='native_download_catalog'?catalog:c==='native_models_scan'?[model]:c==='native_model_scan_status'?{state:'idle',id:''}:[]);
  render(<I18nProvider><DownloadPanel embedded installTarget="/env" modelsDir="/models"/></I18nProvider>);await screen.findByRole('tab',{name:'Models'});tab('Installed');
  fireEvent.contextMenu(await screen.findByRole('button',{name:model.name}));fireEvent.click(screen.getByRole('menuitem',{name:'Edit meta…'}));
- expect(screen.getByRole('dialog').textContent).toContain(model.path);expect(screen.getByLabelText('Model family')).toHaveProperty('disabled',true);
+ expect(screen.getByRole('dialog').textContent).toContain(model.path);expect(within(screen.getByRole('dialog')).getByLabelText('Model family')).toHaveProperty('disabled',true);
  expect(screen.getByText('Family editing is unsupported for this model category.')).toBeTruthy();
  expect(vi.mocked(invoke).mock.calls.some(([c])=>['native_model_info','native_download_start','native_model_family_write'].includes(c))).toBe(false);
 });
@@ -335,7 +335,7 @@ it('saves and resets installed family metadata locally, showing declaration on c
  vi.mocked(invoke).mockImplementation(async(c,a)=>c==='native_download_catalog'?catalog:c==='native_models_scan'?[model]:c==='native_model_scan_status'?{state:'idle',id:''}:c==='native_model_family_write'?{...model,...((a as {family:string|null}).family?{familyOverride:'sdxl'}:{})}:[]);
  render(<I18nProvider><DownloadPanel embedded installTarget="/env" modelsDir="/models"/></I18nProvider>);await screen.findByRole('tab',{name:'Models'});tab('Installed');
  const card=await screen.findByRole('button',{name:model.name});fireEvent.click(card);fireEvent.keyDown(card,{key:'ContextMenu'});fireEvent.click(screen.getByRole('menuitem',{name:'Edit meta…'}));
- expect(screen.getByLabelText('Model family')).toHaveProperty('value','sdxl');fireEvent.click(screen.getByRole('button',{name:'Save'}));await waitFor(()=>expect(screen.queryByRole('dialog')).toBeNull());
+ expect(within(screen.getByRole('dialog')).getByLabelText('Model family')).toHaveProperty('value','sdxl');fireEvent.click(screen.getByRole('button',{name:'Save'}));await waitFor(()=>expect(screen.queryByRole('dialog')).toBeNull());
  expect(invoke).toHaveBeenCalledWith('native_model_family_write',{path:model.path,family:'sdxl'});
  expect(card.textContent).toContain('User-declared family');expect(document.querySelector('.download-picker .model-declared')).toBeTruthy();
  fireEvent.contextMenu(card);fireEvent.click(screen.getByRole('menuitem',{name:'Edit meta…'}));fireEvent.click(screen.getByRole('button',{name:'Reset to detection'}));await waitFor(()=>expect(screen.queryByRole('dialog')).toBeNull());
@@ -371,9 +371,9 @@ it('lists installed models per folder and fetches CivitAI metadata by hash on re
  expect(screen.getByText('Euler a · 30 steps · CFG 4.5 · 896x1152')).toBeTruthy();
  expect(screen.getByRole('button',{name:'Refresh metadata'})).toBeTruthy();
  expect(document.querySelector('img.download-preview')?.getAttribute('src')).toBe(fetched.info.civitai.preview);
- // Batch scan: scope selection + long-running hint, then one native background job.
+ // Batch scan: scope selection + settings provenance hint, then one native background job.
  expect(screen.getByLabelText('Scope')).toBeTruthy();
- expect(screen.getByText(/take a long time/)).toBeTruthy();
+ expect(screen.getByText(/Example settings are not verified recommendations/)).toBeTruthy();
  click('Scan Files');
  // One native job owns the sequential batch; React never drives per-file requests.
  click('Scan Files');
