@@ -4,6 +4,7 @@ Run: uv run --no-project --with playwright python tools/verify_workspace_layout.
 Owns its Vite/browser children; never accesses real models, media or backend services.
 """
 import json
+from pathlib import Path
 from playwright.sync_api import expect
 import verify_postprocessing as runner
 import verify_workbench_collection as collection
@@ -34,7 +35,7 @@ def assert_viewport(page, label):
         utility = page.locator('.aio-utility-tabs')
         assert utility.locator('[role="tab"]').evaluate_all('(es)=>es.map(e=>e.dataset.studioTab||e.dataset.node)') == ['monitor','map','settings','logs'], label
         creative = page.locator('.aio-topbar > .aio-tabs').first
-        assert creative.locator('[role="tab"]').evaluate_all('(es)=>es.map(e=>e.dataset.studioTab||e.dataset.node)')[:6] == ['generate','optional-downloads','forge','chat','tve','comfy'], label
+        assert creative.locator('[role="tab"]').evaluate_all('(es)=>es.map(e=>e.dataset.studioTab||e.dataset.node)')[:7] == ['generate','optional-downloads','forge','chat','analysis','tve','comfy'], label
         if g['width'] >= 1440:
             left, right = creative.bounding_box(), utility.bounding_box()
             assert left['x']+left['width'] <= right['x']+1, (label,'utility group is not right of creative tabs')
@@ -44,17 +45,21 @@ def assert_viewport(page, label):
 FIXTURE = video.IPC + r'''
 localStorage.setItem('deas.pref.install.root', JSON.stringify('/fixture/env'));
 localStorage.setItem('deas.pref.backend.autostart', 'false');
+window.__TAURI_INTERNALS__.metadata={currentWindow:{label:'main'},currentWebview:{label:'main'}};
+window.__TAURI_INTERNALS__.transformCallback=()=>1;
+window.__TAURI_EVENT_PLUGIN_INTERNALS__={unregisterListener:()=>{}};
 const layoutInvoke=window.__TAURI_INTERNALS__.invoke;
 window.__TAURI_INTERNALS__.invoke=async(c,a)=>{
+ if(c==='plugin:event|listen'||c==='plugin:event|unlisten')return 1;
  const read={
-  native_files_present:[true],native_install_open:{state:'succeeded',logs:[],error:null},
-  native_settings_read:{},native_models_scan:[],
+  native_model_library_read:{schemaVersion:1,revision:0,folders:[],entries:{},order:[],views:[]},native_model_assets:{},native_model_scan_status:{id:"",root:"",state:"idle",completed:0,total:0,failed:0,remaining:0,file:null},native_files_present:[true],native_install_open:{state:'succeeded',logs:[],error:null},
+  native_settings_read:{},native_models_scan:window.__workspaceModels??[],
   native_theme_packs:{directory:'/fixture/env/themes',packs:[],warnings:[]},
   native_llm_read:{provider:'openai',baseUrl:'http://127.0.0.1:49312'},native_llm_models:{models:[{id:'openai:layout-fixture',provider:'openai',name:'Layout fixture'}],warnings:[]},
   native_forge_randomizer_list:[],native_forge_targets:{source:{commit:'layout-fixture'},creativity:['balanced'],targets:[{key:'illustrious',label:'Layout fixture',modes:[],defaultMode:null,optional:[],qualityPresets:[],styles:[],aspectRatios:null,hasNegative:true,tools:false,guidance:[]}]},
   native_startup_read:{startup:{preset:'off',flags:[],fast:[]},packages:[],presets:{speed:{flags:[],fast:[]},compatibility:{flags:[],fast:[]},off:{flags:[],fast:[]}}},
   native_backend_status:{state:'stopped',endpoint:null,logs:[],error:null,generationReady:false},
-  native_chat_list:[],native_chat_settings:{search:'off',searxngUrl:''},native_logs:[],
+  native_analysis_overview:{runtimeReady:false,install:{running:false,stage:"",downloaded:0,total:0,error:null},taggers:[],unusable:[],defaultSize:0,runtimeSize:0,toolsSize:0},native_chat_list:[],native_chat_settings:{search:'off',searxngUrl:''},native_logs:[],
   native_spellcheck_status:{available:true,installed:true},native_spellcheck_check:[],
   native_jobs_history:{schemaVersion:1,records:[],readOnly:false,error:null},
   native_wildcard_library:JSON.stringify({categories:[]}),
@@ -97,11 +102,17 @@ def verify(browser, url, shots):
                     try:
                         expect(button).to_have_attribute('aria-selected', 'true')
                     except AssertionError:
+                        print('BROWSER_ERRORS', errors, flush=True)
                         print('NAVIGATION_DIAGNOSTICS', page.evaluate('({calls:__collection.calls,unexpected:__collection.unexpected,text:document.body.innerText.slice(0,6000)})'), flush=True)
                         raise
                     page.wait_for_timeout(35)
                     label = f'{locale}:{width}x{height}:{target}'
-                    assert_viewport(page, label)
+                    try:
+                        assert_viewport(page, label)
+                    except Exception:
+                        print('FAILED_LAYOUT',label,'BROWSER_ERRORS',errors,flush=True)
+                        print(page.locator('body').inner_text()[:2000],flush=True)
+                        raise
                     checks.append(label)
                 page.locator('[data-studio-tab="generate"]').click()
                 assert_viewport(page, 'return to retained Generate')
@@ -118,6 +129,36 @@ def verify(browser, url, shots):
                 page.screenshot(path=str(shots/f'workspace-{locale}-desktop.png'))
                 page.set_viewport_size({'width':390,'height':844})
                 page.screenshot(path=str(shots/f'workspace-{locale}-narrow.png'))
+        collection.set_locale(page,'en','[data-node="studio"]')
+        page.set_viewport_size({'width':1440,'height':960})
+        if (Path(__file__).resolve().parent.parent/'src/features/workspace/Docking.tsx').exists():
+            page.locator('[data-studio-tab="chat"]').click()
+            page.locator('[data-chat-input]').fill('Dock draft survives every move')
+            page.evaluate("window.__chatNode=document.querySelector('[data-chat-input]')")
+            page.get_by_label('Dock monitoring',exact=True).check()
+            for position in ['left','right','bottom','full']:
+                page.get_by_label('Chat placement',exact=True).select_option(position)
+                for width,height in [(1440,960),(390,844),(1440,420)]:
+                    page.set_viewport_size({'width':width,'height':height})
+                    assert_viewport(page,f'docks:{position}:{width}x{height}')
+                    assert page.evaluate("window.__chatNode===document.querySelector('[data-chat-input]')")
+                    expect(page.locator('[data-chat-input]')).to_have_value('Dock draft survives every move')
+                    assert page.locator('[data-monitoring]').count()==1
+                    checks.append(f'docks:{position}:{width}x{height}:single session + feed')
+            page.get_by_role('button',name='Reset workspace layout',exact=True).click()
+        if (Path(__file__).resolve().parent.parent/'src/components/models/ModelLibrary.tsx').exists():
+            page.evaluate("window.__workspaceModels=Array.from({length:600},(_,i)=>({category:'loras',name:'Group '+(i%20)+'/Long descriptive resource '+i+'.safetensors',path:'/fixture/models/loras/model-'+i+'.safetensors',size:1024+i,info:null,family:'minimax-h3'}))")
+            page.locator('[data-node="optional-downloads"]').click()
+            page.locator('[data-library-tab="installed"]').click()
+            expect(page.locator('.download-card')).to_have_count(600)
+            for width,height in [(1440,960),(390,844)]:
+                page.set_viewport_size({'width':width,'height':height})
+                for hierarchy in ['disk','auto','manual']:
+                    page.get_by_label('Hierarchy',exact=True).select_option(hierarchy)
+                    assert_viewport(page,f'large-library:{hierarchy}:{width}')
+                    checks.append(f'large-library:{hierarchy}:{width}:600 resources')
+            page.screenshot(path=str(shots/'library-organized-narrow.png'))
+        page.set_viewport_size({'width':1440,'height':960})
         page.locator('[data-studio-tab="tve"]').click()
         page.evaluate("""()=>{
           document.querySelector('.studio-generate-host:not([hidden])').hidden=true;
