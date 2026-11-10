@@ -26,5 +26,13 @@
   "llm.test.model": "Test model",
   "llm.test.choose": "Choose a model…",
   "llm.models.local": "Local llama.cpp",
-  "llm.models.empty": "No models discovered."
+  "llm.models.empty": "No models discovered.",
+  "llm.provider.openaiapi": "OpenAI API (official)",
+  "llm.apiKey.required": "OpenAI API key (required)",
+  "llm.openai.help": "Official OpenAI Responses API. Prompts and selected reference images are sent to OpenAI only when you request drafting or analysis. API usage is billed separately. Uses low reasoning where supported; local sampling controls are ignored. No automatic retries.",
+  "llm.recommend.group": "Recommended for prompts & images",
+  "llm.recommend.other": "Other available models",
+  "llm.recommend.terra": "Recommended · prompts & image review",
+  "llm.recommend.sol": "Complex prompts & deeper reasoning",
+  "llm.recommend.luna": "Economy · simple descriptions"
 }

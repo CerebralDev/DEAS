@@ -17,6 +17,7 @@ pub enum Provider {
     Local,
     Ollama,
     Openai,
+    OpenaiApi,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -71,8 +72,19 @@ pub(crate) fn endpoint(config: &LlmConfig, route: &str) -> Result<reqwest::Url, 
         return Err("LLM URL must use HTTP(S), without credentials".into());
     }
     let mut path = url.path().trim_end_matches('/').to_owned();
+    if config.provider == Provider::OpenaiApi
+        && (url.scheme() != "https"
+            || url.host_str() != Some("api.openai.com")
+            || url.port().is_some()
+            || !matches!(path.as_str(), "" | "/v1"))
+    {
+        return Err(
+            "OpenAI API uses https://api.openai.com/v1; use OpenAI compatible for other servers"
+                .into(),
+        );
+    }
     // Same rule as the node pack's OpenAICompatible, so one URL works in both.
-    if config.provider == Provider::Openai && !path.ends_with("/v1") {
+    if matches!(config.provider, Provider::Openai | Provider::OpenaiApi) && !path.ends_with("/v1") {
         path.push_str("/v1");
     }
     url.set_path(&format!("{path}/"));
@@ -426,7 +438,7 @@ fn resolve_local(root: &Path, id: &str) -> Result<std::path::PathBuf, String> {
     }
     Ok(actual)
 }
-async fn remote_models(config: &LlmConfig) -> Result<Vec<Model>, String> {
+pub(crate) async fn remote_models(config: &LlmConfig) -> Result<Vec<Model>, String> {
     if config.provider == Provider::Local {
         return Ok(vec![]);
     }
@@ -448,6 +460,9 @@ async fn remote_models(config: &LlmConfig) -> Result<Vec<Model>, String> {
             .as_str()
             .ok_or("Invalid LLM model identifier")?;
         model_id(id, config.provider)?;
+        if config.provider == Provider::OpenaiApi && !crate::openai_api::text_model(id) {
+            continue;
+        }
         models.push(Model {
             id: id.into(),
             name: id.into(),
@@ -484,12 +499,15 @@ fn validate(config: &LlmConfig) -> Result<(), String> {
         endpoint(config, "")?;
     }
     if !config.api_key.is_empty()
-        && (config.provider != Provider::Openai
+        && (!matches!(config.provider, Provider::Openai | Provider::OpenaiApi)
             || config.api_key.len() > 512
             || config.api_key.trim() != config.api_key
             || config.api_key.bytes().any(|b| !(0x21..0x7f).contains(&b)))
     {
         return Err("LLM API key is only for OpenAI-compatible servers: printable ASCII, at most 512 characters".into());
+    }
+    if config.provider == Provider::OpenaiApi && config.api_key.is_empty() {
+        return Err("OpenAI API requires an API key".into());
     }
     Ok(())
 }
@@ -501,11 +519,18 @@ fn validate_request(request: &LlmRequest) -> Result<(), String> {
     {
         return Err("LLM prompt must be nonempty; system and prompt together must be at most 128 KiB without NUL".into());
     }
-    if !(1..=4095).contains(&request.max_tokens)
+    let (minimum, maximum) = if request.model.provider == Provider::OpenaiApi {
+        (16, 32768)
+    } else {
+        (1, 4095)
+    };
+    if !(minimum..=maximum).contains(&request.max_tokens)
         || !request.temperature.is_finite()
         || !(0.0..=2.0).contains(&request.temperature)
     {
-        return Err("LLM maxTokens must be 1–4095; temperature must be finite in [0, 2]".into());
+        return Err(format!(
+            "LLM maxTokens must be {minimum}–{maximum}; temperature must be finite in [0, 2]"
+        ));
     }
     model_id(&request.model.id, request.model.provider)?;
     Ok(())
@@ -633,11 +658,14 @@ async fn http_json(
         } else {
             client.get(url)
         };
-        if config.provider == Provider::Openai && !config.api_key.is_empty() {
+        if matches!(config.provider, Provider::Openai | Provider::OpenaiApi)
+            && !config.api_key.is_empty()
+        {
             builder = builder.bearer_auth(&config.api_key);
         }
         let mut response = builder.send().await.map_err(http_error)?;
-        if !response.status().is_success() {
+        let status = response.status();
+        if !status.is_success() && config.provider != Provider::OpenaiApi {
             return Err(format!(
                 "LLM server returned HTTP {}",
                 response.status().as_u16()
@@ -656,7 +684,12 @@ async fn http_json(
             }
             bytes.extend_from_slice(&chunk);
         }
-        serde_json::from_slice(&bytes).map_err(|_| "LLM server returned invalid JSON".into())
+        let value: Value =
+            serde_json::from_slice(&bytes).map_err(|_| "LLM server returned invalid JSON")?;
+        if !status.is_success() {
+            return Err(crate::openai_api::api_error(status.as_u16(), &value));
+        }
+        Ok(value)
     };
     tokio::time::timeout(timeout, work)
         .await
@@ -668,6 +701,15 @@ async fn remote(
     timeout: Duration,
 ) -> Result<String, String> {
     let messages = json!([{"role":"system","content":request.system},{"role":"user","content":request.prompt}]);
+    if config.provider == Provider::OpenaiApi {
+        let value = crate::openai_api::send(
+            config,
+            &json!({"model":request.model.id,"messages":messages,"max_tokens":request.max_tokens}),
+            timeout,
+        )
+        .await?;
+        return response_text(&value, Provider::Openai);
+    }
     let (route, body) = if config.provider == Provider::Ollama {
         (
             "api/chat",
@@ -984,6 +1026,7 @@ fn forge_settings(config: &LlmConfig) -> Value {
         Provider::Openai => {
             json!({ "openai_url": config.base_url, "openai_api_key": config.api_key })
         }
+        Provider::OpenaiApi => json!({}), // Inject only the disposable bridge token below.
     }
 }
 fn forge_route(route: &str) -> Result<&'static str, String> {
@@ -1021,6 +1064,7 @@ pub async fn native_forge(
 ) -> Result<Value, String> {
     if route == "cancel" {
         if let Some(id) = body["request_id"].as_str() {
+            crate::openai_api::cancel(&base_url, &root, id);
             if let Some(upload) = FORGE_UPLOADS
                 .lock()
                 .map_err(|_| "Prompt Forge upload lock unavailable")?
@@ -1259,7 +1303,29 @@ pub(crate) async fn forge(
         }
         body = json!({"model":model,"path":path,"request_id":id});
     }
-    body["settings"] = forge_settings(&read(Path::new(root))?);
+    let config = read(Path::new(root))?;
+    let mut bridge = if config.provider == Provider::OpenaiApi && route != "cancel" {
+        let backend = crate::validate_base_url(base_url)?;
+        if !matches!(
+            backend.host_str(),
+            Some("127.0.0.1" | "localhost" | "[::1]")
+        ) {
+            return Err(
+                "OpenAI H3 Prompt Forge requires a local Comfy backend for its private adapter"
+                    .into(),
+            );
+        }
+        Some(crate::openai_api::Bridge::start(config.clone()).await?)
+    } else {
+        None
+    };
+    if let (Some(bridge), Some(id)) = (&mut bridge, body["request_id"].as_str()) {
+        bridge.register(base_url, root, id)?;
+    }
+    body["settings"] = bridge
+        .as_ref()
+        .map(|b| b.settings.clone())
+        .unwrap_or_else(|| forge_settings(&config));
     let url = crate::validate_base_url(base_url)?
         .join(path)
         .map_err(|_| "Invalid backend URL")?;
@@ -1303,6 +1369,15 @@ pub(crate) async fn forge(
         }
     })?;
     let status = response.status();
+    if bridge.as_ref().is_some_and(|b| b.is_cancelled()) {
+        return Err("Prompt Forge cancelled".into());
+    }
+    if let Some(error) = bridge
+        .as_ref()
+        .and_then(|b| b.error.lock().ok().and_then(|e| e.clone()))
+    {
+        return Err(error);
+    }
     let limit = 4 * MAX_RESPONSE;
     if response.content_length().is_some_and(|n| n > limit as u64) {
         return Err("Prompt Forge response too large".into());
@@ -1397,6 +1472,62 @@ mod tests;
 #[cfg(test)]
 mod continuity_tests {
     use super::*;
+
+    #[test]
+    fn official_openai_test_button_budget_passes_native_validation() {
+        let mut request = LlmRequest {
+            model: ModelRef {
+                id: "gpt-6.1-terra".into(),
+                provider: Provider::OpenaiApi,
+            },
+            system: "Respond briefly and directly.".into(),
+            prompt: "Say hello in one short sentence.".into(),
+            max_tokens: 4096,
+            temperature: 0.2,
+        };
+        assert!(validate_request(&request).is_ok());
+        request.max_tokens = 32768;
+        assert!(validate_request(&request).is_ok());
+        request.max_tokens = 32769;
+        assert!(validate_request(&request).is_err());
+        request.max_tokens = 4096;
+        request.model.provider = Provider::Openai;
+        assert!(validate_request(&request).is_err());
+        request.max_tokens = 4095;
+        assert!(validate_request(&request).is_ok());
+    }
+
+    #[tokio::test]
+    async fn official_openai_h3_uses_private_bridge_and_preserves_prompt_fields() {
+        let root = tempfile::tempdir().unwrap();
+        let config = LlmConfig {
+            provider: Provider::OpenaiApi,
+            base_url: "https://api.openai.com/v1".into(),
+            api_key: "private-fixture-key".into(),
+        };
+        write(root.path(), config.clone()).unwrap();
+        assert_eq!(read(root.path()).unwrap(), config);
+        let (url, server) = fixture(200, json!({"prompt":"retained"})).await;
+        let result=forge(&url,root.path().to_str().unwrap(),"h3",json!({"model":"openai:gpt-6.1-terra","brief":"exact brief","mode":"I2VA","request_id":"test-official"})).await.unwrap();
+        assert_eq!(result["prompt"], "retained");
+        let (_, body) = server.await.unwrap();
+        assert_eq!(body["brief"], "exact brief");
+        assert_eq!(body["mode"], "I2VA");
+        assert!(body["settings"]["openai_url"]
+            .as_str()
+            .unwrap()
+            .starts_with("http://127.0.0.1:"));
+        assert!(!body.to_string().contains("private-fixture-key"));
+        assert!(forge(
+            "http://192.0.2.1:8188",
+            root.path().to_str().unwrap(),
+            "h3",
+            json!({"model":"openai:gpt-6.1-terra"})
+        )
+        .await
+        .unwrap_err()
+        .contains("local Comfy"));
+    }
 
     fn checkpoint() -> Value {
         json!({"source_kind":"checkpoint", "session":"Session-1", "clip_id":"_imports",

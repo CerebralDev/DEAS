@@ -6,6 +6,7 @@ pub mod analysis_frames;
 pub mod analysis_taggers;
 pub mod audio_enhance;
 mod audio_runtime;
+pub(crate) mod openai_api;
 mod resources;
 pub use audio_enhance::{
     native_audio_enhance_cancel, native_audio_enhance_capabilities, native_audio_enhance_export,

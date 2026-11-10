@@ -26,5 +26,13 @@
   "llm.test.model": "テストモデル",
   "llm.test.choose": "モデルを選択…",
   "llm.models.local": "ローカル llama.cpp",
-  "llm.models.empty": "モデルが見つかりません。"
+  "llm.models.empty": "モデルが見つかりません。",
+  "llm.provider.openaiapi": "OpenAI API（公式）",
+  "llm.apiKey.required": "OpenAI APIキー（必須）",
+  "llm.openai.help": "OpenAI公式Responses API。下書きや解析を実行した場合のみ、プロンプトと選択した参照画像をOpenAIに送信します。API料金は別途発生します。対応モデルでは推論量を低く設定し、ローカルのサンプリング設定は使用しません。自動再試行は行いません。",
+  "llm.recommend.group": "プロンプト・画像向けの推奨モデル",
+  "llm.recommend.other": "その他の利用可能なモデル",
+  "llm.recommend.terra": "推奨 · プロンプトと画像確認",
+  "llm.recommend.sol": "複雑なプロンプトと深い推論",
+  "llm.recommend.luna": "低コスト · 簡単な説明"
 }

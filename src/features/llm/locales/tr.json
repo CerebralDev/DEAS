@@ -26,5 +26,13 @@
   "llm.test.model": "Test modeli",
   "llm.test.choose": "Bir model seçin…",
   "llm.models.local": "Yerel llama.cpp",
-  "llm.models.empty": "Model bulunamadı."
+  "llm.models.empty": "Model bulunamadı.",
+  "llm.provider.openaiapi": "OpenAI API (resmî)",
+  "llm.apiKey.required": "OpenAI API anahtarı (gerekli)",
+  "llm.openai.help": "Resmî OpenAI Responses API. İstemler ve seçilen referans görseller yalnızca taslak veya analiz istediğinizde OpenAI hizmetine gönderilir. API kullanımı ayrıca ücretlendirilir. Desteklenen modellerde düşük akıl yürütme kullanılır; yerel örnekleme ayarları yok sayılır. Otomatik yeniden deneme yapılmaz.",
+  "llm.recommend.group": "İstemler ve görüntüler için önerilen",
+  "llm.recommend.other": "Diğer kullanılabilir modeller",
+  "llm.recommend.terra": "Önerilen · istemler ve görüntü inceleme",
+  "llm.recommend.sol": "Karmaşık istemler ve derin akıl yürütme",
+  "llm.recommend.luna": "Ekonomik · basit açıklamalar"
 }

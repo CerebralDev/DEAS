@@ -8,6 +8,26 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 beforeEach(() => { localStorage.clear(); });
 afterEach(() => { cleanup(); vi.resetAllMocks(); });
 
+test.each([false, true])('OpenAI recommendations default to Terra and preserve explicit choices (nodepack=%s)', async nodepack => {
+  const prefix = nodepack ? 'openai' : 'openaiapi';
+  const ids = ['gpt-4.1', 'gpt-6-luna', 'gpt-6.1-sol', 'gpt-6.1-terra'];
+  vi.mocked(invoke).mockImplementation(async command => {
+    if (command === 'native_llm_read') return { provider: 'openaiapi', baseUrl: 'https://api.openai.com/v1' };
+    if (command === 'native_llm_models') return { models: ids.map(id => ({ id, name: id, provider: 'openaiapi' })), warnings: [] };
+    if (command === 'native_forge') return { models: ids.map(id => ({ id: `${prefix}:${id}`, label: id })), errors: {}, creativity: [], shot_counts: [] };
+    throw Error(`Unexpected ${command}`);
+  });
+  const { result } = renderHook(() => useForgeModels('http://localhost:8188', '/env', true, nodepack));
+  act(() => result.current.load());
+  await waitFor(() => expect(result.current.model).toBe(`${prefix}:gpt-6.1-terra`));
+  expect(result.current.usable.map(m => m.id)).toEqual(['gpt-6.1-terra', 'gpt-6.1-sol', 'gpt-6-luna', 'gpt-4.1'].map(id => `${prefix}:${id}`));
+  act(() => result.current.setModel(`${prefix}:gpt-4.1`));
+  act(() => window.dispatchEvent(new Event('deas:llm-changed')));
+  act(() => result.current.load());
+  await waitFor(() => expect(result.current.model).toBe(`${prefix}:gpt-4.1`));
+  expect(vi.mocked(invoke).mock.calls.every(([cmd, args]) => cmd !== 'native_forge' || (args as { route: string }).route === 'models')).toBe(true);
+});
+
 test.each(['local:nested/model.gguf', 'ollama:qwen:latest', 'openai:remote'])('native request strips only the provider prefix from %s', id => {
   expect(nativeModelId(id)).toBe(id.slice(id.indexOf(':') + 1));
 });

@@ -71,7 +71,7 @@ pub struct Round<'a> {
 fn request(r: &Round<'_>, stream: bool) -> Result<(reqwest::Url, Value, bool), String> {
     let ollama = match r.config.provider {
         Provider::Ollama => true,
-        Provider::Openai => false,
+        Provider::Openai | Provider::OpenaiApi => false,
         Provider::Local => {
             return Err(
                 "No LLM server is set: pick a local GGUF, or set a server under Backend → LLM."
@@ -293,6 +293,10 @@ pub async fn round(r: Round<'_>) -> Result<Reply, String> {
     if is_local(r.model) {
         return local_round(&r).await;
     }
+    if r.config.provider == Provider::OpenaiApi {
+        let value = crate::openai_api::send(r.config, &json!({"model":r.model,"messages":r.messages,"tools":r.tools,"max_tokens":r.max_tokens}), r.timeout).await?;
+        return parse(&value, false);
+    }
     let (url, body, ollama) = request(&r, false)?;
     let mut response = post(r.config, url, &body, r.timeout).await?;
     let status = response.status();
@@ -318,6 +322,17 @@ pub async fn stream_round(
     on_text: &mut (dyn FnMut(&str) + Send),
     stop: &std::sync::atomic::AtomicBool,
 ) -> Result<Reply, String> {
+    if r.config.provider == Provider::OpenaiApi && !is_local(r.model) {
+        let reply = tokio::select! {
+            biased;
+            _ = cancelled(stop) => return Ok(Reply { content: String::new(), calls: vec![], truncated: false }),
+            reply = round(r) => reply?,
+        };
+        if !reply.content.is_empty() {
+            on_text(&reply.content);
+        }
+        return Ok(reply);
+    }
     // The managed GGUF worker answers a round at once; Stop drops the round (and the worker with it).
     if is_local(r.model) {
         let reply = tokio::select! {
@@ -773,7 +788,7 @@ pub(super) mod tests {
                     match provider {
                         Provider::Ollama => "{\"message\":{\"content\":\"ok\"},\"done\":true}\n",
                         Provider::Openai => "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\ndata: [DONE]\n\n",
-                        Provider::Local => unreachable!(),
+                        Provider::Local | Provider::OpenaiApi => unreachable!(),
                     }
                     .to_string()
                 } else {
@@ -782,7 +797,7 @@ pub(super) mod tests {
                         Provider::Openai => {
                             "{\"choices\":[{\"message\":{\"content\":\"ok\"},\"finish_reason\":\"stop\"}]}"
                         }
-                        Provider::Local => unreachable!(),
+                        Provider::Local | Provider::OpenaiApi => unreachable!(),
                     }
                     .to_string()
                 };

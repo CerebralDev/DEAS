@@ -26,5 +26,13 @@
   "llm.test.model": "Modèle de test",
   "llm.test.choose": "Choisir un modèle…",
   "llm.models.local": "llama.cpp local",
-  "llm.models.empty": "Aucun modèle découvert."
+  "llm.models.empty": "Aucun modèle découvert.",
+  "llm.provider.openaiapi": "API OpenAI (officielle)",
+  "llm.apiKey.required": "Clé API OpenAI (obligatoire)",
+  "llm.openai.help": "API officielle OpenAI Responses. Les prompts et images de référence sélectionnées sont envoyés à OpenAI uniquement lors de votre demande de rédaction ou d’analyse. Utilisation API facturée séparément. Raisonnement faible si disponible ; réglages locaux ignorés. Aucune nouvelle tentative automatique.",
+  "llm.recommend.group": "Recommandés pour les prompts et images",
+  "llm.recommend.other": "Autres modèles disponibles",
+  "llm.recommend.terra": "Recommandé · prompts et analyse d’images",
+  "llm.recommend.sol": "Prompts complexes et raisonnement approfondi",
+  "llm.recommend.luna": "Économique · descriptions simples"
 }
