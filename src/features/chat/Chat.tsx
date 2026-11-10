@@ -108,7 +108,7 @@ function Bubble({ m, onSend, draws = {}, onRedraw }: { m: ChatMessage; onSend: (
  * Chat: PromptForge's chat, natively. A streamed conversation with the LLM that can write prompts with the image
  * models' own writers, read how any model (or DEAS) works, look tags up, and search the web when switched on.
  */
-export function Chat({ endpoint, root, active = true, onSend, studio, onRender }: { endpoint: string; root?: string; active?: boolean; onSend: (positive: string, negative: string) => void; /** What Generate can draw with; absent = chat cannot render. */ studio?: ChatStudio; /** Draws a prompt with Generate's settings. */ onRender?: (ask: ChatRenderRequest) => Promise<ChatRenderOutcome> }) {
+export function Chat({ endpoint, root, active = true, onSend, studio, onRender, docked=false }: { docked?:boolean; endpoint: string; root?: string; active?: boolean; onSend: (positive: string, negative: string) => void; /** What Generate can draw with; absent = chat cannot render. */ studio?: ChatStudio; /** Draws a prompt with Generate's settings. */ onRender?: (ask: ChatRenderRequest) => Promise<ChatRenderOutcome> }) {
   const { t } = useI18n();
   // Local GGUFs are listed like in Prompt Forge; a server stays the default when there is one.
   const forge = useForgeModels(endpoint, root, active, false, true);
@@ -298,9 +298,12 @@ export function Chat({ endpoint, root, active = true, onSend, studio, onRender }
   }, [menu]);
   const pin = (c: ChatSummary) => { if (root) void pinChat(root, c.id, !c.pinned).then(refresh, err => setError(forgeError(err))); };
 
-  if (!root) return <section className="chat-tab"><p className="field-help">{t('forge.noBackend')}</p></section>;
-  return <section className="chat-tab" aria-label={t('studio.tab.chat')}>
+  const [conversationList,setConversationList]=useState(false);
+  if (!root) return <section className={`chat-tab ${docked?'is-docked':''}`}><p className="field-help">{t('forge.noBackend')}</p></section>;
+  return <section className={`chat-tab ${docked?'is-docked':''}`} aria-label={t('studio.tab.chat')}>
     <aside className="forge-card chat-side">
+      {docked&&<button type="button" title={t('workspace.conversationsHelp')} aria-expanded={conversationList} onClick={()=>setConversationList(v=>!v)}>{t('workspace.conversations')}</button>}
+      <div hidden={docked&&!conversationList}>
       <button type="button" className="action-button" data-chat-new disabled={busy} onClick={() => void open(undefined)}>{t('chat.new')}</button>
       <nav className="chat-list" aria-label={t('chat.history')}>
         {chats.map(c => <div key={c.id} className={`chat-row${c.id === id ? ' on' : ''}${c.pinned ? ' pinned' : ''}`} data-chat-row={c.id} data-chat-pinned={c.pinned || undefined}
@@ -325,6 +328,7 @@ export function Chat({ endpoint, root, active = true, onSend, studio, onRender }
         <button type="button" role="menuitem" data-chat-menu-pin onClick={() => { pin(menu.chat); setMenu(null); }}>{t(menu.chat.pinned ? 'chat.unpin' : 'chat.pin')}</button>
         <button type="button" role="menuitem" className="danger" data-chat-menu-delete disabled={busy && menu.chat.id === id} onClick={() => { setConfirmDelete(menu.chat.id); setMenu(null); }}>{t('chat.delete')}</button>
       </div>}
+      </div>
     </aside>
     <div className="forge-card chat-main">
       <div className="forge-card-head chat-head">

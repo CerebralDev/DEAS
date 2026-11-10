@@ -1,3 +1,4 @@
+import { readSelectedContext } from '../../lib/workspaceSelection';
 import { useEffect, useRef, useState } from 'react';
 import { isTauri, invoke } from '@tauri-apps/api/core';
 import { useI18n } from '../../i18n/I18nProvider';
@@ -64,7 +65,7 @@ export function axisTop(values:(number|null)[]):number {
  return Math.ceil(peak/step)*step;
 }
 const PAD={left:58,right:14,top:8,bottom:20};
-function Graph({series,color,max,unit,label}:{series:(number|null)[];color:string;max?:number;unit:string;label:string}){
+function Graph({series,times,color,max,unit,label}:{times:number[];series:(number|null)[];color:string;max?:number;unit:string;label:string}){
  const canvas=useRef<HTMLCanvasElement>(null);
  // CSS box × devicePixelRatio, so the backing store is never stretched (a fixed 900 px store blurred at other widths).
  const [box,setBox]=useState({w:0,h:0,dpr:1});
@@ -97,50 +98,63 @@ function Graph({series,color,max,unit,label}:{series:(number|null)[];color:strin
   const step=(x1-x0)/(SAMPLE_LIMIT-1);
   ctx.save();ctx.beginPath();ctx.rect(x0,y0,x1-x0,y1-y0);ctx.clip();
   ctx.strokeStyle=color;ctx.lineWidth=1.5;ctx.lineJoin='round';ctx.beginPath();let pen=false;
-  series.forEach((v,i)=>{const x=x1-(series.length-1-i)*step;if(v==null){pen=false;return;}const y=y1-Math.min(top,Math.max(0,v))/top*(y1-y0);if(pen)ctx.lineTo(x,y);else ctx.moveTo(x,y);pen=true;});
+  series.forEach((v,i)=>{const x=x1-Math.max(0,(times[times.length-1]-times[i])/1000)*step;if(v==null){pen=false;return;}const y=y1-Math.min(top,Math.max(0,v))/top*(y1-y0);if(pen)ctx.lineTo(x,y);else ctx.moveTo(x,y);pen=true;});
   ctx.stroke();ctx.restore();
- },[series,color,max,unit,box]);
+ },[series,times,color,max,unit,box]);
  return <canvas ref={canvas} className="monitoring-graph" role="img" aria-label={label} data-monitoring-graph/>;
 }
 
 /** Monitoring tab: the last ten native attempts with their timing and peaks, and live host/GPU telemetry while the tab is visible. */
-export function Monitoring({active,root}:{active:boolean;root?:string}){
+export function Monitoring({active,root,compact=false}:{active:boolean;root?:string;compact?:boolean}){
  const {t,locale}=useI18n();
  const [records,setRecords]=useState<HistoryRecord[]>([]);
  const [historyFailed,setHistoryFailed]=useState(false);
  const [samples,setSamples]=useState<MonitoringSample[]>([]);
  const [sampleError,setSampleError]=useState('');
  const native=isTauri();
+ const sampling=useRef(false),readingHistory=useRef(false);
+ const interval=compact?5000:1000;
  useEffect(()=>{
   if(!active||!native)return;
   let alive=true,timer:ReturnType<typeof setTimeout>|undefined;
   const read=async()=>{
+   if(document.visibilityState!=='visible'||readingHistory.current){if(alive)timer=setTimeout(()=>void read(),interval);return;}
+   readingHistory.current=true;
    try{const value=await readHistory();if(alive){setRecords(historicalRows(value.records));setHistoryFailed(false);}}
    catch{if(alive)setHistoryFailed(true);}
-   finally{if(alive)timer=setTimeout(()=>void read(),2000);}
+   finally{readingHistory.current=false;if(alive)timer=setTimeout(()=>void read(),Math.max(interval,2000));}
   };
   void read();return()=>{alive=false;clearTimeout(timer);};
- },[active,native]);
+ },[active,native,interval]);
  useEffect(()=>{
   if(!active||!native)return;
   let alive=true,timer:ReturnType<typeof setTimeout>|undefined;
   const poll=async()=>{
-   if(document.visibilityState==='visible'){
+   if(document.visibilityState==='visible'&&!sampling.current){
+    sampling.current=true;
     try{const s=await invoke<MonitoringSample>('native_monitoring_sample',{root:root??null});if(alive){setSamples(prev=>[...prev,s].slice(-SAMPLE_LIMIT));setSampleError('');}}
-    catch(e){if(alive)setSampleError(String(e));}
+    catch(e){if(alive)setSampleError(String(e));void invoke('native_logs_workspace_error',{operation:'monitoring'}).catch(()=>{});}
+    finally{sampling.current=false;}
    }
-   if(alive)timer=setTimeout(()=>void poll(),1000);
+   if(alive)timer=setTimeout(()=>void poll(),interval);
   };
   void poll();return()=>{alive=false;clearTimeout(timer);};
- },[active,native,root]);
+ },[active,native,root,interval]);
  const finished=records.filter(r=>r.state!=='queued'&&r.state!=='running').slice(0,10);
  const latest=finished.find(r=>r.state==='succeeded'&&r.generationMs!=null);
  const maxWall=Math.max(1,...finished.map(r=>timeline(r).wallMs));
  const current=samples[samples.length-1];
+ const running=records.find(r=>r.state==='running'||r.state==='queued');
+ const age=current?Math.max(0,Date.now()-current.at):null;
+ const [liveProgress,setLiveProgress]=useState(()=>readSelectedContext('Monitoring').jobStatus);
+ useEffect(()=>{const update=()=>setLiveProgress(readSelectedContext('Monitoring').jobStatus);window.addEventListener('deas:workspace-context',update);return()=>window.removeEventListener('deas:workspace-context',update);},[]);
  return <section className="monitoring" data-monitoring aria-label={t('monitoring.title')}>
   <header className="monitoring-heading"><div><p className="eyebrow">{t('monitoring.tab')}</p><h2>{t('monitoring.title')}</h2>
-    {current&&<p className="monitoring-current" data-monitoring-values title={current.warnings?.join(' · ')}>{currentSummary(current,locale,t)}</p>}</div>
+    {current&&<p className="monitoring-current" data-monitoring-values title={current.warnings?.join(' · ')}>{currentSummary(current,locale,t)} · {t('workspace.sampleAge',{seconds:String(Math.round((age??0)/1000))})}{(age??0)>15000?` · ${t('workspace.stale')}`:''}</p>}</div>
    {latest&&<p className="monitoring-headline" data-monitoring-headline><strong>{seconds(latest.generationMs!,locale)}</strong><span>{t('monitoring.lastDuration')}</span></p>}</header>
+  {compact&&sampleError&&<p role="alert">{sampleError}</p>}
+  {running&&<p className="monitoring-current">{liveProgress||t(`studio.jobs.${running.state}`)} · {seconds(Date.now()-(running.startedAt??running.admittedAt),locale)}</p>}
+  {!current&&native&&<p className="field-help">{t('workspace.noSample')}</p>}
   {!native&&<p className="field-help">{t('studio.history.native')}</p>}
   <section className="monitoring-panel" aria-labelledby="monitoring-generations"><h3 id="monitoring-generations">{t('monitoring.generations')}</h3>
    {historyFailed&&<p className="error-message" role="alert">{t('studio.history.failed')}</p>}
@@ -158,7 +172,7 @@ export function Monitoring({active,root}:{active:boolean;root?:string}){
    {current&&<>
     <div className="monitoring-graphs">{metrics.map(m=>{const series=samples.map(m.value);const now=series[series.length-1];return <figure key={m.key} className="monitoring-metric" data-monitoring-metric={m.key}>
      <figcaption><span style={{background:m.color}}/>{t(`monitoring.${m.key}`)}<strong>{m.max===100?pct(now):mibs(now)}</strong></figcaption>
-     <Graph series={series} color={m.color} max={m.max} unit={m.max===100?' %':' MiB/s'} label={t('monitoring.graphOf',{metric:t(`monitoring.${m.key}`)})}/>
+     <Graph times={samples.map(s=>s.at)} series={series} color={m.color} max={m.max} unit={m.max===100?' %':' MiB/s'} label={t('monitoring.graphOf',{metric:t(`monitoring.${m.key}`)})}/>
     </figure>;})}</div>
     {current.gpus.length===0&&<p className="field-help">{t('monitoring.noGpu')}</p>}
     <p className="field-help">{t('monitoring.source',{source:current.source})}{current.warnings?.length?` · ${current.warnings.join(' · ')}`:''}</p>
