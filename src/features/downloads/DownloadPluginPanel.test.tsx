@@ -371,9 +371,9 @@ it('lists installed models per folder and fetches CivitAI metadata by hash on re
  expect(screen.getByText('Euler a · 30 steps · CFG 4.5 · 896x1152')).toBeTruthy();
  expect(screen.getByRole('button',{name:'Refresh metadata'})).toBeTruthy();
  expect(document.querySelector('img.download-preview')?.getAttribute('src')).toBe(fetched.info.civitai.preview);
- // Batch scan: scope selection + long-running hint, then one native background job.
+ // Batch scan: scope selection + settings provenance hint, then one native background job.
  expect(screen.getByLabelText('Scope')).toBeTruthy();
- expect(screen.getByText(/take a long time/)).toBeTruthy();
+ expect(screen.getByText(/Example settings are not verified recommendations/)).toBeTruthy();
  click('Scan Files');
  // One native job owns the sequential batch; React never drives per-file requests.
  click('Scan Files');
