@@ -12,7 +12,7 @@ export const fetchModelInfo=(path:string,authenticated:boolean)=>invoke<LocalMod
 /** Explicit source-bound declaration only; null restores automatic detection. Never hashes or fetches. */
 export const writeModelFamily=(path:string,family:string|null)=>invoke<LocalModel>('native_model_family_write',{path,family});
 export type ModelScanScope='all'|'models'|'loras';
-export interface ModelScanStatus { id:string; root:string; state:'idle'|'running'|'succeeded'|'failed'; file:string|null; completed:number; total:number; remaining:number; failed:number }
+export interface ModelScanStatus { id:string; root:string; state:'idle'|'running'|'succeeded'|'failed'|'cancelled'; file:string|null; completed:number; total:number; remaining:number; failed:number;matched?:number;unmatched?:number;cancelRequested?:boolean;outcomes?:{path:string;state:'matched'|'unmatched'|'failed'}[] }
 /** Native task lifetime is independent of the Library view; one batch at a time app-wide. */
 export const startModelScan=(root:string,scope:ModelScanScope,authenticated:boolean)=>invoke<ModelScanStatus>('native_model_scan_start',{root,scope,authenticated});
 export const readModelScanStatus=()=>invoke<ModelScanStatus>('native_model_scan_status');

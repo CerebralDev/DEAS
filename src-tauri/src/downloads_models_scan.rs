@@ -29,19 +29,40 @@ pub struct ModelScanStatus {
     pub total: usize,
     pub remaining: usize,
     pub failed: usize,
+    pub matched: usize,
+    pub unmatched: usize,
+    pub cancel_requested: bool,
+    pub outcomes: Vec<FileOutcome>,
+}
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileOutcome {
+    pub path: String,
+    pub state: String,
 }
 
 #[derive(Clone)]
-pub struct ModelScanEngine(Arc<Mutex<ModelScanStatus>>);
+pub struct ModelScanEngine(Arc<Mutex<ModelScanStatus>>, Arc<Mutex<Option<PathBuf>>>);
 impl Default for ModelScanEngine {
     fn default() -> Self {
-        Self(Arc::new(Mutex::new(ModelScanStatus {
-            state: "idle".into(),
-            ..Default::default()
-        })))
+        Self(
+            Arc::new(Mutex::new(ModelScanStatus {
+                state: "idle".into(),
+                ..Default::default()
+            })),
+            Arc::new(Mutex::new(None)),
+        )
     }
 }
 impl ModelScanEngine {
+    fn cancel(&self, id: &str) -> Result<ModelScanStatus, String> {
+        let mut s = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        if s.id != id || s.state != "running" {
+            return Err("That metadata refresh is not running".into());
+        }
+        s.cancel_requested = true;
+        Ok(s.clone())
+    }
     pub fn status(&self) -> ModelScanStatus {
         self.0.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
@@ -74,22 +95,50 @@ impl ModelScanEngine {
         provider: Provider,
         header: Option<HeaderValue>,
     ) -> Result<ModelScanStatus, String> {
-        if !Path::new(&root).is_absolute()
-            || root.len() > 32768
-            || root.chars().any(char::is_control)
+        self.start_job(root, scope, provider, header, None)
+    }
+
+    fn start_job(
+        &self,
+        root: String,
+        scope: ScanScope,
+        provider: Provider,
+        header: Option<HeaderValue>,
+        paths: Option<Vec<String>>,
+    ) -> Result<ModelScanStatus, String> {
+        if paths.as_ref().is_some_and(|p| {
+            p.is_empty()
+                || p.len() > 5000
+                || p.iter().any(|p| {
+                    !Path::new(p).is_absolute()
+                        || p.len() > 32768
+                        || p.chars().any(char::is_control)
+                })
+        }) {
+            return Err("Select 1–5000 absolute model file identities".into());
+        }
+        if paths.is_none()
+            && (!Path::new(&root).is_absolute()
+                || root.len() > 32768
+                || root.chars().any(char::is_control))
         {
             return Err("Models folder must be an absolute path without control characters".into());
         }
         let initial = self.reserve(root.clone())?;
         report(&initial, "INFO", "started");
         let worker = self.clone();
-        let task = tokio::spawn(async move { worker.run(root, scope, provider, header).await });
+        let task =
+            tokio::spawn(
+                async move { worker.run_paths(root, scope, provider, header, paths).await },
+            );
         let owner = self.clone();
         tokio::spawn(async move {
             let outcome = task.await;
             let failed = !matches!(outcome, Ok(Ok(())));
             let status = owner.update(|s| {
-                s.state = if failed || s.failed > 0 {
+                s.state = if s.cancel_requested {
+                    "cancelled"
+                } else if failed || s.failed > 0 {
                     "failed"
                 } else {
                     "succeeded"
@@ -113,29 +162,65 @@ impl ModelScanEngine {
         Ok(initial)
     }
 
-    async fn run(
+    async fn run_paths(
         &self,
         root: String,
         scope: ScanScope,
         provider: Provider,
         header: Option<HeaderValue>,
+        paths: Option<Vec<String>>,
     ) -> Result<(), String> {
-        let models = tokio::task::spawn_blocking(move || scan(Path::new(&root)))
-            .await
-            .map_err(|_| "Model listing task failed")??;
-        let models: Vec<_> = models.into_iter().filter(|m| scope.includes(m)).collect();
-        let status = self.update(|s| s.total = models.len());
+        let paths = if let Some(paths) = paths {
+            let mut seen = std::collections::HashSet::new();
+            paths
+                .into_iter()
+                .filter(|p| seen.insert(p.clone()))
+                .collect::<Vec<_>>()
+        } else {
+            let models = tokio::task::spawn_blocking(move || scan(Path::new(&root)))
+                .await
+                .map_err(|_| "Model listing task failed")??;
+            models
+                .into_iter()
+                .filter(|m| scope.includes(m))
+                .map(|m| m.path)
+                .collect::<Vec<_>>()
+        };
+        let status = self.update(|s| s.total = paths.len());
         report(&status, "INFO", "listed");
-        for model in models {
-            let status = self.update(|s| s.file = Some(model.path.clone()));
+        for path in paths {
+            if self.status().cancel_requested {
+                break;
+            }
+            let status = self.update(|s| s.file = Some(path.clone()));
             report(&status, "INFO", "processing");
             // Reuse the verified-handle hash/cache/publication path, one request at a time.
-            let failed = fetch(&provider, PathBuf::from(model.path), header.clone())
-                .await
-                .is_err();
+            let cache = self.1.lock().unwrap_or_else(|e| e.into_inner()).clone();
+            let outcome = if let Some(cache) = cache {
+                assets::enrich(&provider, PathBuf::from(&path), header.clone(), cache).await
+            } else {
+                fetch(&provider, PathBuf::from(&path), header.clone()).await
+            };
+            let failed = outcome.is_err();
+            let matched = outcome
+                .as_ref()
+                .is_ok_and(|m| m.info.as_ref().is_some_and(|i| i.civitai.is_some()));
             let status = self.update(|s| {
                 s.completed += 1;
                 s.failed += usize::from(failed);
+                s.matched += usize::from(matched);
+                s.unmatched += usize::from(!failed && !matched);
+                s.outcomes.push(FileOutcome {
+                    path: path.clone(),
+                    state: if failed {
+                        "failed"
+                    } else if matched {
+                        "matched"
+                    } else {
+                        "unmatched"
+                    }
+                    .into(),
+                });
             });
             // Do not log provider response bodies: they can contain credentials or arbitrary data.
             report(
@@ -170,9 +255,21 @@ fn report(status: &ModelScanStatus, level: &str, operation: &str) {
 pub fn native_model_scan_status(scans: tauri::State<'_, ModelScanEngine>) -> ModelScanStatus {
     scans.status()
 }
+#[tauri::command]
+pub fn native_model_scan_cancel(
+    scans: tauri::State<'_, ModelScanEngine>,
+    id: String,
+) -> Result<ModelScanStatus, String> {
+    let result = scans.cancel(&id);
+    if let Ok(ref s) = result {
+        report(s, "INFO", "cancel requested; finishing current file");
+    }
+    result
+}
 
 #[tauri::command]
 pub async fn native_model_scan_start(
+    app: tauri::AppHandle,
     scans: tauri::State<'_, ModelScanEngine>,
     engine: tauri::State<'_, DownloadEngine>,
     auth: tauri::State<'_, AuthState>,
@@ -192,6 +289,13 @@ pub async fn native_model_scan_start(
             .ok_or("No CivitAI provider in catalog")?
             .clone();
         let header = credential(&auth, &provider, authenticated)?;
+        use tauri::Manager;
+        *scans.1.lock().unwrap_or_else(|e| e.into_inner()) = Some(
+            app.path()
+                .app_local_data_dir()
+                .map_err(|_| "Asset directory unavailable")?
+                .join("model-assets"),
+        );
         scans.start(root, scope, provider, header)
     })();
     if result.is_err() {
@@ -204,9 +308,98 @@ pub async fn native_model_scan_start(
     result
 }
 
+/// Explicit selected-file refresh, including models from additional roots. No weight downloads.
+#[tauri::command]
+pub async fn native_model_scan_selected(
+    app: tauri::AppHandle,
+    scans: tauri::State<'_, ModelScanEngine>,
+    engine: tauri::State<'_, DownloadEngine>,
+    auth: tauri::State<'_, AuthState>,
+    paths: Vec<String>,
+    authenticated: bool,
+) -> Result<ModelScanStatus, String> {
+    use tauri::Manager;
+    *scans.1.lock().unwrap_or_else(|e| e.into_inner()) = Some(
+        app.path()
+            .app_local_data_dir()
+            .map_err(|_| "Asset directory unavailable")?
+            .join("model-assets"),
+    );
+    let result = (|| {
+        if engine.status()?.state == "running" {
+            return Err("Wait for downloads to finish before scanning files".into());
+        }
+        let catalog = engine.catalog()?;
+        let provider = catalog
+            .providers
+            .iter()
+            .find(|p| p.kind == "civitai")
+            .ok_or("No CivitAI provider in catalog")?
+            .clone();
+        let header = credential(&auth, &provider, authenticated)?;
+        scans.start_job(
+            "Selected model files".into(),
+            ScanScope::All,
+            provider,
+            header,
+            Some(paths),
+        )
+    })();
+    if result.is_err() {
+        report(
+            &scans.status(),
+            "ERROR",
+            "selected refresh rejected; check selection and provider authorization",
+        );
+    }
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn selected_scan_cancellation_stops_remaining_and_preserves_completed() {
+        let engine = ModelScanEngine::default();
+        let initial = engine.reserve("selected".into()).unwrap();
+        assert!(engine.reserve("other".into()).is_err());
+        engine.update(|s| {
+            s.total = 2;
+            s.completed = 1;
+            s.matched = 1;
+            s.outcomes.push(FileOutcome {
+                path: "original".into(),
+                state: "matched".into(),
+            });
+        });
+        assert!(engine.cancel("wrong request").is_err());
+        engine.cancel(&initial.id).unwrap();
+        let p = Provider {
+            id: "fixture".into(),
+            kind: "civitai".into(),
+            label: "Fixture".into(),
+            origin: "http://127.0.0.1:1".into(),
+            scopes: vec!["model".into()],
+            anonymous_notice: String::new(),
+        };
+        // A cancelled continuation must not even attempt this invalid network destination.
+        engine
+            .run_paths(
+                "selected".into(),
+                ScanScope::All,
+                p,
+                None,
+                Some(vec!["one".into(), "two".into()]),
+            )
+            .await
+            .unwrap();
+        let s = engine.status();
+        assert_eq!(s.completed, 1);
+        assert_eq!(s.outcomes.len(), 1);
+        assert_eq!(s.matched, 1);
+        assert_eq!(s.remaining, 1);
+    }
 
     #[test]
     fn background_scan_scopes_keep_non_loras_in_models() {

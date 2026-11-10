@@ -35,6 +35,8 @@ pub use auth::{
     native_auth_verify,
 };
 pub mod downloads;
+pub use downloads::models::assets::native_model_assets;
+pub use downloads::models::background::{native_model_scan_cancel, native_model_scan_selected};
 pub use downloads::models::background::{
     native_model_scan_start, native_model_scan_status, ModelScanEngine,
 };
@@ -105,7 +107,9 @@ pub use repo::{
 pub mod environment_move;
 pub use environment_move::native_environment_move;
 pub mod folder_operations;
+pub mod model_library;
 pub mod presets;
+pub use model_library::{native_model_library_read, native_model_library_write};
 pub mod settings;
 pub use folder_operations::{native_settings_move, FolderOperations};
 pub use presets::{native_presets_invalid, native_presets_read, native_presets_write};
@@ -122,6 +126,7 @@ pub mod install_defaults;
 pub use install_defaults::native_install_defaults;
 pub mod install;
 pub mod logs;
+pub mod workspace_log;
 pub use install::{
     native_install_cancel, native_install_open, native_install_plan, native_install_start,
     native_install_status, native_install_update, native_torch_update_check,
@@ -130,6 +135,7 @@ pub use logs::{
     native_logs, native_logs_beginner_error, native_logs_export, native_logs_people_image_error,
     native_logs_reference_media_error,
 };
+pub use workspace_log::native_logs_workspace_error;
 
 use reqwest::Url;
 

@@ -104,7 +104,7 @@ test('model metadata action enables an unknown supported file while GGUF stays u
  expect(tile.getAttribute('aria-disabled')).toBe('true');
  expect(tile).toHaveProperty('disabled',false);tile.focus();expect(document.activeElement).toBe(tile);
  fireEvent.keyDown(tile,{key:'F10',shiftKey:true});fireEvent.click(screen.getByRole('menuitem',{name:'Edit meta…'}));
- fireEvent.change(screen.getByLabelText('Model family'),{target:{value:'anima'}});fireEvent.click(screen.getByRole('button',{name:'Save'}));
+ fireEvent.change(within(screen.getByRole('dialog')).getByLabelText('Model family'),{target:{value:'anima'}});fireEvent.click(screen.getByRole('button',{name:'Save'}));
  await waitFor(()=>expect(tile.getAttribute('aria-disabled')).toBe('false'));
  const picker=document.querySelector('[data-model-picker]') as HTMLSelectElement;
  expect(picker.value).toBe(gguf.name);
@@ -2578,7 +2578,7 @@ test('model and LoRA docks get a subfolder tree from the scanned names that filt
  expect(screen.getByRole('button',{name:'sdxl/base.safetensors'})).toBeTruthy();expect(screen.queryByRole('button',{name:'sd15/old.safetensors'})).toBeNull();
  dock('LoRAs');expect(screen.queryByRole('navigation',{name:'Folders'})).toBeNull();expect(screen.getByRole('button',{name:'grain.safetensors'})).toBeTruthy(); // no subfolders, no tree, unfiltered
  dock('Models');expect(within(screen.getByRole('navigation',{name:'Folders'})).getByRole('button',{name:'sdxl'}).getAttribute('aria-current')).toBe('location');
- fireEvent.click(within(screen.getByRole('navigation',{name:'Folders'})).getByRole('button',{name:'Models'}));
+ fireEvent.click(within(screen.getByRole('navigation',{name:'Folders'})).getByRole('button',{name:'All resources'}));
  expect(screen.getByRole('button',{name:'sd15/old.safetensors'})).toBeTruthy();
  // Tiles print the short name; the full path stays the accessible name. The view choice is remembered.
  expect(screen.getByRole('button',{name:'sd15/old.safetensors'}).querySelector('.wb-tile-name')!.textContent).toBe('old');

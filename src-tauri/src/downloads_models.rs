@@ -2,6 +2,8 @@
 //! metadata looked up by SHA-256. Metadata is cached beside the file as `<file>.deas.json`;
 //! the model file itself is only ever read.
 use super::*;
+#[path = "downloads_model_assets.rs"]
+pub mod assets;
 #[path = "downloads_models_scan.rs"]
 pub mod background;
 use serde_json::Value;
@@ -1187,6 +1189,7 @@ pub fn native_models_scan(
 }
 #[tauri::command]
 pub async fn native_model_info(
+    app: tauri::AppHandle,
     engine: tauri::State<'_, DownloadEngine>,
     auth: tauri::State<'_, AuthState>,
     path: String,
@@ -1199,7 +1202,17 @@ pub async fn native_model_info(
         .find(|p| p.kind == "civitai")
         .ok_or("No CivitAI provider in catalog")?;
     let h = credential(&auth, p, authenticated)?;
-    fetch(p, PathBuf::from(path), h).await
+    use tauri::Manager;
+    let cache = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|_| "Model cache unavailable")?
+        .join("model-assets");
+    let result = assets::enrich(p, PathBuf::from(path), h, cache).await;
+    if result.is_err() {
+        crate::workspace_log::native_logs_workspace_error("assets".into());
+    }
+    result
 }
 
 #[cfg(test)]
