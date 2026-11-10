@@ -34,6 +34,8 @@ pub use auth::{
     native_auth_verify,
 };
 pub mod downloads;
+pub use downloads::models::assets::native_model_assets;
+pub use downloads::models::background::{native_model_scan_cancel, native_model_scan_selected};
 pub use downloads::models::background::{
     native_model_scan_start, native_model_scan_status, ModelScanEngine,
 };

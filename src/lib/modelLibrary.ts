@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { LocalModel } from './models';
+import type { LocalModel, ModelScanStatus } from './models';
 export interface VirtualFolder { id:string; name:string; parent:string|null }
 export interface LibraryEntry { folder:string|null; tags:string[]; kind:string; pinned?:boolean;notes?:string;thumbnail?:string|null }
 export interface SavedLibraryView { name:string;scope:string;mode:'disk'|'auto'|'manual';folder:string;kind:string;family:string;tag:string;query:string;order:'default'|'type'|'manual';pinned:boolean;missing:boolean }
@@ -8,6 +8,8 @@ export const emptyLibrary=():ModelLibrary=>({schemaVersion:1,revision:0,folders:
 export const libraryChanged='deas:model-library-changed';
 export const readModelLibrary=async()=>{const v=await invoke<ModelLibrary>('native_model_library_read');if(!v||v.schemaVersion!==1||!Array.isArray(v.folders)||!Array.isArray(v.order)||!v.entries)throw new Error('Model library unavailable; existing organization preserved.');return {...v,views:v.views??[]};};
 export const writeModelLibrary=(library:ModelLibrary)=>invoke<ModelLibrary>('native_model_library_write',{library});
+export const refreshSelectedModels=(paths:string[],authenticated:boolean)=>invoke<ModelScanStatus>('native_model_scan_selected',{paths,authenticated});
+export const cancelModelRefresh=(id:string)=>invoke<ModelScanStatus>('native_model_scan_cancel',{id});
 export const modelKey=(m:LocalModel)=>m.path?(/^[a-z]:[\\/]/i.test(m.path)?m.path.replace(/\\/g,'/').toLowerCase():m.path):`${m.category}:${m.name}`;
 export const modelKind=(m:LocalModel,lib:ModelLibrary)=>lib.entries[modelKey(m)]?.kind||m.info?.civitai?.category||m.info?.civitai?.modelType||m.category;
 export const modelFamily=(m:LocalModel)=>m.info?.civitai?.base||m.family||'Unknown';
