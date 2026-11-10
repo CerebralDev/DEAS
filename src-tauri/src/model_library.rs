@@ -272,19 +272,21 @@ mod tests {
     }
     #[test]
     fn virtual_library_rejects_cycles_and_unknown_folders() {
-        let mut v = Library::default();
-        v.folders = vec![
-            Folder {
-                id: "a".into(),
-                name: "A".into(),
-                parent: Some("b".into()),
-            },
-            Folder {
-                id: "b".into(),
-                name: "B".into(),
-                parent: Some("a".into()),
-            },
-        ];
+        let mut v = Library {
+            folders: vec![
+                Folder {
+                    id: "a".into(),
+                    name: "A".into(),
+                    parent: Some("b".into()),
+                },
+                Folder {
+                    id: "b".into(),
+                    name: "B".into(),
+                    parent: Some("a".into()),
+                },
+            ],
+            ..Default::default()
+        };
         assert!(validate(&v).is_err());
         v.folders.clear();
         v.entries.insert(
