@@ -172,7 +172,6 @@ pub fn native_workspace_validate_suggestion(
     Ok(proposed)
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
