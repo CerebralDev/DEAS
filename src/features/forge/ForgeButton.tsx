@@ -1,3 +1,4 @@
+import { selectContext } from '../../lib/workspaceSelection';
 import { PromptTextarea } from '../studio/PromptTextarea';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { invoke } from '@tauri-apps/api/core';
@@ -149,6 +150,7 @@ export function ForgeButton({ endpoint, root, dialect, value, image, onApply, on
   const open = inline || expanded;
   const [choosing, setChoosing] = useState(false);
   const [brief, setBrief] = useState(inline ? value : '');
+  useEffect(()=>{if(inline&&active)selectContext('Forge',{brief,resource:h3?`${h3.mode} · ${h3.duration}s`:dialect??''});},[inline,active,brief,h3?.mode,h3?.duration,dialect]);
   const [result, setResult] = useState('');
   const [busy, setBusy] = useState(false);
   const changeBusy = (next: boolean) => {
