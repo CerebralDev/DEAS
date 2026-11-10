@@ -24,6 +24,8 @@ const nativeDropFailure=vi.hoisted(()=>({sync:false,async:false}));
 vi.mock('@tauri-apps/api/webview',()=>({getCurrentWebview:()=>{if(nativeDropFailure.sync)throw Error('missing webview');return {onDragDropEvent:async(handler:(event:{payload:{type:'drop';paths:string[];position:{x:number;y:number}}})=>void)=>{if(nativeDropFailure.async)throw Error('unavailable listener');nativeDrops.add(handler);return()=>nativeDrops.delete(handler);}};}}));
 vi.mock('../../lib/recipePrerequisites',()=>({checkRecipePrerequisites:vi.fn(async()=>{throw new Error('offline');})}));
 vi.mock('../../lib/models',()=>({scanModels:vi.fn(),writeModelFamily:vi.fn()}));
+// Organization has its own native/UI tests; Workbench fixtures read an empty valid store.
+vi.mock('../../lib/modelLibrary',async importOriginal=>{const actual=await importOriginal<typeof import('../../lib/modelLibrary')>();return {...actual,readModelLibrary:vi.fn(async()=>actual.emptyLibrary())};});
 vi.mock('../../lib/imageMetadata',async importOriginal=>({...await importOriginal<typeof import('../../lib/imageMetadata')>(),readImageMetadata:vi.fn(async()=>[] as [string,string][])}));
 vi.mock('../../lib/jobs',()=>({autoRefine:vi.fn(),waitForWorkbenchJob:vi.fn(),stopWorkbenchJob:vi.fn(),uploadMask:vi.fn(),uploadInput:vi.fn(),readH3Session:vi.fn(),prepareH3Video:vi.fn(),readRefMods:vi.fn(),stopWorkbench:vi.fn(),runWorkbenchJob:vi.fn(),readCurrentWorkbench:vi.fn(),pollWorkbench:vi.fn(),loadDiagnosticJobOutput:vi.fn(),exportDiagnosticJobOutput:vi.fn(),isImageIntent:(i:{recipeId?:string})=>i?.recipeId==='checkpoint-text-to-image-diagnostic'}));
 const collection=(jobs:JobStatus[]=[],preparing=0)=>({jobs,preparing,capacity:20,stopAvailable:true,admissionEpoch:0,stopping:false});
