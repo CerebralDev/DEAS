@@ -1210,7 +1210,7 @@ pub async fn native_model_info(
         .join("model-assets");
     let result = assets::enrich(p, PathBuf::from(path), h, cache).await;
     if result.is_err() {
-        crate::workspace_context::native_logs_workspace_error("assets".into());
+        crate::workspace_log::native_logs_workspace_error("assets".into());
     }
     result
 }
