@@ -68,7 +68,7 @@ export const nativeForgeTargets = (root: string) => invoke<NativeTargets>('nativ
 /** Family dialect -> native writer key; dialects without one stay on the node pack. */
 export const nativeTarget = (dialect?: string) => ({ Illustrious: 'illustrious', Anima: 'anima', Krea2: 'krea2', MOSS: 'moss', 'Qwen Image 2.1': 'qwen_image' } as Record<string, string>)[dialect ?? ''];
 /** Discovery qualifies model ids by provider; native requests take the bare id. */
-export const nativeModelId = (id: string) => id.replace(/^(local|openai|ollama):/, '');
+export const nativeModelId = (id: string) => id.replace(/^(local|openai|openaiapi|ollama):/, '');
 /** The native writer runs a local GGUF itself, so it keeps the `local:` prefix that says so. */
 export const nativeWriteModel = (id: string) => id.startsWith('local:') ? id : nativeModelId(id);
 /** A 404 — or 405, since ComfyUI's GET-only static `/` route catches unknown POST paths — means the node pack predates these routes. */

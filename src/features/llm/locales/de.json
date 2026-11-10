@@ -26,5 +26,13 @@
   "llm.test.model": "Testmodell",
   "llm.test.choose": "Modell auswählen…",
   "llm.models.local": "Lokales llama.cpp",
-  "llm.models.empty": "Keine Modelle gefunden."
+  "llm.models.empty": "Keine Modelle gefunden.",
+  "llm.provider.openaiapi": "OpenAI API (offiziell)",
+  "llm.apiKey.required": "OpenAI-API-Schlüssel (erforderlich)",
+  "llm.openai.help": "Offizielle OpenAI Responses API. Prompts und ausgewählte Referenzbilder werden nur beim angeforderten Entwurf oder bei der Analyse an OpenAI gesendet. API-Nutzung wird separat berechnet. Niedriger Denkaufwand, sofern unterstützt; lokale Sampling-Regler werden ignoriert. Keine automatischen Wiederholungen.",
+  "llm.recommend.group": "Empfohlen für Prompts und Bilder",
+  "llm.recommend.other": "Weitere verfügbare Modelle",
+  "llm.recommend.terra": "Empfohlen · Prompts und Bildanalyse",
+  "llm.recommend.sol": "Komplexe Prompts und tiefere Analyse",
+  "llm.recommend.luna": "Sparsam · einfache Beschreibungen"
 }

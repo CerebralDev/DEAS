@@ -15,6 +15,7 @@ import { prepare } from '../forge/ReferenceImages';
 import type { MediaAction } from '../media/MediaLibrary';
 import { FramePicker } from './FramePicker';
 import './analysis.css';
+import { RecommendedModelOptions } from '../llm/RecommendedModelOptions';
 
 export interface AnalysisPicture {
   path: string; src: string; name: string; media: 'image' | 'video';
@@ -396,7 +397,7 @@ export function Analysis({ active = true, endpoint = '', roots, root, incoming, 
         <div className="analysis-controls">
           <label className="forge-field"><span>{t('forge.model')}</span>
             <select data-analysis-describe-model value={llmModel} onMouseDown={() => { if (!forge.list) forge.load(); }} onFocus={() => { if (!forge.list) forge.load(); }} onChange={e => { setDescribeModel(e.target.value); setPickFirst(false); }}>
-              {llmModels.length ? llmModels.map(m => <option key={m.id} value={m.id}>{m.label}</option>) : <option value="">{t(forge.list ? 'forge.noModels' : 'analysis.describe.modelsOnClick')}</option>}
+              {llmModels.length ? <RecommendedModelOptions models={llmModels}/> : <option value="">{t(forge.list ? 'forge.noModels' : 'analysis.describe.modelsOnClick')}</option>}
             </select></label>
           {describing
             ? <button type="button" className="forge-ghost" data-analysis-describe-stop onClick={stopDescribe}>{t('analysis.describe.stop')}</button>

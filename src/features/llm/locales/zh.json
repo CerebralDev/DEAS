@@ -26,5 +26,13 @@
   "llm.test.model": "测试模型",
   "llm.test.choose": "选择模型…",
   "llm.models.local": "本地 llama.cpp",
-  "llm.models.empty": "未发现模型。"
+  "llm.models.empty": "未发现模型。",
+  "llm.provider.openaiapi": "OpenAI API（官方）",
+  "llm.apiKey.required": "OpenAI API 密钥（必填）",
+  "llm.openai.help": "官方 OpenAI Responses API。仅在请求撰写或分析时，将提示词和选定的参考图像发送到 OpenAI。API 使用单独计费。支持时使用低推理强度；忽略本地采样设置。不自动重试。",
+  "llm.recommend.group": "提示词和图像推荐模型",
+  "llm.recommend.other": "其他可用模型",
+  "llm.recommend.terra": "推荐 · 提示词和图像分析",
+  "llm.recommend.sol": "复杂提示词和深入推理",
+  "llm.recommend.luna": "经济 · 简单描述"
 }

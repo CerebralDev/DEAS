@@ -38,6 +38,37 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.resetAllMocks(); });
 
+it('puts discovered recommendations first, defaults Terra and preserves the test selection on refresh without inference', async () => {
+  const ids = ['gpt-4.1', 'gpt-6-luna', 'gpt-6.1-sol', 'gpt-6.1-terra'];
+  vi.mocked(invoke).mockImplementation(async command => {
+    if (command === 'native_llm_read') return { provider: 'openaiapi', baseUrl: 'https://api.openai.com/v1', apiKey: 'fixture' };
+    if (command === 'native_llm_models') return { models: ids.map(id => ({ id, name: id, provider: 'openaiapi' })), warnings: [] };
+    throw Error(`Unexpected ${command}`);
+  });
+  render(ui()); await ready();
+  const select = screen.getByRole('combobox', { name: 'Test model' }) as HTMLSelectElement;
+  expect(select.value).toBe(key('openaiapi', 'gpt-6.1-terra'));
+  expect(Array.from(select.options).slice(1).map(o => o.value)).toEqual(['gpt-6.1-terra', 'gpt-6.1-sol', 'gpt-6-luna', 'gpt-4.1'].map(id => key('openaiapi', id)));
+  expect(select.querySelector('optgroup')?.label).toBe('Recommended for prompts & images');
+  fireEvent.change(select, { target: { value: key('openaiapi', 'gpt-4.1') } });
+  fireEvent.click(button('Refresh models')); await ready();
+  expect(select.value).toBe(key('openaiapi', 'gpt-4.1'));
+  expect(commands()).not.toContain('native_llm_generate');
+});
+
+it('adds official OpenAI separately, fixes its URL, requires a key and never infers on save', async () => {
+  render(ui()); await ready();
+  fireEvent.change(screen.getByRole('combobox', { name: 'Provider' }), { target: { value: 'openaiapi' } });
+  expect(screen.getByRole('option', { name: 'OpenAI compatible' })).toBeTruthy();
+  const url = screen.getByRole('textbox', { name: 'Endpoint URL' }) as HTMLInputElement;
+  expect(url.value).toBe('https://api.openai.com/v1'); expect(url.readOnly).toBe(true);
+  expect(button('Save LLM settings').disabled).toBe(true);
+  fireEvent.change(screen.getByLabelText('OpenAI API key (required)'), { target: { value: 'fixture-key' } });
+  fireEvent.click(button('Save LLM settings')); await ready();
+  expect(invoke).toHaveBeenCalledWith('native_llm_write', { root: '/env', config: { provider: 'openaiapi', baseUrl: 'https://api.openai.com/v1', apiKey: 'fixture-key' } });
+  expect(commands()).not.toContain('native_llm_generate');
+});
+
 it('only reads config and all models on mount, with no global model/path/tuning controls or implicit selection', async () => {
   render(ui()); await ready();
   expect(commands()).toEqual(['native_llm_read', 'native_llm_models']);

@@ -7,6 +7,8 @@ import { cancelForge, forgeError, forgeH3, forgeModels, labelCharacters, nativeF
 import { isString, usePref } from '../../lib/preferences';
 import { discoverLlmModels, hasLlmConfiguration, requestLlmSetup } from '../../lib/llm';
 import './forge.css';
+import { recommendedFirst } from '../../lib/llmRecommendations';
+import { RecommendedModelOptions } from '../llm/RecommendedModelOptions';
 
 /** Read-only native discovery by default; video/node-pack tools also need their metadata. */
 export function useForgeModels(endpoint: string, root?: string, active = true, nodepack = false, localGguf = false) {
@@ -65,7 +67,7 @@ export function useForgeModels(endpoint: string, root?: string, active = true, n
       setError(forgeError(e));
     });
   };
-  const usable = scope.current?.identity === identity && scope.current.loaded ? list?.models.filter(m => !m.disabled) ?? [] : [];
+  const usable = recommendedFirst(scope.current?.identity === identity && scope.current.loaded ? list?.models.filter(m => !m.disabled) ?? [] : []);
   // A remembered model only counts while the backend still lists it.
   const current = usable.some(m => m.id === model) ? model : usable[0]?.id ?? '';
   // The list empties on every reload (tab switch, backend start), which is not a model change.
@@ -78,7 +80,7 @@ export function ModelSelect({ forge }: { forge: ReturnType<typeof useForgeModels
   const { t } = useI18n();
   return <label className="forge-field"><span>{t('forge.model')}</span>
     <select data-forge-model value={forge.model} disabled={!forge.usable.length} onChange={e => forge.setModel(e.target.value)}>
-      {forge.usable.length ? forge.usable.map(m => <option key={m.id} value={m.id}>{m.label}</option>) : <option value="">{forge.error ? '—' : t(forge.list ? forge.serverOnly ? 'forge.noServer' : 'forge.noModels' : 'forge.loading')}</option>}
+      {forge.usable.length ? <RecommendedModelOptions models={forge.usable}/> : <option value="">{forge.error ? '—' : t(forge.list ? forge.serverOnly ? 'forge.noServer' : 'forge.noModels' : 'forge.loading')}</option>}
     </select>
     {forge.list && Object.values(forge.list.errors).map(text => <small key={text} className="forge-warning">{t(text)}</small>)}
     {forge.error && <span className="error-message" role="alert">{t(forge.error)} <button type="button" data-forge-retry onClick={forge.load}>{t('forge.retry')}</button></span>}
