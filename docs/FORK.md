@@ -9,6 +9,7 @@ This is an independent public fork of [darksidewalker/DEAS](https://github.com/d
 - Feature branches and exact adoption ranges are in [UPSTREAM-MODULES.md](UPSTREAM-MODULES.md). Dependent modules are explicitly based on their prerequisite branch.
 - Small shared workspace diagnostics/selection and browser-fixture commits are bundled where needed. They are not dependencies on the Chat feature. Cherry-pick a shared commit once; merging branch history recognizes it automatically.
 - Do not force-push published branches, overwrite upstream tags or label a fork binary as an official DEAS release. Use `fork-*` tags if later authorized. Binary releases and scheduled data publication are disabled initially; verification CI remains enabled.
+- Publish explicit reviewed branch refs only, never `git push --mirror`; private stashes and preservation refs must remain local.
 
 ## Portable setup and development
 
@@ -49,6 +50,8 @@ If the mirror cannot fast-forward, stop and inspect rather than reset. Resolve a
 ## Installed-build provenance and rollback
 
 The installation was deliberately left on the pre-fork custom v0.2.22 build. Its recorded executable SHA-256 is `b8bdf7acb7a4ee11b13f4486a20a0d958b93dd675278633d12e3d2069b67e63d`. The source packaging is not a new installed release or a claim of binary reproducibility.
+
+Package versions and the built-in upstream update behavior are preserved. Fork-specific versioning, signing and update-feed policy must be reviewed before any future fork binary release; this setup does not redirect an installed updater.
 
 The operator retains a private pre-fork source snapshot, tracked patch, per-file hashes, installed-build receipt and local working-tree preservation record. Their machine-specific paths, credentials, media and operational logs are excluded from this repository. Fork verification outcomes are in [FORK-VERIFICATION.md](FORK-VERIFICATION.md).
 

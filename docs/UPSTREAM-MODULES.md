@@ -58,7 +58,7 @@ Adopt by merging `codex/forge-apply-return` into a review branch after its decla
 Organize resources without moving model files: folders, tags, pins, types, order, search and saved views in both library surfaces.
 
 - Guide: [MODEL-LIBRARY.md](MODEL-LIBRARY.md)
-- Range: `0c2b1083d47ecc7c210b09f75ebedf90fbba1414..7c503900dd6f0ab44576138eafe4fecae294a349`
+- Range: `0c2b1083d47ecc7c210b09f75ebedf90fbba1414..921ae911608c1b177c506fa5b1dec2455dbb9b21`
 - Interfaces: model_library.rs; modelLibrary.ts; OrganizedModels; InstalledModels; Workbench.
 - Compatibility: Version 1 deas-model-library.json, revision checks and atomic writes. Membership identities remain source identities; names never become execution IDs. Shared diagnostics/selection helper is bundled in this branch.
 - Verification targets: Native roundtrip/conflict/cycle/corrupt-store tests; library UI; installed view; layout/paired gates. Actual results: [verification record](FORK-VERIFICATION.md).
@@ -72,6 +72,8 @@ fd5040c test(workspace): align read-only fixtures and verify modular layouts
 b772502 Merge branch 'codex/verification-fixtures' into codex/model-library
 9eae73b style: format extracted native modules
 7c50390 test(library): keep enrichment-only copy assertions in its dependent module
+1f66825 test(library): supply valid organization state to Workbench fixtures
+921ae91 test(library): initialize cycle fixture without field reassignment
 ```
 
 Adopt by merging `codex/model-library` into a review branch after its declared prerequisite, or cherry-pick the concrete non-merge commits above in order. Keep native registrations, permissions, tests and all six locale catalogs together. Resolve shared App/Workbench wiring by behavior. Run the module checks and combined layout gate before deploying.
@@ -81,7 +83,7 @@ Adopt by merging `codex/model-library` into a review branch after its declared p
 Refresh selected resources by exact identity, cache thumbnails and expose provenance, cancellation and outcomes.
 
 - Guide: [MODEL-ENRICHMENT.md](MODEL-ENRICHMENT.md)
-- Range: `7c503900dd6f0ab44576138eafe4fecae294a349..4ea42e362a84b8f8cf8506d983cf1fc88df46e64`
+- Range: `921ae911608c1b177c506fa5b1dec2455dbb9b21..e7ba65df0ba47f04707d3113736a04f9285e8978`
 - Interfaces: downloads_model_assets.rs; downloads_models_scan.rs; library refresh/details UI.
 - Compatibility: Depends on model-library. Legacy cache structures remain readable. native_model_scan_selected, native_model_scan_cancel and native_model_assets retain their identifiers.
 - Verification targets: Native metadata/scan fixtures; library/download UI; layout gate. Actual results: [verification record](FORK-VERIFICATION.md).
@@ -93,6 +95,8 @@ Refresh selected resources by exact identity, cache thumbnails and expose proven
 2310634 Merge branch 'codex/model-library' into codex/model-enrichment
 76f593c style: format extracted native modules
 4ea42e3 refactor(enrichment): route asset errors through shared diagnostics
+48cd2b9 Merge branch 'codex/model-library' into codex/model-enrichment
+e7ba65d Merge library test lint correction into enrichment
 ```
 
 Adopt by merging `codex/model-enrichment` into a review branch after its declared prerequisite, or cherry-pick the concrete non-merge commits above in order. Keep native registrations, permissions, tests and all six locale catalogs together. Resolve shared App/Workbench wiring by behavior. Run the module checks and combined layout gate before deploying.
