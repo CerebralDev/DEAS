@@ -1,3 +1,5 @@
+> **Independent CerebralDev fork.** Based on [darksidewalker/DEAS](https://github.com/darksidewalker/DEAS), with modular OpenAI, Forge, library and workspace improvements. This is not an official DEAS release. See [fork maintenance](docs/FORK.md), [adoption modules](docs/UPSTREAM-MODULES.md) and [verification results](docs/FORK-VERIFICATION.md).
+
 # DEAS — Dark Engine AI Studio
 
 A Rust/Tauri desktop workstation for ComfyUI and DaSiWa tools: generation, model-aware prompting, model/resource browsing and image editing in one interface. Studio, Library, Prompt Forge, Chat, TVE, Run Plan and the original Comfy editor share the same owned backend; installation, provider authorization and settings live in the Backend tab, diagnostics in Logs.

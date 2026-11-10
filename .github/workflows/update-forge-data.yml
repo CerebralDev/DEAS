@@ -15,7 +15,7 @@ concurrency:
 jobs:
   import:
     # Manual runs from other refs must not supply code to the write-token job.
-    if: github.ref == 'refs/heads/main'
+    if: github.repository == 'darksidewalker/DEAS' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
@@ -84,7 +84,7 @@ jobs:
 
   publish:
     needs: import
-    if: needs.import.outputs.updated == 'true'
+    if: github.repository == 'darksidewalker/DEAS' && needs.import.outputs.updated == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:

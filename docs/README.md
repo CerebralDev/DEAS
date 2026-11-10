@@ -1,3 +1,9 @@
+# Fork documentation
+
+[Fork policy](FORK.md) · [Module/adoption index](UPSTREAM-MODULES.md) · [Verification](FORK-VERIFICATION.md)
+
+The upstream index below is retained as historical upstream documentation; it does not identify the installed fork build.
+
 # DEAS documentation
 
 **Current version: 0.2.17 BETA**, released. Existing platform/model limitations and open acceptance gates still apply; see [the plan](PLAN.md).

@@ -1,5 +1,9 @@
 # Changelog
 
+## Independent fork — 2026-11-10
+
+The CerebralDev fork packages the existing custom OpenAI provider, Forge Apply & return, virtual model library, selected metadata enrichment, workspace docks and contextual Chat into documented adoption branches. The installed application is unchanged. [Module index](UPSTREAM-MODULES.md) lists interfaces, dependencies and prepared upstream descriptions; [verification](FORK-VERIFICATION.md) distinguishes passing checks from baseline failures and unverified runtime boundaries. No upstream PR, binary release, render or deployment was performed.
+
 ## 0.2.22 BETA
 
 - **Seamless loop for videos.** LTX, Wan and MiniMax H3 Post-Processing (and the TVE tab) gain a **Seamless loop** stage, off by default. It runs first in the post chain with the DaSiWa Seamless Loop node (RIFE/FILM `.safetensors` model or RTX Frame Generation), turns the clip into a loop by trimming and morphing its end into its start, and cuts the generated audio with exactly the same frame mapping, so picture and sound stay in sync. **Loop audio → Beat-aware** additionally picks a loop length of whole beats when the music has a clear tempo, so the beats line up across the wrap; without a clear tempo it falls back to the plain crossfade. The loop shortens the video; the Original stays saved. Needs DaSiWa nodes 0.5.41 (Backend → Upgrade → ComfyUI and node packs) and a backend restart.

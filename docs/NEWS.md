@@ -1,5 +1,9 @@
 # News
 
+## Independent fork — 2026-11-10
+
+The CerebralDev fork packages the existing custom OpenAI provider, Forge Apply & return, virtual model library, selected metadata enrichment, workspace docks and contextual Chat into documented adoption branches. The installed application is unchanged. [Module index](UPSTREAM-MODULES.md) lists interfaces, dependencies and prepared upstream descriptions; [verification](FORK-VERIFICATION.md) distinguishes passing checks from baseline failures and unverified runtime boundaries. No upstream PR, binary release, render or deployment was performed.
+
 ## 0.2.22 BETA
 
 - **New: Media Analysis.** Drop a picture on **Studio → Media Analysis** for its tags, the settings that made it and **Open in ComfyUI** for its workflow; press **Describe** for the picture in words from your vision LLM, with the characters it recognises and what the tagger missed. It uses the taggers you already have (WD14 node, animetimm ONNX, and others) and downloads one only if you have none and ask. Drop a video to get every frame in a strip: save frames, analyse one, or send it to Generate as a first/last frame or H3 picture (several picked frames at once as H3 references). Have animetimm taggers from ComfyUI's animetimm node? Media Analysis can convert them to ONNX for you, once, and use them. Describe has Temperature and Repeat penalty sliders, and you pick its model before it runs. [Media Analysis guide](MEDIA-ANALYSIS.md).

@@ -11,6 +11,7 @@ permissions:
 
 jobs:
   build:
+    if: github.repository == 'darksidewalker/DEAS'
     strategy:
       fail-fast: false
       matrix:
@@ -44,6 +45,7 @@ jobs:
           if-no-files-found: error
 
   release:
+    if: github.repository == 'darksidewalker/DEAS'
     needs: build
     runs-on: ubuntu-24.04
     steps:

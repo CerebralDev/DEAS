@@ -1,5 +1,9 @@
 # DEAS plan
 
+## Independent fork — 2026-11-10
+
+The CerebralDev fork packages the existing custom OpenAI provider, Forge Apply & return, virtual model library, selected metadata enrichment, workspace docks and contextual Chat into documented adoption branches. The installed application is unchanged. [Module index](UPSTREAM-MODULES.md) lists interfaces, dependencies and prepared upstream descriptions; [verification](FORK-VERIFICATION.md) distinguishes passing checks from baseline failures and unverified runtime boundaries. No upstream PR, binary release, render or deployment was performed.
+
 [Documentation index](README.md) · [Project rules](PROJECT-RULES.md) · [Product decisions](PRODUCT-DECISIONS.md) · [Verification journal](VERIFICATION.md) · [Changelog](CHANGELOG.md)
 
 This is the **single current plan** for DEAS: what is in place, what is still open and what has to be proven before an item counts as accepted. It replaces the earlier `IMPLEMENTATION-STATUS.md`, `VIDEO-PLAN.md`, `YUE2-MUSIC-PLAN.md`, `PLUGIN-ROADMAP.md`, `NEXT-SESSION.md`, `DRAFT-VIDEO-PLAYBACK-FIX.md` and the old milestone checklist that used this file name; they remain in Git history.
