@@ -1,0 +1,5 @@
+{
+  "workspace.applyReturn": "应用并返回",
+  "workspace.applyHelp": "应用已审阅的值，不开始生成。",
+  "workspace.applyReturnHelp": "应用提示词并返回 Studio，不开始生成。"
+}

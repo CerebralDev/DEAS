@@ -1,0 +1,5 @@
+{
+  "workspace.applyReturn": "Uygula ve dön",
+  "workspace.applyHelp": "İncelenen değerleri üretim yapmadan uygula.",
+  "workspace.applyReturnHelp": "İstemi uygula ve Studio'ya dön. Üretim başlatmaz."
+}

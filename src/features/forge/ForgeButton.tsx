@@ -97,7 +97,7 @@ const isShots = (v: unknown): v is string | number => v === 'Auto' || isNumber(v
 /** Lucide "hammer" (ISC). */
 export const HammerIcon = () => <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 12-8.373 8.373a1 1 0 1 1-3-3L12 9"/><path d="m18 15 4-4"/><path d="m21.5 11.5-1.914-1.914A2 2 0 0 1 19 8.172V7l-2.26-2.26a6 6 0 0 0-4.202-1.756L9 2.96l.92.82A6.18 6.18 0 0 1 12 8.4V10l2 2h1.172a2 2 0 0 1 1.414.586L18.5 14.5"/></svg>;
 
-export function ForgeButton({ endpoint, root, dialect, value, image, onApply, onWildcards, wildcard, h3, tools, onBusyChange, inline = false, active = true }: { active?: boolean; inline?: boolean; endpoint: string; root?: string; dialect?: string; value: string; /** Image-to-image/inpaint source, read by a vision model. */ image?: string; onApply: (text: string) => void; onBusyChange?: (busy: boolean) => void; onWildcards?: () => void; /** Active wildcard rules: the node resolves them and the picks join the idea. */ wildcard?: WildcardRules; h3?: H3Context; /** Director prompt helpers shown in the panel (H3 video only). */ tools?: ReactNode }) {
+export function ForgeButton({ endpoint, root, dialect, value, image, onApply, onReturn, onWildcards, wildcard, h3, tools, onBusyChange, inline = false, active = true }: { active?: boolean; inline?: boolean; endpoint: string; root?: string; dialect?: string; value: string; /** Image-to-image/inpaint source, read by a vision model. */ image?: string; onApply: (text: string) => void | boolean; onReturn?: () => void; onBusyChange?: (busy: boolean) => void; onWildcards?: () => void; /** Active wildcard rules: the node resolves them and the picks join the idea. */ wildcard?: WildcardRules; h3?: H3Context; /** Director prompt helpers shown in the panel (H3 video only). */ tools?: ReactNode }) {
   const { t } = useI18n();
   const forge = useForgeModels(endpoint, root, true, !!h3 || !nativeTarget(dialect), true);
   const opener = useRef<HTMLButtonElement>(null);
@@ -215,6 +215,7 @@ export function ForgeButton({ endpoint, root, dialect, value, image, onApply, on
   };
   const cancel = () => { const current = request.current; if (!current) return; current.cancelled = true; changeBusy(false); (current.id ? cancelForge(current.endpoint, current.root, current.id) : nativeForgeCancel()).catch(e => { if (request.current === current) setError(forgeError(e)); }); };
   const stale = !!h3 && !!result && draftFit !== fit;
+  const apply = (back = false) => { if (busy || stale || !result.trim()) return; if (onApply(result) === false) return; setUndo(value); setOpen(false); if (back) onReturn?.(); else opener.current?.focus(); };
   const level = (key: string, v: number, set: (n: number) => void) => <label className="forge-field"><span>{t(key)} {v}</span><input type="range" min={1} max={10} value={v} onChange={e => set(Number(e.target.value))}/></label>;
   return <div className={inline ? 'forge-controls' : 'forge-anchor'}>
     {!inline && <button ref={opener} type="button" className="forge-hammer" data-forge-open aria-expanded={open} disabled={disabled && !onWildcards} aria-label={t('forge.button')} title={t(onWildcards ? 'wildcards.choose' : !root ? 'forge.noBackend' : !dialect ? 'forge.noDialect' : 'forge.button')} onClick={toggle}>
@@ -261,7 +262,8 @@ export function ForgeButton({ endpoint, root, dialect, value, image, onApply, on
       {result && h3 && <>
         <label className="forge-field"><span>{t('forge.result')}</span><PromptTextarea data-forge-result value={result} onChange={e => setResult(e.target.value)}/></label>
         {stale && <p className="forge-warning" role="status">{t('forge.stale')}</p>}
-        <button type="button" className="action-button" data-forge-apply disabled={stale} onClick={() => { setUndo(value); onApply(result); setOpen(false); opener.current?.focus(); }}>{t('forge.apply')}</button>
+        <button type="button" className="action-button" data-forge-apply disabled={stale || busy} title={t(stale ? 'forge.canvas.stale' : 'workspace.applyHelp')} onClick={() => apply()}>{t('forge.apply')}</button>
+        {onReturn && <button type="button" className="action-button" data-forge-apply-return disabled={stale || busy} title={t(stale ? 'forge.canvas.stale' : 'workspace.applyReturnHelp')} onClick={() => apply(true)}>{t('workspace.applyReturn')}</button>}
       </>}
       {drafts.length > 0 && <div className="forge-row" role="group" aria-label={t('forge.history')}>{drafts.map((d, i) => <button key={i} type="button" data-forge-draft={i + 1} title={d.text} aria-pressed={result === d.text && draftFit === d.fit} onClick={() => { setResult(d.text); setDraftFit(d.fit); }}>{t('forge.draft', { n: String(i + 1) })}{d.fit !== fit && ' ⚠'}</button>)}</div>}
       </>}

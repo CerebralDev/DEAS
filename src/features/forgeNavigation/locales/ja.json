@@ -1,0 +1,5 @@
+{
+  "workspace.applyReturn": "適用して戻る",
+  "workspace.applyHelp": "確認済みの値を適用します。生成は開始しません。",
+  "workspace.applyReturnHelp": "プロンプトを適用して Studio に戻ります。生成はしません。"
+}

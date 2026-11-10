@@ -1,0 +1,5 @@
+{
+  "workspace.applyReturn": "Apply & return",
+  "workspace.applyHelp": "Apply reviewed values without generating.",
+  "workspace.applyReturnHelp": "Apply this prompt, then return to Studio. Does not generate."
+}
