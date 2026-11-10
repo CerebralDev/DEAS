@@ -146,3 +146,7 @@ Adopt by merging `codex/contextual-chat` into a review branch after its declared
 ## Combined integration wiring
 
 The integration merge supplies Forge’s optional live brief/resource selection to the shared presentation feed and joins independent App/Workbench callbacks. It does not change prompts, seeds, generation requests, native command identifiers or persisted schemas. Module-local CSS and locale ownership remove incidental dependencies. No feature requires fork-maintenance documentation or release guards.
+
+Review the [combined callback/retained-view merge](https://github.com/CerebralDev/DEAS/commit/c11785255fce3366aa21114e0649dae097f68903) and [optional Forge context publisher](https://github.com/CerebralDev/DEAS/commit/b7ebe4efb39f9d8ee2d676cc87d9178ca5359e9d) when adopting these modules together. These are integration changes, not hidden prerequisites for the independent Forge or library branches.
+
+If a prerequisite is adopted upstream by squash or cherry-pick, start a fresh review branch at that accepted upstream revision and apply only the dependent module’s non-merge delta above. Do not replay the prerequisite or shared-service commits twice. Resolve any resulting wiring conflicts explicitly and rerun the dependent and combined checks.

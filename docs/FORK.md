@@ -32,6 +32,8 @@ cargo build --manifest-path src-tauri/Cargo.toml --locked --release
 
 Read AGENTS.md and docs/PROJECT-RULES.md first. Use the documented Windows Rust/WebView2 or Linux GTK/WebKit prerequisites in [GETTING-STARTED.md](GETTING-STARTED.md). Layout changes also require `npm run test:layout` and the [paired-output gate](WORKSPACE-VERIFICATION.md). Keep platform-native runtime evidence separate from Chromium tests. Credentials belong only in protected application storage; no real API calls or rendering are required for fixture tests.
 
+Native subprocess fixtures need a working Python on the test process PATH. On Linux, use a private temporary directory as the retained CI workflow does: create `~/deas-tmp` with mode 700 and set `TMPDIR` to that directory for the test process. Do not point tests at a production profile or change global runtime settings. Strict lint and hosted timing limitations are recorded in [FORK-VERIFICATION.md](FORK-VERIFICATION.md).
+
 ## Manual upstream synchronization
 
 Start with a clean tree, preserve uncommitted work privately and verify upstream's current SHA. Never infer the installed build from Git HEAD.
