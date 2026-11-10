@@ -113,6 +113,7 @@ fn main() {
             deas::native_model_scan_cancel,
             deas::native_model_assets,
             deas::native_logs_workspace_error,
+            deas::native_workspace_validate_suggestion,
             deas::native_model_family_write,
             deas::native_model_scan_start,
             deas::native_model_scan_status,

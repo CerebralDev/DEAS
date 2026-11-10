@@ -1,3 +1,4 @@
+import { DockResize, RetainedPane, WorkspaceTooltips } from './features/workspace/Docking';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { backendErrorText } from './lib/backendErrors';
 import { useI18n } from './i18n/I18nProvider';
@@ -18,7 +19,7 @@ import type { MediaAction } from './features/media/MediaLibrary';
 import type { Folders } from './lib/settings';
 import type { ChatRenderOutcome, ChatRenderRequest, ChatStudio } from './lib/chat';
 import type { ForgeCanvasContext, ForgeSendCanvas } from './lib/forgeCanvas';
-import { oneOf, usePref } from './lib/preferences';
+import { oneOf, usePref, isBoolean } from './lib/preferences';
 import {type Experience,type BeginnerPage} from './features/beginner/Experience';
 const studioTabs=['generate','forge','chat','analysis','tve','monitor','map'] as const;
 const presentation: Record<string,{column:number;order:number}>={engine:{column:0,order:0},director:{column:1,order:0},plugins:{column:1,order:1},forge:{column:2,order:0},refmods:{column:2,order:1},continuity:{column:2,order:2},output:{column:2,order:3}};
@@ -62,12 +63,28 @@ export default function App(){
  function closePanel(){document.querySelector<HTMLButtonElement>(`[data-node="${active}"] button`)?.focus();setActive(null);}
  const [tab,setTab]=usePref('studio.tab','generate',oneOf(...studioTabs));
  const [studioActive,setStudioActive]=useState(false);
+ const [workspaceArea,setWorkspaceArea]=useState('backend');
+ const [lastContext,setLastContext]=useState('Studio');
+ useEffect(()=>{const area=workspaceArea==='studio'?({generate:'Studio',forge:'Forge',analysis:'Analysis',tve:'Video',monitor:'Monitoring',map:'Studio'} as Record<string,string>)[tab]:({downloads:'Library',backend:'Backend',logs:'Logs',comfy:'ComfyUI'} as Record<string,string>)[workspaceArea];if(area)setLastContext(area);},[workspaceArea,tab]);
+ const [focusStudio,setFocusStudio]=useState(0);
+ const [chatDock,setChatDock]=usePref('workspace.chat.position','full',oneOf('full','left','right','bottom'));
+ const [chatCollapsed,setChatCollapsed]=usePref('workspace.chat.collapsed',false,isBoolean);
+ const [monitorDock,setMonitorDock]=usePref('workspace.monitor.enabled',false,isBoolean);
+ const [monitorCompact,setMonitorCompact]=usePref('workspace.monitor.compact',true,isBoolean);
+ const validDockSize=(v:unknown):v is number=>typeof v==='number'&&Number.isFinite(v)&&v>=180&&v<=720;
+ const [chatWidth,setChatWidth]=usePref('workspace.chat.width',400,validDockSize);
+ const [chatHeight,setChatHeight]=usePref('workspace.chat.height',300,validDockSize);
+ const [monitorHeight,setMonitorHeight]=usePref('workspace.monitor.height',240,validDockSize);
+ const [chatFullHost,setChatFullHost]=useState<HTMLDivElement|null>(null),[chatSideHost,setChatSideHost]=useState<HTMLDivElement|null>(null),[chatBottomHost,setChatBottomHost]=useState<HTMLDivElement|null>(null);
+ const [monitorFullHost,setMonitorFullHost]=useState<HTMLDivElement|null>(null),[monitorBottomHost,setMonitorBottomHost]=useState<HTMLDivElement|null>(null);
+ const openFullChat=()=>{setChatDock('full');setChatCollapsed(false);setTab('chat');setFocusStudio(n=>n+1);};
+
  // ComfyUI's own input/output live beside the managed checkout unless Settings redirected them.
  const [environment,setEnvironment]=useState<{root:string;folders:Folders}|null>(null);
  const roots=environment?{input:environment.folders.input??`${environment.root}/ComfyUI/input`,output:environment.folders.output??`${environment.root}/ComfyUI/output`,models:environment.folders.models??`${environment.root}/ComfyUI/models`,extraModels:environment.folders.extraModels??[]}:undefined;
  // Prompt Forge mounts on first visit (it reads the backend's model list) and then keeps its draft.
  const forgeOpened=useRef(false);if(tab==='forge')forgeOpened.current=true;
- const chatOpened=useRef(false);if(tab==='chat')chatOpened.current=true;
+ const chatOpened=useRef(false);if(tab==='chat'||chatDock!=='full')chatOpened.current=true;
  const analysisOpened=useRef(false);if(tab==='analysis')analysisOpened.current=true;
  // Media's "Open in Media Analysis" sends the picture here.
  const [toAnalyze,setToAnalyze]=useState<{item:MediaItem;n:number}>();
@@ -75,7 +92,7 @@ export default function App(){
  // The frame picker's sends are whatever Generate would do with a picture right now.
  const frameActions=useRef<((item:MediaItem)=>MediaAction[])|undefined>(undefined);
  const tveOpened=useRef(false);if(tab==='tve')tveOpened.current=true;
- const monitorOpened=useRef(false);if(tab==='monitor')monitorOpened.current=true;
+ const monitorOpened=useRef(false);if(tab==='monitor'||monitorDock)monitorOpened.current=true;
  const [forgeHost,setForgeHost]=useState<HTMLDivElement|null>(null);
  const [h3ForgeAvailable,setH3ForgeAvailable]=useState(false);
  const [forgeCanvasContext,setForgeCanvasContext]=useState<ForgeCanvasContext>();
@@ -115,16 +132,24 @@ export default function App(){
  const edges:NeuralEdge[]=builtinPlugins.flatMap(p=>active===p.id?(p.suggests??[]).map(id=>({id:`suggested:${p.id}:${id}`,fromId:p.id,toId:id,kind:'suggested' as const})):[]);
  const selected=builtinPlugins.find(p=>p.id===active);
  return <div className="studio-shell" ref={shellRef}>
+  <WorkspaceTooltips/>
+  <div className="workspace-controls" aria-label={t('workspace.layout')}>
+   <label>{t('workspace.chat')}<select aria-label={t('workspace.chatPosition')} title={t('workspace.dockingHelp')} value={chatDock} onChange={e=>{const v=e.target.value as typeof chatDock;if(v==='full')openFullChat();else {setChatDock(v);setChatCollapsed(false);}}}>{['full','left','right','bottom'].map(p=><option key={p} value={p}>{t(`workspace.${p}`)}</option>)}</select></label>
+   {chatDock!=='full'&&<button title={t('workspace.collapseHelp')} onClick={()=>setChatCollapsed(v=>!v)}>{t(chatCollapsed?'workspace.expandChat':'workspace.collapseChat')}</button>}
+   <label title={t('workspace.monitorHelp')}><input type="checkbox" checked={monitorDock} onChange={e=>setMonitorDock(e.target.checked)}/>{t('workspace.dockMonitoring')}</label>
+   <button title={t('workspace.resetHelp')} onClick={()=>{setChatDock('full');setChatCollapsed(false);setMonitorDock(false);setMonitorCompact(true);setChatWidth(400);setChatHeight(300);setMonitorHeight(240);}}>{t('workspace.reset')}</button>
+  </div>
+  <div className="workspace-stage">
   <main id="workspace">
-   <AiOSetup experience={experience} onExperience={setExperience} beginnerPage={beginnerPage} onBeginnerPage={setBeginnerPage} studioTab={tab} onStudioTab={setTab} onStudioActiveChange={setStudioActive} onConnectExisting={connectExisting} onEnvironment={setEnvironment} studio={<div id="studio-workspace" className="studio-workspace">
+   <AiOSetup experience={experience} onExperience={setExperience} beginnerPage={beginnerPage} onBeginnerPage={setBeginnerPage} studioTab={tab} onStudioTab={setTab} onStudioActiveChange={setStudioActive} onWorkspaceChange={setWorkspaceArea} focusStudio={focusStudio} onConnectExisting={connectExisting} onEnvironment={setEnvironment} studio={<div id="studio-workspace" className="studio-workspace">
     <div className="studio-columns">
     <div className="studio-main">
     <div className="studio-generate-host" hidden={tab==='forge'||tab==='chat'||tab==='analysis'||tab==='tve'||tab==='monitor'}><Workbench beginner={beginner} beginnerPage={beginnerPage} onBeginnerPage={setBeginnerPage} planVisible={tab==='map'} endpoint={endpoint} roots={roots} root={environment?.root} incoming={sent} onCanvasContext={setForgeCanvasContext} onOpenVideoPost={()=>setTab('tve')} forgeHost={forgeHost} forgeActive={studioActive&&tab==='forge'} onOpenPromptForge={()=>setTab('forge')} onReturnStudio={()=>setTab('generate')} onH3ForgeAvailable={setH3ForgeAvailable} chatRender={chatRender} onChatRender={chatRendered} onChatStudio={setChatStudio} onAnalyze={analyze} onFrameActions={fn=>{frameActions.current=fn;}}/></div>
     {analysisOpened.current&&<div className="studio-generate-host" hidden={tab!=='analysis'}><Analysis active={studioActive&&tab==='analysis'} endpoint={endpoint} frameActions={item=>frameActions.current?.(item)??[]} roots={roots} root={environment?.root} incoming={toAnalyze} onSend={sendToGenerate}/></div>}
     {tveOpened.current&&<div className="studio-generate-host" hidden={tab!=='tve'}><TrueVideoEnhancer endpoint={endpoint} roots={roots}/></div>}
-    {monitorOpened.current&&<div className="studio-generate-host" hidden={tab!=='monitor'}><Monitoring active={studioActive&&tab==='monitor'} root={environment?.root}/></div>}
+    <div className="studio-generate-host" hidden={tab!=='monitor'}><button title={t('workspace.monitorHelp')} onClick={()=>{setMonitorDock(v=>!v);setMonitorCompact(false);}}>{t(monitorDock?'workspace.full':'workspace.dockMonitoring')}</button><div className="workspace-slot" ref={setMonitorFullHost}/></div>
     {forgeOpened.current&&<div className="studio-generate-host" hidden={tab!=='forge'}>{canvasSendError&&<p className="error-message" role="alert">{t(canvasSendError)}</p>}<div ref={setForgeHost} hidden={!h3ForgeAvailable}/><div hidden={h3ForgeAvailable}><PromptForge active={studioActive&&tab==='forge'&&!h3ForgeAvailable} endpoint={endpoint} root={environment?.root} inputDir={roots?.input} outputDir={roots?.output} onSend={sendToGenerate} canvasContext={forgeCanvasContext}/></div></div>}
-    {chatOpened.current&&<div className="studio-generate-host" hidden={tab!=='chat'}><Chat active={studioActive&&tab==='chat'} endpoint={endpoint} root={environment?.root} onSend={sendToGenerate} studio={chatStudio} onRender={renderForChat}/></div>}
+    <div className="studio-generate-host" hidden={tab!=='chat'}>{chatDock!=='full'&&<button onClick={openFullChat}>{t('workspace.full')}</button>}<div className="workspace-slot" ref={setChatFullHost}/></div>
     {tab==='map'&&<details className="run-plan-diagnostics" open={active!==null}><summary>{t('studio.plan.diagnostics')}</summary>
     <section className="neural-field" aria-label={t('studio.features')}><div className="field-caption"><span className="crosshair" aria-hidden="true">+</span>{t('studio.map')} <span>{t('studio.select')}</span></div>
      <NeuralGraph nodes={nodes} edges={edges} selectedId={active} label={t('studio.features')} onSelect={id=>setActive(active===id?null:id)}/>
@@ -146,5 +171,19 @@ export default function App(){
     </div></div>
    </div>}/>
   </main>
+  <aside className={`workspace-dock workspace-side ${chatDock}`} hidden={!['left','right'].includes(chatDock)||chatCollapsed} style={{'--chat-width':`${chatWidth}px`} as React.CSSProperties}>
+   <DockResize vertical={false} reverse={chatDock==='left'} value={chatWidth} onChange={setChatWidth}/><div className="workspace-slot" ref={setChatSideHost}/>
+  </aside>
+  </div>
+  <aside className="workspace-dock workspace-bottom" hidden={chatDock!=='bottom'||chatCollapsed} style={{'--chat-height':`${chatHeight}px`} as React.CSSProperties}>
+   <DockResize vertical value={chatHeight} onChange={setChatHeight}/><div className="workspace-slot" ref={setChatBottomHost}/>
+  </aside>
+  <aside className={`workspace-dock workspace-monitor ${monitorCompact?'compact':''}`} hidden={!monitorDock} style={{'--monitor-height':`${monitorHeight}px`} as React.CSSProperties}>
+   {!monitorCompact&&<DockResize vertical value={monitorHeight} onChange={setMonitorHeight}/>}
+   <div className="workspace-dock-head"><button title={t('workspace.monitorHelp')} onClick={()=>setMonitorCompact(v=>!v)}>{t(monitorCompact?'workspace.expandMonitoring':'workspace.collapseMonitoring')}</button></div>
+   <div className="workspace-slot" ref={setMonitorBottomHost}/>
+  </aside>
+  {chatOpened.current&&<RetainedPane target={chatDock==='full'?chatFullHost:chatDock==='bottom'?chatBottomHost:chatSideHost}><Chat active={chatDock==='full'?studioActive&&tab==='chat':!chatCollapsed} endpoint={endpoint} root={environment?.root} onSend={sendToGenerate} studio={chatStudio} onRender={renderForChat} workspaceArea={lastContext} docked={chatDock!=='full'}/></RetainedPane>}
+  {monitorOpened.current&&<RetainedPane target={monitorDock?monitorBottomHost:monitorFullHost}><Monitoring active={monitorDock||studioActive&&tab==='monitor'} compact={monitorDock&&monitorCompact} root={environment?.root}/></RetainedPane>}
  </div>;
 }

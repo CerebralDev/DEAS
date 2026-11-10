@@ -1,8 +1,10 @@
+import { ContextChip, Suggestion } from '../workspace/Suggestion';
+import { captureWorkspaceContext, suggestionFromText } from '../workspace/context';
 import { Fragment, useEffect, useRef, useState, type ClipboardEvent, type ReactNode } from 'react';
 import { useI18n } from '../../i18n/I18nProvider';
 import { PromptTextarea } from '../studio/PromptTextarea';
 import { convertFileSrc } from '@tauri-apps/api/core';
-import { cancelChat, chatSettings, deleteChat, freeChatLlm, getChat, listChats, pinChat, recordRender, renameChat, saveChatSettings, sendChat, workingContext, type ChatEvent, type ChatHit, type ChatMessage, type ChatRenderOutcome, type ChatRenderRequest, type ChatSettings, type ChatStudio, type ChatSummary, type RenderResult, type WrittenPrompt } from '../../lib/chat';
+import { cancelChat, chatSettings, deleteChat, freeChatLlm, getChat, listChats, pinChat, recordRender, renameChat, saveChatSettings, sendChat, type ChatEvent, type ChatHit, type ChatMessage, type ChatRenderOutcome, type ChatRenderRequest, type ChatSettings, type ChatStudio, type ChatSummary, type RenderResult, type WrittenPrompt } from '../../lib/chat';
 import { pollWorkbench, stopWorkbenchJob, type JobStatus } from '../../lib/jobs';
 import { forgeError, nativeWriteModel } from '../../lib/forge';
 import { isBoolean, isString, usePref } from '../../lib/preferences';
@@ -70,7 +72,7 @@ function Picture({ prompt, draw, onRedraw }: { prompt: WrittenPrompt; draw?: Dra
   </>;
 }
 
-function PromptCard({ prompt, onSend, draw, onRedraw }: { prompt: WrittenPrompt; onSend: (positive: string, negative: string) => void; draw?: Draw; onRedraw?: () => void }) {
+function PromptCard({ prompt, draw, onRedraw }: { prompt: WrittenPrompt; onSend: (positive: string, negative: string) => void; draw?: Draw; onRedraw?: () => void }) {
   const { t } = useI18n();
   const [copied, setCopied] = useState(false);
   const copy = async () => { try { await navigator.clipboard.writeText(prompt.negative ? `${prompt.prompt}\n\n${t('forge.negativeShort')}: ${prompt.negative}` : prompt.prompt); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* the text is on screen to copy by hand */ } };
@@ -78,11 +80,12 @@ function PromptCard({ prompt, onSend, draw, onRedraw }: { prompt: WrittenPrompt;
     <div className="chat-prompt-head"><strong>{prompt.label}</strong>
       <div className="forge-actions">
         <button type="button" className="forge-ghost" onClick={() => void copy()}>{t(copied ? 'forge.copied' : 'chat.copy')}</button>
-        <button type="button" className="forge-ghost" data-chat-send-prompt onClick={() => onSend(prompt.prompt, prompt.negative ?? '')}>{t('chat.toGenerate')}</button>
+
       </div>
     </div>
     <pre>{prompt.prompt}</pre>
     {prompt.negative && <><span className="forge-note">{t('forge.negativeShort')}</span><pre className="chat-prompt-neg">{prompt.negative}</pre></>}
+    <Suggestion proposed={{positive:prompt.prompt,...(prompt.negative?{negative:prompt.negative}:{})}}/>
     <Picture prompt={prompt} draw={draw} onRedraw={onRedraw}/>
   </div>;
 }
@@ -99,6 +102,8 @@ function Bubble({ m, onSend, draws = {}, onRedraw }: { m: ChatMessage; onSend: (
     {m.pictures > 0 && <span className="forge-note">{t('chat.picturesSent', { count: String(m.pictures) })}</span>}
     {body && (m.role === 'assistant' ? <Rich text={body} citations={m.citations}/> : <p className="chat-user-text">{body}</p>)}
     {m.prompts.map((p, i) => <PromptCard key={i} prompt={p} onSend={onSend} draw={draws[`${m.at}:${i}`]} onRedraw={onRedraw && (() => onRedraw(i))}/>)}
+    {m.context&&<details className="chat-context"><summary>{t('workspace.sentContext')}</summary><pre>{m.context}</pre></details>}
+    {m.role==='assistant'&&suggestionFromText(m.content)&&<Suggestion proposed={suggestionFromText(m.content)!} context={m.context}/>}
     {m.citations.length > 0 && <ol className="chat-sources">{m.citations.map(c => <li key={c.n}><a href={c.url} target="_blank" rel="noreferrer">{c.title}</a> <span>{c.domain}</span></li>)}</ol>}
     {m.tools.length > 0 && <p className="chat-tools">{m.tools.join(' · ')}</p>}
   </div>;
@@ -108,7 +113,7 @@ function Bubble({ m, onSend, draws = {}, onRedraw }: { m: ChatMessage; onSend: (
  * Chat: PromptForge's chat, natively. A streamed conversation with the LLM that can write prompts with the image
  * models' own writers, read how any model (or DEAS) works, look tags up, and search the web when switched on.
  */
-export function Chat({ endpoint, root, active = true, onSend, studio, onRender }: { endpoint: string; root?: string; active?: boolean; onSend: (positive: string, negative: string) => void; /** What Generate can draw with; absent = chat cannot render. */ studio?: ChatStudio; /** Draws a prompt with Generate's settings. */ onRender?: (ask: ChatRenderRequest) => Promise<ChatRenderOutcome> }) {
+export function Chat({ endpoint, root, active = true, onSend, studio, onRender, workspaceArea='Studio', docked=false }: { docked?:boolean;workspaceArea?:string; endpoint: string; root?: string; active?: boolean; onSend: (positive: string, negative: string) => void; /** What Generate can draw with; absent = chat cannot render. */ studio?: ChatStudio; /** Draws a prompt with Generate's settings. */ onRender?: (ask: ChatRenderRequest) => Promise<ChatRenderOutcome> }) {
   const { t } = useI18n();
   // Local GGUFs are listed like in Prompt Forge; a server stays the default when there is one.
   const forge = useForgeModels(endpoint, root, active, false, true);
@@ -118,9 +123,11 @@ export function Chat({ endpoint, root, active = true, onSend, studio, onRender }
   const [draft, setDraft] = usePref('chat.draft', '', isString);
   const [pictures, setPictures] = useState<string[]>([]);
   const [search, setSearch] = usePref('chat.search', false, isBoolean);
-  const [includeWork, setIncludeWork] = usePref('chat.includeWork', false, isBoolean);
+  const [includeWork, setIncludeWork] = usePref('chat.workspaceContext.v1', true, isBoolean);
+  const [allowRender,setAllowRender]=useState(false);
   const [settings, setSettings] = useState<ChatSettings | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [historyOpen,setHistoryOpen]=useState(false);
   const [busy, setBusy] = useState(false);
   const [opening, setOpening] = useState(false);
   const pending = useRef(false);
@@ -233,7 +240,9 @@ export function Chat({ endpoint, root, active = true, onSend, studio, onRender }
     const request = revision.current;
     const valid = () => revision.current === request && latestRoot.current === root;
     sending.current = true; stopDrawing.current = false;
-    const mine: ChatMessage = { role: 'user', content: text, pictures: pictures.length, prompts: [], citations: [], tools: [], at: Date.now() };
+    const sentContext=includeWork?JSON.stringify(captureWorkspaceContext(workspaceArea)):undefined;
+    const renderAuthorized=allowRender;setAllowRender(false);
+    const mine: ChatMessage = { role: 'user', context:sentContext, content: text, pictures: pictures.length, prompts: [], citations: [], tools: [], at: Date.now() };
     setMessages(m => [...m, mine]); setDraft(''); setError(''); setBusy(true);
     const sentPictures = pictures; setPictures([]);
     setLive({ text: '', status: 'thinking', detail: null, prompts: [], searched: null, searchDetail: null });
@@ -246,14 +255,14 @@ export function Chat({ endpoint, root, active = true, onSend, studio, onRender }
       else if (e.event === 'searched') setLive(l => l && { ...l, searched: e.results, searchDetail: e.detail });
     };
     try {
-      const done = await sendChat(root, { id: current.current, message: text, model: nativeWriteModel(forge.model), pictures: sentPictures, context: includeWork ? workingContext() || undefined : undefined, search: searchOn && search,
-        ...(studio && onRender ? { studio: { ...studio, endpoint, writerModel: forge.model } } : {}) }, onEvent);
+      const done = await sendChat(root, { id: current.current, message: text, model: nativeWriteModel(forge.model), pictures: sentPictures, context: sentContext, search: searchOn && search,
+        ...(renderAuthorized && studio && onRender ? { studio: { ...studio, endpoint, writerModel: forge.model } } : {}) }, onEvent);
       if (valid()) setMessages(m => [...m, done]);
       // A render_picture answer is drawn now, by Generate; the turn stays busy (and Stop stops it) until it is done.
       const chatId = current.current;
       if (chatId && valid()) {
         setLive(null);
-        for (let i = 0; i < done.prompts.length; i++) if (done.prompts[i].render && !stopDrawing.current) await draw(chatId, done, i, valid);
+        for (let i = 0; i < done.prompts.length; i++) if (renderAuthorized && done.prompts[i].render && !stopDrawing.current) await draw(chatId, done, i, valid);
       }
     } catch (e) {
       if (!valid()) return;
@@ -298,9 +307,12 @@ export function Chat({ endpoint, root, active = true, onSend, studio, onRender }
   }, [menu]);
   const pin = (c: ChatSummary) => { if (root) void pinChat(root, c.id, !c.pinned).then(refresh, err => setError(forgeError(err))); };
 
-  if (!root) return <section className="chat-tab"><p className="field-help">{t('forge.noBackend')}</p></section>;
-  return <section className="chat-tab" aria-label={t('studio.tab.chat')}>
+  const [conversationList,setConversationList]=useState(false);
+  if (!root) return <section className={`chat-tab ${docked?'is-docked':''}`}><p className="field-help">{t('forge.noBackend')}</p></section>;
+  return <section className={`chat-tab ${docked?'is-docked':''}`} aria-label={t('studio.tab.chat')}>
     <aside className="forge-card chat-side">
+      {docked&&<button type="button" title={t('workspace.conversationsHelp')} aria-expanded={conversationList} onClick={()=>setConversationList(v=>!v)}>{t('workspace.conversations')}</button>}
+      <div hidden={docked&&!conversationList}>
       <button type="button" className="action-button" data-chat-new disabled={busy} onClick={() => void open(undefined)}>{t('chat.new')}</button>
       <nav className="chat-list" aria-label={t('chat.history')}>
         {chats.map(c => <div key={c.id} className={`chat-row${c.id === id ? ' on' : ''}${c.pinned ? ' pinned' : ''}`} data-chat-row={c.id} data-chat-pinned={c.pinned || undefined}
@@ -325,6 +337,7 @@ export function Chat({ endpoint, root, active = true, onSend, studio, onRender }
         <button type="button" role="menuitem" data-chat-menu-pin onClick={() => { pin(menu.chat); setMenu(null); }}>{t(menu.chat.pinned ? 'chat.unpin' : 'chat.pin')}</button>
         <button type="button" role="menuitem" className="danger" data-chat-menu-delete disabled={busy && menu.chat.id === id} onClick={() => { setConfirmDelete(menu.chat.id); setMenu(null); }}>{t('chat.delete')}</button>
       </div>}
+      </div>
     </aside>
     <div className="forge-card chat-main">
       <div className="forge-card-head chat-head">
@@ -345,6 +358,7 @@ export function Chat({ endpoint, root, active = true, onSend, studio, onRender }
       </div>
       {error && <p className="error-message" role="alert">{t(error)}</p>}
       {pictures.length > 0 && <div className="chat-pictures">{pictures.map((p, i) => <span key={i} className="chat-pic"><img src={p} alt=""/><button type="button" aria-label={t('chat.removePicture')} onClick={() => setPictures(pictures.filter((_, k) => k !== i))}>×</button></span>)}</div>}
+      <ContextChip area={workspaceArea} enabled={includeWork} onEnabled={setIncludeWork}/>
       <div className="chat-compose">
         <PromptTextarea data-chat-input aria-label={t('chat.message')} value={draft} maxLength={32000} rows={Math.min(8, Math.max(2, draft.split('\n').length))} placeholder={t('chat.placeholder')}
           onChange={e => setDraft(e.target.value)} onPaste={paste}
@@ -355,7 +369,7 @@ export function Chat({ endpoint, root, active = true, onSend, studio, onRender }
             {t('chat.picture')}
           </label>
           {searchOn && <button type="button" className="forge-chip" data-chat-search aria-pressed={search} title={t(settings!.search === 'duckduckgo' ? 'chat.searchDdgNote' : 'chat.searchSearxNote')} onClick={() => setSearch(!search)}>{t('chat.search')}</button>}
-          <label className="forge-switch chat-include" title={t('chat.includeHelp')}><input type="checkbox" data-chat-include checked={includeWork} onChange={e => setIncludeWork(e.target.checked)}/><span>{t('chat.include')}</span></label>
+          <label className="forge-switch chat-include" title={t('workspace.allowRenderHelp')}><input type="checkbox" checked={allowRender} onChange={e=>setAllowRender(e.target.checked)}/><span>{t('workspace.allowRender')}</span></label>
           {busy
             ? <button type="button" className="action-button" data-chat-stop onClick={stop}>{t('chat.stop')}</button>
             : <button type="button" className="action-button" data-chat-send disabled={opening || !forge.model || (!draft.trim() && !pictures.length)} onClick={() => void send()}>{t('chat.send')}</button>}

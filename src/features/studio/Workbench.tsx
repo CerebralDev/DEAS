@@ -1,3 +1,4 @@
+import { selectContext } from '../../lib/workspaceSelection';
 import { BeginnerLoras,isBeginnerLoraDraft,type BeginnerLoraDraft,type BeginnerLora } from '../beginner/BeginnerLoras';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { backendErrorText } from '../../lib/backendErrors';
@@ -318,6 +319,7 @@ function WorkbenchContent({beginner=false,beginnerPage='generate',onBeginnerPage
  // Source image of each edit job, for the original/edited split view.
  const [sources,setSources]=useState<Record<string,MediaItem>>({});const [slider,setSlider]=useState(false);
  const [jobs,setJobs]=useState<JobStatus[]>([]);const [selectedJob,setSelectedJob]=useState('');const [selectedOutput,setSelectedOutput]=useState(0);
+ useEffect(()=>{const j=jobs.find(j=>j.state==='running')??jobs.find(j=>j.state==='queued');selectContext('Monitoring',{jobStatus:j?`${j.state}${j.progress?` · ${j.progress.value} / ${j.progress.max}`:''}`:''});},[jobs]);
  const live=useRef(false);const lock=useRef(false);const epoch=useRef(0);
  const preparationGeneration=useRef(0);const localPreparations=useRef(0);const stopLock=useRef(false);const stopped=useRef(new Set<string>());const admissionEpoch=useRef(0);
  const [stopChoice,setStopChoice]=useState<{jobId:string}|null>(null);

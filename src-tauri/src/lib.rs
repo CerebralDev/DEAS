@@ -126,6 +126,7 @@ pub mod install_defaults;
 pub use install_defaults::native_install_defaults;
 pub mod install;
 pub mod logs;
+pub mod workspace_context;
 pub mod workspace_log;
 pub use install::{
     native_install_cancel, native_install_open, native_install_plan, native_install_start,
@@ -135,6 +136,7 @@ pub use logs::{
     native_logs, native_logs_beginner_error, native_logs_export, native_logs_people_image_error,
     native_logs_reference_media_error,
 };
+pub use workspace_context::native_workspace_validate_suggestion;
 pub use workspace_log::native_logs_workspace_error;
 
 use reqwest::Url;
